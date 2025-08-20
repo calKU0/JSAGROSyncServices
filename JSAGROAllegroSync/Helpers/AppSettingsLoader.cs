@@ -30,6 +30,7 @@ namespace JSAGROAllegroSync.Helpers
             return new AllegroApiSettings
             {
                 BaseUrl = GetString("AllegroApiBaseUrl"),
+                AuthBaseUrl = GetString("AllegroAuthBaseUrl"),
                 ClientName = GetString("AllegroClientName"),
                 ClientId = GetString("AllegroClientId"),
                 ClientSecret = GetString("AllegroClientSecret"),

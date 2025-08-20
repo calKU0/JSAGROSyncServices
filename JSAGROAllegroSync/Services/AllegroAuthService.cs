@@ -27,12 +27,11 @@ namespace JSAGROAllegroSync.Services
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
 
-        public AllegroAuthService(AllegroApiSettings settings, ITokenRepository tokenRepo, HttpClient httpClient = null)
+        public AllegroAuthService(AllegroApiSettings settings, ITokenRepository tokenRepo, HttpClient httpClient)
         {
             _settings = settings;
             _tokenRepo = tokenRepo;
-            _http = httpClient ?? new HttpClient();
-            _http.BaseAddress = new Uri(_settings.BaseUrl);
+            _http = httpClient;
         }
 
         public async Task<string> GetAccessTokenAsync(CancellationToken ct = default(CancellationToken))
@@ -99,15 +98,16 @@ namespace JSAGROAllegroSync.Services
         private async Task<DeviceCodeResponseDto> StartDeviceFlowAsync(CancellationToken ct)
         {
             var uri = $"/auth/oauth/device?client_id={Uri.EscapeDataString(_settings.ClientId)}";
+
+            if (!string.IsNullOrWhiteSpace(_settings.Scope))
+            {
+                uri += $"&scope={Uri.EscapeDataString(_settings.Scope)}";
+            }
+
             using (var req = new HttpRequestMessage(HttpMethod.Post, uri))
             {
                 req.Headers.Authorization = new AuthenticationHeaderValue("Basic", BuildBasic(_settings.ClientId, _settings.ClientSecret));
                 req.Content = new StringContent("", Encoding.UTF8, "application/x-www-form-urlencoded");
-
-                if (!string.IsNullOrWhiteSpace(_settings.Scope))
-                {
-                    req.RequestUri = new Uri($"/auth/oauth/device?client_id={Uri.EscapeDataString(_settings.ClientId)}&scope={Uri.EscapeDataString(_settings.Scope)}");
-                }
 
                 using (var resp = await _http.SendAsync(req, ct))
                 {

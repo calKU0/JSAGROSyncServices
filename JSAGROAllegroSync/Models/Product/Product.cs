@@ -22,9 +22,11 @@ namespace JSAGROAllegroSync.Models
         public string SupplierName { get; set; }
         public string SupplierLogo { get; set; }
         public float InStock { get; set; }
+        public string Unit { get; set; }
         public string CurrencyPrice { get; set; }
         public decimal PriceNet { get; set; }
         public decimal PriceGross { get; set; }
+        public int DefaultAllegroCategory { get; set; }
         public bool Archived { get; set; } = false;
         public DateTime CreatedDate { get; set; } = DateTime.Now;
         public DateTime UpdatedDate { get; set; } = DateTime.Now;

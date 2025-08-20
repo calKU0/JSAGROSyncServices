@@ -12,12 +12,12 @@ namespace JSAGROAllegroSync
         /// <summary>
         /// Główny punkt wejścia dla aplikacji.
         /// </summary>
-        static void Main()
+        private static void Main()
         {
             ServiceBase[] ServicesToRun;
             ServicesToRun = new ServiceBase[]
             {
-                new JSAGROAllegroSync()
+                new JSAGROAllegroService()
             };
             ServiceBase.Run(ServicesToRun);
         }

@@ -63,6 +63,7 @@
     <Reference Include="System.Configuration.ConfigurationManager, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Configuration.ConfigurationManager.9.0.8\lib\net462\System.Configuration.ConfigurationManager.dll</HintPath>
     </Reference>
+    <Reference Include="System.Configuration.Install" />
     <Reference Include="System.Core" />
     <Reference Include="System.Diagnostics.DiagnosticSource, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Diagnostics.DiagnosticSource.9.0.8\lib\net462\System.Diagnostics.DiagnosticSource.dll</HintPath>
@@ -70,6 +71,7 @@
     <Reference Include="System.IO.Pipelines, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.IO.Pipelines.9.0.8\lib\net462\System.IO.Pipelines.dll</HintPath>
     </Reference>
+    <Reference Include="System.Management" />
     <Reference Include="System.Memory, Version=4.0.5.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Memory.4.6.3\lib\net462\System.Memory.dll</HintPath>
     </Reference>
@@ -104,19 +106,34 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Data\DbTokenRepository.cs" />
+    <Compile Include="DTOs\ApplicationDto.cs" />
+    <Compile Include="DTOs\ImageDto.cs" />
+    <Compile Include="DTOs\ParameterDto.cs" />
+    <Compile Include="Migrations\202508201113326_AddProductUnit.cs" />
+    <Compile Include="Migrations\202508201113326_AddProductUnit.Designer.cs">
+      <DependentUpon>202508201113326_AddProductUnit.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508201352391_AddProductAllegroCategory.cs" />
+    <Compile Include="Migrations\202508201352391_AddProductAllegroCategory.Designer.cs">
+      <DependentUpon>202508201352391_AddProductAllegroCategory.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Repositories\DbTokenRepository.cs" />
+    <Compile Include="Repositories\IProductRepository.cs" />
     <Compile Include="Data\MyDbContext.cs" />
-    <Compile Include="DTOs\ApiProductResponse.cs" />
-    <Compile Include="DTOs\ApiProductsResponse.cs" />
+    <Compile Include="Repositories\ProductRepository.cs" />
+    <Compile Include="DTOs\AllegroApiResponses\MatchingCategoriesResponse.cs" />
+    <Compile Include="DTOs\GaskaApiResponse\ProductResponse.cs" />
+    <Compile Include="DTOs\GaskaApiResponse\ProductsResponse.cs" />
+    <Compile Include="DTOs\ProductDto.cs" />
     <Compile Include="DTOs\Settings\AllegroApiSettings.cs" />
-    <Compile Include="DTOs\DeviceCodeResponseDto.cs" />
+    <Compile Include="DTOs\AllegroApiResponses\DeviceCodeResponseDto.cs" />
     <Compile Include="DTOs\Settings\GaskaApiSettings.cs" />
     <Compile Include="DTOs\TokenDto.cs" />
-    <Compile Include="DTOs\TokenResponseDto.cs" />
+    <Compile Include="DTOs\AllegroApiResponses\TokenResponseDto.cs" />
     <Compile Include="Helpers\ApiHelper.cs" />
     <Compile Include="Helpers\AppSettingsLoader.cs" />
     <Compile Include="Helpers\CategoriesHelper.cs" />
-    <Compile Include="Data\ITokenRepository.cs" />
+    <Compile Include="Repositories\ITokenRepository.cs" />
     <Compile Include="JSAGROAllegroService.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -124,6 +141,11 @@
       <DependentUpon>JSAGROAllegroService.cs</DependentUpon>
     </Compile>
     <Compile Include="Logging\LogConfig.cs" />
+    <Compile Include="Migrations\202508200653359_InitialCreate.cs" />
+    <Compile Include="Migrations\202508200653359_InitialCreate.Designer.cs">
+      <DependentUpon>202508200653359_InitialCreate.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\Configuration.cs" />
     <Compile Include="Models\AllegroTokenEntity.cs" />
     <Compile Include="Models\Product\Application.cs" />
     <Compile Include="Models\Product\Component.cs" />
@@ -136,6 +158,12 @@
     <Compile Include="Models\Product\ProductParameter.cs" />
     <Compile Include="Models\Product\RecommendedPart.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="ProjectInstaller.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="ProjectInstaller.Designer.cs">
+      <DependentUpon>ProjectInstaller.cs</DependentUpon>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\AllegroApiService.cs" />
     <Compile Include="Services\AllegroAuthService.cs" />
@@ -144,6 +172,20 @@
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\202508200653359_InitialCreate.resx">
+      <DependentUpon>202508200653359_InitialCreate.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508201113326_AddProductUnit.resx">
+      <DependentUpon>202508201113326_AddProductUnit.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508201352391_AddProductAllegroCategory.resx">
+      <DependentUpon>202508201352391_AddProductAllegroCategory.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ProjectInstaller.resx">
+      <DependentUpon>ProjectInstaller.cs</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

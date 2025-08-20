@@ -2,7 +2,7 @@
 
 namespace JSAGROAllegroSync.DTOs
 {
-    public class ApiProductResponse
+    public class ProductResponse
     {
         public ApiProduct Product { get; set; }
         public int Result { get; set; }
