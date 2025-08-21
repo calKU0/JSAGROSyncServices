@@ -19,10 +19,12 @@ namespace JSAGROAllegroSync.Data
 
         Task UpdateProductDetails(Product product, ApiProduct updatedProduct);
 
-        Task UpdateProductAllegroCategory(int productId, int categoryId);
+        Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct);
 
-        Task<int?> GetMostCommonDefaultAllegroCategoryAsync(int productId, CancellationToken ct);
+        Task<int?> GetMostCommonDefaultAllegroCategory(int productId, CancellationToken ct);
 
-        Task<List<ProductDto>> GetProductsToUpload();
+        Task<List<ProductDto>> GetProductsWithoutDefaultCategory(CancellationToken ct);
+
+        Task<List<ProductDto>> GetProductsToUpload(CancellationToken ct);
     }
 }

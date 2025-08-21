@@ -1,6 +1,7 @@
 ﻿using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Data.Entity;
@@ -203,7 +204,7 @@ namespace JSAGROAllegroSync.Data
             await _context.SaveChangesAsync();
         }
 
-        public async Task<List<ProductDto>> GetProductsToUpload()
+        public async Task<List<ProductDto>> GetProductsToUpload(CancellationToken ct)
         {
             // Step 1: Fetch only the necessary fields and related collections
             var productsData = await _context.Products
@@ -245,7 +246,7 @@ namespace JSAGROAllegroSync.Data
                         i.Url
                     }).ToList()
                 })
-                .ToListAsync();
+                .ToListAsync(ct);
 
             // Step 2: Project into DTOs in memory
             var products = productsData.Select(p => new ProductDto
@@ -289,31 +290,85 @@ namespace JSAGROAllegroSync.Data
             return products;
         }
 
-        public async Task UpdateProductAllegroCategory(int productId, int categoryId)
+        public async Task<List<ProductDto>> GetProductsWithoutDefaultCategory(CancellationToken ct)
         {
-            var product = await _context.Products.Where(p => p.Id == productId).FirstOrDefaultAsync();
+            // 1. Get products without DefaultAllegroCategory
+            var productsData = await _context.Products
+                .Where(p => p.DefaultAllegroCategory == 0 && !p.Archived)
+                .Select(p => new
+                {
+                    p.Id,
+                    p.CodeGaska,
+                    p.Name,
+                    p.Ean
+                })
+                .ToListAsync(ct);
+
+            // 2. Mapping to DTO
+            var products = productsData.Select(p => new ProductDto
+            {
+                Id = p.Id,
+                CodeGaska = p.CodeGaska,
+                Name = p.Name,
+                Ean = p.Ean
+            }).ToList();
+
+            return products;
+        }
+
+        public async Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct)
+        {
+            var product = await _context.Products.Where(p => p.Id == productId).FirstOrDefaultAsync(ct);
 
             if (product != null && categoryId != 0)
             {
                 product.DefaultAllegroCategory = categoryId;
-                await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync(ct);
             }
         }
 
-        public async Task<int?> GetMostCommonDefaultAllegroCategoryAsync(int productId, CancellationToken ct)
+        public async Task<int?> GetMostCommonDefaultAllegroCategory(int productId, CancellationToken ct)
         {
-            // Get this product’s first/main category (branch)
-            var mainCategoryId = await _context.ProductCategories
-                .Where(pc => pc.ProductId == productId && pc.ParentID == 0) // <-- adjust rule for "first branch"
-                .Select(pc => pc.CategoryId)
-                .FirstOrDefaultAsync(ct);
+            // 1. Load all categories for this product
+            var productCategories = await _context.ProductCategories
+                .Where(pc => pc.ProductId == productId)
+                .ToListAsync(ct);
 
-            if (mainCategoryId == 0) // no main category
+            if (!productCategories.Any())
+            {
                 return null;
+            }
 
-            // Find other products that share the same first branch and have DefaultAllegroCategory set
+            // 2. Find root branches
+            var rootBranches = productCategories.Where(pc => pc.ParentID == 0).ToList();
+
+            // Prefer the one with root = 19178 ("Części według rodzaju")
+            var mainRoot = rootBranches.FirstOrDefault(r => r.CategoryId == 19178)
+                           ?? rootBranches.FirstOrDefault(); // fallback if no 19178
+
+            if (mainRoot == null)
+            {
+                return null;
+            }
+
+            // 3. Traverse down to find the "deepest leaf" in this branch
+            var branchCategories = productCategories
+                .Where(pc => IsInBranch(pc, mainRoot.CategoryId, productCategories))
+                .ToList();
+
+            // A leaf = category that is not a ParentID for any other in this branch
+            var leaf = branchCategories.FirstOrDefault(c => !branchCategories.Any(other => other.ParentID == c.CategoryId));
+
+            if (leaf == null)
+            {
+                return null;
+            }
+
+            // 4. Find other products with the same leaf and non-null DefaultAllegroCategory
             var categoryStats = await _context.ProductCategories
-                .Where(pc => pc.ParentID == 0 && pc.CategoryId == mainCategoryId && pc.Product.DefaultAllegroCategory != 0)
+                .Where(pc => pc.CategoryId == leaf.CategoryId
+                             && pc.ProductId != productId
+                             && pc.Product.DefaultAllegroCategory != 0)
                 .GroupBy(pc => pc.Product.DefaultAllegroCategory)
                 .Select(g => new
                 {
@@ -323,7 +378,27 @@ namespace JSAGROAllegroSync.Data
                 .OrderByDescending(g => g.Count)
                 .FirstOrDefaultAsync(ct);
 
-            return categoryStats?.CategoryId;
+            if (categoryStats == null)
+            {
+                return null;
+            }
+
+            return categoryStats.CategoryId;
+        }
+
+        /// <summary>
+        /// Recursively check if a category belongs to branch with given root.
+        /// </summary>
+        private bool IsInBranch(ProductCategory category, int rootId, List<ProductCategory> allCategories)
+        {
+            if (category.CategoryId == rootId)
+                return true;
+
+            var parent = allCategories.FirstOrDefault(c => c.CategoryId == category.ParentID);
+            if (parent == null)
+                return false;
+
+            return IsInBranch(parent, rootId, allCategories);
         }
     }
 }

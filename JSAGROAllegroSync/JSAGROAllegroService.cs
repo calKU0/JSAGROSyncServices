@@ -80,20 +80,25 @@ namespace JSAGROAllegroSync
             {
                 _lastRunTime = DateTime.Now;
 
-                // 1. Getting default info about products
+                // 1. Get default info about products
+                //Log.Information("Starting syncing basic products info...");
                 //await _gaskaApiService.SyncProducts();
                 //Log.Information("Basic product sync completed.");
 
-                ////// 2.Getting detailed info about products that are not in db yet
+                // 2. Get detailed info about products that are not in db yet
                 //if (_lastProductDetailsSyncDate.Date < DateTime.Today)
                 //{
+                //    Log.Information("Starting syncing product details...");
                 //    await _gaskaApiService.SyncProductDetails();
                 //    _lastProductDetailsSyncDate = DateTime.Today;
 
                 //    Log.Information("Detailed product sync completed.");
                 //}
 
-                await _allegroApiService.UploadProducts();
+                // 3. Update Allegro Categories
+                Log.Information("Starting Allegro categories mapping...");
+                await _allegroApiService.UpdateAllegroCategories();
+                Log.Information("Allegro Categories mapping completed.");
 
                 DateTime nextRun = _lastRunTime.Add(_interval);
                 Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);

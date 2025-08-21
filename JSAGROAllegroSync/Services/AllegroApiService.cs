@@ -41,22 +41,55 @@ namespace JSAGROAllegroSync.Services
             _http = httpClient;
         }
 
-        public async Task UploadProducts(CancellationToken ct = default)
+        public async Task UpdateAllegroCategories(CancellationToken ct = default)
         {
             try
             {
-                var productsToUpload = await _productRepo.GetProductsToUpload();
+                // 1. Get all products that doesnt have DefaultAllegroCategory
+                var products = await _productRepo.GetProductsWithoutDefaultCategory(ct);
 
-                foreach (var product in productsToUpload)
+                // 2. Get suggested categories from [name, code, ean] and update Database
+                foreach (var product in products)
                 {
-                    int categoryId = await ResolveCategoryId(product, ct);
-                    await _productRepo.UpdateProductAllegroCategory(product.Id, categoryId);
+                    try
+                    {
+                        int categoryId = await GetCategoriesSuggestions(product.Name, product.CodeGaska, product.Ean, ct);
+                        await _productRepo.UpdateProductAllegroCategory(product.Id, categoryId, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, $"Error while trying to fetch and update suggested Allegro category for product {product.CodeGaska} ({product.Name}).");
+                    }
+                }
+
+                // 3. Get once again products that doesnt have DefaultAllegroCategory
+                products = await _productRepo.GetProductsWithoutDefaultCategory(ct);
+
+                // 4. Search database for other products that has the same main Gaska category and get calcualte the DefaultAllegroCategory from count() of ther products that has the same main Gaska category as current product
+                foreach (var product in products)
+                {
+                    try
+                    {
+                        var dbCategory = await _productRepo.GetMostCommonDefaultAllegroCategory(product.Id, ct);
+                        if (dbCategory.HasValue)
+                        {
+                            int categoryId = dbCategory.Value;
+                            await _productRepo.UpdateProductAllegroCategory(product.Id, categoryId, ct);
+                        }
+                        else
+                        {
+                            Log.Warning($"No Allegro or Database category resolved for product {product.CodeGaska} ({product.Name}).");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Error(ex, $"Error while trying to fetch and update suggested database category for product {product.CodeGaska} ({product.Name}).");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Error uploading products to Allegro");
-                throw;
+                Log.Error(ex, "Error in categories mapping.");
             }
         }
 
@@ -82,6 +115,7 @@ namespace JSAGROAllegroSync.Services
                     var category = result?.MatchingCategories?.FirstOrDefault();
                     if (category != null)
                     {
+                        Log.Information($"Suggested Allegro category for product {code} by his {queryType}: {category.Name} ({category.Id})");
                         return Convert.ToInt32(category.Id);
                     }
                 }
@@ -98,17 +132,19 @@ namespace JSAGROAllegroSync.Services
                 // 1 Try with product name first
                 resultCategory = await FetchCategory(name, "name");
 
-                // 2️ If no match, try with product code
-                if (resultCategory == 0 && !string.IsNullOrEmpty(code))
-                {
-                    resultCategory = await FetchCategory(code, "code");
-                }
+                // !!! DELETED OTHER MATCHING BECAUSE SOMETIMES IT RETURNED NOT RELEVANT CATEGORIES !!!
 
                 // 2️ If no match, try with product code
-                if (resultCategory == 0 && !string.IsNullOrEmpty(ean))
-                {
-                    resultCategory = await FetchCategory(ean, "ean");
-                }
+                //if (resultCategory == 0 && !string.IsNullOrEmpty(code))
+                //{
+                //    resultCategory = await FetchCategory(code, "code");
+                //}
+
+                // 2️ If no match, try with product code
+                //if (resultCategory == 0 && !string.IsNullOrEmpty(ean))
+                //{
+                //    resultCategory = await FetchCategory(ean, "ean");
+                //}
             }
             catch (Exception ex)
             {
@@ -116,27 +152,6 @@ namespace JSAGROAllegroSync.Services
             }
 
             return resultCategory;
-        }
-
-        private async Task<int> ResolveCategoryId(ProductDto product, CancellationToken ct)
-        {
-            // 1. Try Allegro API suggestion
-            var suggested = await GetCategoriesSuggestions(product.Name, product.CodeGaska, product.Ean, ct);
-            if (suggested != 0)
-            {
-                return suggested;
-            }
-
-            // 2. Fallback: use DB logic from repository
-            var dbCategory = await _productRepo.GetMostCommonDefaultAllegroCategoryAsync(product.Id, ct);
-            if (dbCategory.HasValue)
-            {
-                return dbCategory.Value;
-            }
-
-            // 3. Nothing found
-            Log.Warning($"No Allegro or DB category resolved for product {product.CodeGaska} ({product.Name})");
-            return 0;
         }
 
         //public async Task<string> GenerateXMLFile()
