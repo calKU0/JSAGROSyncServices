@@ -1,4 +1,5 @@
 ﻿using JSAGROAllegroSync.Models;
+using JSAGROAllegroSync.Models.Product;
 using System;
 using System.Data.Entity;
 
@@ -16,14 +17,18 @@ namespace JSAGROAllegroSync.Data
         public DbSet<Component> Components { get; set; }
         public DbSet<RecommendedPart> RecommendedParts { get; set; }
         public DbSet<Application> Applications { get; set; }
-        public DbSet<ProductParameter> ProductParameters { get; set; }
+        public DbSet<ProductAttribute> ProductAttributes { get; set; }
         public DbSet<ProductImage> ProductImages { get; set; }
         public DbSet<ProductFile> ProductFiles { get; set; }
         public DbSet<ProductCategory> ProductCategories { get; set; }
         public DbSet<AllegroTokenEntity> AllegroTokens { get; set; }
+        public DbSet<CategoryParameter> CategoryParameters { get; set; }
+        public DbSet<ProductParameter> ProductParameters { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
+            base.OnModelCreating(modelBuilder);
+
             modelBuilder.Entity<Product>()
                 .Property(p => p.CreatedDate)
                 .HasColumnType("datetime2");
@@ -32,7 +37,7 @@ namespace JSAGROAllegroSync.Data
                 .Property(p => p.UpdatedDate)
                 .HasColumnType("datetime2");
 
-            base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<CategoryParameter>().HasKey(cp => new { cp.ParameterId, cp.CategoryId });
         }
 
         public override int SaveChanges()

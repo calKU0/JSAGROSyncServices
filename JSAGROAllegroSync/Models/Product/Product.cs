@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace JSAGROAllegroSync.Models
+namespace JSAGROAllegroSync.Models.Product
 {
     public class Product
     {
@@ -35,9 +35,10 @@ namespace JSAGROAllegroSync.Models
         public virtual ICollection<Component> Components { get; set; }
         public virtual ICollection<RecommendedPart> RecommendedParts { get; set; }
         public virtual ICollection<Application> Applications { get; set; }
-        public virtual ICollection<ProductParameter> Parameters { get; set; }
+        public virtual ICollection<ProductAttribute> Atributes { get; set; }
         public virtual ICollection<ProductImage> Images { get; set; }
         public virtual ICollection<ProductFile> Files { get; set; }
         public virtual ICollection<ProductCategory> Categories { get; set; }
+        public virtual ICollection<ProductParameter> Parameters { get; set; }
     }
 }

@@ -2,6 +2,7 @@
 using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Models;
+using JSAGROAllegroSync.Models.Product;
 using Newtonsoft.Json;
 using Serilog;
 using System;

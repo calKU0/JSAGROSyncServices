@@ -100,6 +100,16 @@ namespace JSAGROAllegroSync
                 await _allegroApiService.UpdateAllegroCategories();
                 Log.Information("Allegro Categories mapping completed.");
 
+                // 4. Update Allegro Parameters
+                Log.Information("Starting Allegro parameters for category mapping...");
+                await _allegroApiService.FetchAndSaveCategoryParameters();
+                Log.Information("Allegro parameters for category mapping completed.");
+
+                // 5. Feed Product Parameters
+                Log.Information("Starting product parameters update...");
+                await _allegroApiService.UpdateProductParameters();
+                Log.Information("Product parameters update completed");
+
                 DateTime nextRun = _lastRunTime.Add(_interval);
                 Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);
             }

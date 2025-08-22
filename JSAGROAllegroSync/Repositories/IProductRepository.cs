@@ -1,5 +1,6 @@
 ﻿using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.Models;
+using JSAGROAllegroSync.Models.Product;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,8 +24,22 @@ namespace JSAGROAllegroSync.Data
 
         Task<int?> GetMostCommonDefaultAllegroCategory(int productId, CancellationToken ct);
 
-        Task<List<ProductDto>> GetProductsWithoutDefaultCategory(CancellationToken ct);
+        Task<List<Product>> GetProductsWithoutDefaultCategory(CancellationToken ct);
 
-        Task<List<ProductDto>> GetProductsToUpload(CancellationToken ct);
+        Task<List<Product>> GetProductsWithDefaultCategory(CancellationToken ct);
+
+        Task<List<int>> GetDefaultCategories(CancellationToken ct);
+
+        Task<List<Product>> GetProductsToUpload(CancellationToken ct);
+
+        Task<Product> GetByIdAsync(int id, CancellationToken ct);
+
+        Task SaveCategoryParametersAsync(IEnumerable<CategoryParameter> parameters, CancellationToken ct);
+
+        Task SetDefaultCategoryAsync(int productId, int categoryId, CancellationToken ct);
+
+        Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct);
+
+        Task<List<CategoryParameter>> GetCategoryParametersAsync(int categoryId, CancellationToken ct);
     }
 }

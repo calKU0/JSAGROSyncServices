@@ -1,15 +1,18 @@
 ﻿using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
+using JSAGROAllegroSync.Models.Product;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Data.Entity;
+using System.Data.Entity.Migrations;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.Remoting.Contexts;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -34,37 +37,32 @@ namespace JSAGROAllegroSync.Data
             {
                 try
                 {
-                    var incomingIds = apiProducts.Select(p => p.Id).ToList();
-                    var existingProducts = await _context.Products
-                                            .Where(p => incomingIds.Contains(p.Id))
-                                            .ToDictionaryAsync(p => p.Id);
-
                     foreach (var apiProduct in apiProducts)
                     {
                         fetchedProductIds.Add(apiProduct.Id);
 
-                        if (!existingProducts.TryGetValue(apiProduct.Id, out var product))
+                        var product = new Product
                         {
-                            product = new Product { Id = apiProduct.Id };
-                            _context.Products.Add(product);
-                        }
+                            Id = apiProduct.Id,
+                            CodeGaska = apiProduct.CodeGaska,
+                            CodeCustomer = apiProduct.CodeCustomer,
+                            Name = apiProduct.Name,
+                            Description = apiProduct.Description,
+                            Ean = apiProduct.Ean,
+                            TechnicalDetails = apiProduct.TechnicalDetails,
+                            WeightGross = apiProduct.GrossWeight,
+                            WeightNet = apiProduct.NetWeight,
+                            SupplierName = apiProduct.SupplierName,
+                            SupplierLogo = apiProduct.SupplierLogo,
+                            InStock = apiProduct.InStock,
+                            Unit = apiProduct.Unit,
+                            CurrencyPrice = apiProduct.CurrencyPrice,
+                            PriceNet = apiProduct.NetPrice,
+                            PriceGross = apiProduct.GrossPrice,
+                            Archived = false
+                        };
 
-                        product.CodeGaska = apiProduct.CodeGaska;
-                        product.CodeCustomer = apiProduct.CodeCustomer;
-                        product.Name = apiProduct.Name;
-                        product.Description = apiProduct.Description;
-                        product.Ean = apiProduct.Ean;
-                        product.TechnicalDetails = apiProduct.TechnicalDetails;
-                        product.WeightGross = apiProduct.GrossWeight;
-                        product.WeightNet = apiProduct.NetWeight;
-                        product.SupplierName = apiProduct.SupplierName;
-                        product.SupplierLogo = apiProduct.SupplierLogo;
-                        product.InStock = apiProduct.InStock;
-                        product.Unit = apiProduct.Unit;
-                        product.CurrencyPrice = apiProduct.CurrencyPrice;
-                        product.PriceNet = apiProduct.NetPrice;
-                        product.PriceGross = apiProduct.GrossPrice;
-                        product.Archived = false;
+                        _context.Products.AddOrUpdate(product);
                     }
 
                     await _context.SaveChangesAsync();
@@ -92,6 +90,15 @@ namespace JSAGROAllegroSync.Data
         public async Task<List<Product>> GetProductsForDetailUpdate(int limit)
         {
             var productsToUpdate = await _context.Products
+                                        .Include(p => p.Packages)
+                                        .Include(p => p.CrossNumbers)
+                                        .Include(p => p.Components)
+                                        .Include(p => p.RecommendedParts)
+                                        .Include(p => p.Applications)
+                                        .Include(p => p.Atributes)
+                                        .Include(p => p.Images)
+                                        .Include(p => p.Files)
+                                        .Include(p => p.Categories)
                                         .Where(p => !p.Categories.Any() && !p.Archived)
                                         .Take(limit)
                                         .ToListAsync();
@@ -100,6 +107,15 @@ namespace JSAGROAllegroSync.Data
             {
                 productsToUpdate = await _context.Products
                                     .Where(p => !p.Archived)
+                                    .Include(p => p.Packages)
+                                    .Include(p => p.CrossNumbers)
+                                    .Include(p => p.Components)
+                                    .Include(p => p.RecommendedParts)
+                                    .Include(p => p.Applications)
+                                    .Include(p => p.Atributes)
+                                    .Include(p => p.Images)
+                                    .Include(p => p.Files)
+                                    .Include(p => p.Categories)
                                     .OrderBy(p => p.UpdatedDate)
                                     .Take(limit)
                                     .ToListAsync();
@@ -116,7 +132,7 @@ namespace JSAGROAllegroSync.Data
             _context.Components.RemoveRange(product.Components);
             _context.RecommendedParts.RemoveRange(product.RecommendedParts);
             _context.Applications.RemoveRange(product.Applications);
-            _context.ProductParameters.RemoveRange(product.Parameters);
+            _context.ProductAttributes.RemoveRange(product.Atributes);
             _context.ProductImages.RemoveRange(product.Images);
             _context.ProductFiles.RemoveRange(product.Files);
             _context.ProductCategories.RemoveRange(product.Categories);
@@ -175,7 +191,7 @@ namespace JSAGROAllegroSync.Data
                 Name = a.Name
             }).ToList();
 
-            product.Parameters = updatedProduct.Parameters.Select(p => new ProductParameter
+            product.Atributes = updatedProduct.Parameters.Select(p => new ProductAttribute
             {
                 AttributeId = p.AttributeId,
                 AttributeName = p.AttributeName,
@@ -204,114 +220,49 @@ namespace JSAGROAllegroSync.Data
             await _context.SaveChangesAsync();
         }
 
-        public async Task<List<ProductDto>> GetProductsToUpload(CancellationToken ct)
+        public async Task<List<Product>> GetProductsToUpload(CancellationToken ct)
         {
-            // Step 1: Fetch only the necessary fields and related collections
-            var productsData = await _context.Products
+            return await _context.Products
+                .Include(p => p.CrossNumbers)
+                .Include(p => p.Applications)
+                .Include(p => p.Atributes)
+                .Include(p => p.Images)
                 .Where(p => p.Categories.Any() && !p.Archived)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.CodeGaska,
-                    p.CodeCustomer,
-                    p.Name,
-                    p.Unit,
-                    p.Ean,
-                    p.SupplierName,
-                    p.SupplierLogo,
-                    p.Description,
-                    p.TechnicalDetails,
-                    p.PriceNet,
-                    p.PriceGross,
-                    p.CurrencyPrice,
-                    p.WeightNet,
-                    p.InStock,
-                    p.DefaultAllegroCategory,
-                    CrossNumbers = p.CrossNumbers.Select(cn => cn.CrossNumberValue).ToList(),
-                    Applications = p.Applications.Select(a => new
-                    {
-                        a.Id,
-                        a.ParentID,
-                        a.Name
-                    }).ToList(),
-                    Parameters = p.Parameters.Select(pa => new
-                    {
-                        pa.Id,
-                        pa.AttributeName,
-                        pa.AttributeValue
-                    }).ToList(),
-                    Images = p.Images.Select(i => new
-                    {
-                        i.Title,
-                        i.Url
-                    }).ToList()
-                })
                 .ToListAsync(ct);
-
-            // Step 2: Project into DTOs in memory
-            var products = productsData.Select(p => new ProductDto
-            {
-                Id = p.Id,
-                CodeGaska = p.CodeGaska,
-                CodeCustomer = p.CodeCustomer,
-                Name = p.Name,
-                Unit = p.Unit,
-                Ean = p.Ean,
-                SupplierName = p.SupplierName,
-                SupplierLogo = p.SupplierLogo,
-                Description = p.Description,
-                TechnicalDetails = p.TechnicalDetails,
-                NetPrice = p.PriceNet,
-                GrossPrice = p.PriceGross,
-                CurrencyPrice = p.CurrencyPrice,
-                NetWeight = p.WeightNet,
-                InStock = p.InStock,
-                SuggestedCategoryId = p.DefaultAllegroCategory,
-                CrossNumbers = string.Join(",", p.CrossNumbers),
-                Applications = p.Applications.Select(a => new ApplicationDto
-                {
-                    Id = a.Id,
-                    ParentId = a.ParentID,
-                    Name = a.Name
-                }).ToList(),
-                Parameters = p.Parameters.Select(pa => new ParameterDto
-                {
-                    Id = pa.Id,
-                    Name = pa.AttributeName,
-                    Value = pa.AttributeValue
-                }).ToList(),
-                Images = p.Images.Select(i => new ImageDto
-                {
-                    Title = i.Title,
-                    Url = i.Url
-                }).ToList()
-            }).ToList();
-
-            return products;
         }
 
-        public async Task<List<ProductDto>> GetProductsWithoutDefaultCategory(CancellationToken ct)
+        public async Task<List<Product>> GetProductsWithoutDefaultCategory(CancellationToken ct)
         {
-            // 1. Get products without DefaultAllegroCategory
+            return await _context.Products
+                .Where(p => p.DefaultAllegroCategory == 0 && !p.Archived && p.Categories.Any())
+                .ToListAsync(ct);
+        }
+
+        public async Task<List<Product>> GetProductsWithDefaultCategory(CancellationToken ct)
+        {
+            return await _context.Products
+                .Include(p => p.CrossNumbers)
+                .Include(p => p.Applications)
+                .Include(p => p.Atributes)
+                .Where(p => p.Categories.Any() && !p.Archived)
+                .ToListAsync(ct);
+        }
+
+        public async Task<List<int>> GetDefaultCategories(CancellationToken ct)
+        {
+            // 1. Get products with DefaultAllegroCategory and without parameters
             var productsData = await _context.Products
-                .Where(p => p.DefaultAllegroCategory == 0 && !p.Archived)
+                .Where(p => p.DefaultAllegroCategory != 0
+                            && !p.Archived
+                            && !_context.CategoryParameters.Any(cp => cp.CategoryId == p.DefaultAllegroCategory))
                 .Select(p => new
                 {
-                    p.Id,
-                    p.CodeGaska,
-                    p.Name,
-                    p.Ean
+                    p.DefaultAllegroCategory
                 })
+                .Distinct()
                 .ToListAsync(ct);
 
-            // 2. Mapping to DTO
-            var products = productsData.Select(p => new ProductDto
-            {
-                Id = p.Id,
-                CodeGaska = p.CodeGaska,
-                Name = p.Name,
-                Ean = p.Ean
-            }).ToList();
+            var products = productsData.Select(p => p.DefaultAllegroCategory).ToList();
 
             return products;
         }
@@ -329,61 +280,116 @@ namespace JSAGROAllegroSync.Data
 
         public async Task<int?> GetMostCommonDefaultAllegroCategory(int productId, CancellationToken ct)
         {
-            // 1. Load all categories for this product
+            // 1 Load all categories for this product
             var productCategories = await _context.ProductCategories
                 .Where(pc => pc.ProductId == productId)
                 .ToListAsync(ct);
 
             if (!productCategories.Any())
-            {
                 return null;
-            }
 
-            // 2. Find root branches
+            // 2 Find root branches
             var rootBranches = productCategories.Where(pc => pc.ParentID == 0).ToList();
 
-            // Prefer the one with root = 19178 ("Części według rodzaju")
+            // Prefer root 19178 ("Części według rodzaju")
             var mainRoot = rootBranches.FirstOrDefault(r => r.CategoryId == 19178)
-                           ?? rootBranches.FirstOrDefault(); // fallback if no 19178
+                           ?? rootBranches.FirstOrDefault();
 
             if (mainRoot == null)
-            {
                 return null;
-            }
 
-            // 3. Traverse down to find the "deepest leaf" in this branch
+            // 3 Traverse branch to get all categories in this branch
             var branchCategories = productCategories
                 .Where(pc => IsInBranch(pc, mainRoot.CategoryId, productCategories))
                 .ToList();
 
-            // A leaf = category that is not a ParentID for any other in this branch
+            // Leaf = category that is not a ParentID for any other in this branch
             var leaf = branchCategories.FirstOrDefault(c => !branchCategories.Any(other => other.ParentID == c.CategoryId));
 
-            if (leaf == null)
+            if (leaf != null)
             {
-                return null;
+                // 4 Find other products with the same leaf and non-null DefaultAllegroCategory
+                var categoryStats = await _context.ProductCategories
+                    .Where(pc => pc.CategoryId == leaf.CategoryId
+                                 && pc.ProductId != productId
+                                 && pc.Product.DefaultAllegroCategory != 0)
+                    .GroupBy(pc => pc.Product.DefaultAllegroCategory)
+                    .Select(g => new
+                    {
+                        CategoryId = g.Key,
+                        Count = g.Count()
+                    })
+                    .OrderByDescending(g => g.Count)
+                    .FirstOrDefaultAsync(ct);
+
+                if (categoryStats != null)
+                    return categoryStats.CategoryId;
             }
 
-            // 4. Find other products with the same leaf and non-null DefaultAllegroCategory
-            var categoryStats = await _context.ProductCategories
-                .Where(pc => pc.CategoryId == leaf.CategoryId
-                             && pc.ProductId != productId
-                             && pc.Product.DefaultAllegroCategory != 0)
-                .GroupBy(pc => pc.Product.DefaultAllegroCategory)
-                .Select(g => new
-                {
-                    CategoryId = g.Key,
-                    Count = g.Count()
-                })
-                .OrderByDescending(g => g.Count)
-                .FirstOrDefaultAsync(ct);
-
-            if (categoryStats == null)
+            // 5 Fallback: search branch names for 'traktor'
+            var traktorMatch = branchCategories.FirstOrDefault(c => c.Name.ToLower().Contains("traktor"));
+            if (traktorMatch != null)
             {
-                return null;
+                // return Motoryzacja/Części do maszyn i innych pojazdów/Części do maszyn rolniczych/Do traktorów/Części montażowe
+                return 305829;
             }
 
-            return categoryStats.CategoryId;
+            // 6 Fallback: search branch names for 'kombajn'
+            var kombajnMatch = branchCategories.FirstOrDefault(c => c.Name.ToLower().Contains("kombajn"));
+            if (kombajnMatch != null)
+            {
+                // return Motoryzacja/Części do maszyn i innych pojazdów/Części do maszyn rolniczych/Do kombajnów/Części montażowe
+                return 319159;
+            }
+
+            return null;
+        }
+
+        public async Task<Product> GetByIdAsync(int id, CancellationToken ct)
+        {
+            return await _context.Products
+                .Include(p => p.Atributes)
+                .FirstOrDefaultAsync(p => p.Id == id, ct);
+        }
+
+        public async Task SaveCategoryParametersAsync(IEnumerable<CategoryParameter> parameters, CancellationToken ct)
+        {
+            foreach (var param in parameters)
+            {
+                _context.CategoryParameters.AddOrUpdate(param);
+            }
+
+            await _context.SaveChangesAsync(ct);
+        }
+
+        public async Task SetDefaultCategoryAsync(int productId, int categoryId, CancellationToken ct)
+        {
+            var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == productId, ct);
+
+            if (product == null)
+                throw new InvalidOperationException($"Product {productId} not found.");
+
+            product.DefaultAllegroCategory = categoryId;
+            product.UpdatedDate = DateTime.Now;
+
+            await _context.SaveChangesAsync(ct);
+        }
+
+        public async Task<List<CategoryParameter>> GetCategoryParametersAsync(int categoryId, CancellationToken ct = default)
+        {
+            return await _context.CategoryParameters
+                .Where(cp => cp.CategoryId == categoryId)
+                .ToListAsync(ct);
+        }
+
+        public async Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct = default)
+        {
+            foreach (var param in parameters)
+            {
+                _context.ProductParameters.AddOrUpdate(param);
+            }
+
+            await _context.SaveChangesAsync(ct);
         }
 
         /// <summary>

@@ -106,9 +106,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DTOs\ApplicationDto.cs" />
-    <Compile Include="DTOs\ImageDto.cs" />
-    <Compile Include="DTOs\ParameterDto.cs" />
+    <Compile Include="DTOs\AllegroApiResponses\CategoryParametersResponse.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.Designer.cs">
       <DependentUpon>202508201113326_AddProductUnit.cs</DependentUpon>
@@ -117,6 +115,24 @@
     <Compile Include="Migrations\202508201352391_AddProductAllegroCategory.Designer.cs">
       <DependentUpon>202508201352391_AddProductAllegroCategory.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202508220643103_CategoryParameters.cs" />
+    <Compile Include="Migrations\202508220643103_CategoryParameters.Designer.cs">
+      <DependentUpon>202508220643103_CategoryParameters.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508220846073_CategoryParameters-fix.cs" />
+    <Compile Include="Migrations\202508220846073_CategoryParameters-fix.Designer.cs">
+      <DependentUpon>202508220846073_CategoryParameters-fix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508221210224_ProductParameters.cs" />
+    <Compile Include="Migrations\202508221210224_ProductParameters.Designer.cs">
+      <DependentUpon>202508221210224_ProductParameters.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508221224301_ProductParameters-fix.cs" />
+    <Compile Include="Migrations\202508221224301_ProductParameters-fix.Designer.cs">
+      <DependentUpon>202508221224301_ProductParameters-fix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Models\CategoryParameter.cs" />
+    <Compile Include="Models\Product\ProductParameter.cs" />
     <Compile Include="Repositories\DbTokenRepository.cs" />
     <Compile Include="Repositories\IProductRepository.cs" />
     <Compile Include="Data\MyDbContext.cs" />
@@ -124,7 +140,6 @@
     <Compile Include="DTOs\AllegroApiResponses\MatchingCategoriesResponse.cs" />
     <Compile Include="DTOs\GaskaApiResponse\ProductResponse.cs" />
     <Compile Include="DTOs\GaskaApiResponse\ProductsResponse.cs" />
-    <Compile Include="DTOs\ProductDto.cs" />
     <Compile Include="DTOs\Settings\AllegroApiSettings.cs" />
     <Compile Include="DTOs\AllegroApiResponses\DeviceCodeResponseDto.cs" />
     <Compile Include="DTOs\Settings\GaskaApiSettings.cs" />
@@ -155,7 +170,7 @@
     <Compile Include="Models\Product\ProductCategory.cs" />
     <Compile Include="Models\Product\ProductFile.cs" />
     <Compile Include="Models\Product\ProductImage.cs" />
-    <Compile Include="Models\Product\ProductParameter.cs" />
+    <Compile Include="Models\Product\ProductAttribute.cs" />
     <Compile Include="Models\Product\RecommendedPart.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="ProjectInstaller.cs">
@@ -182,6 +197,18 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202508201352391_AddProductAllegroCategory.resx">
       <DependentUpon>202508201352391_AddProductAllegroCategory.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508220643103_CategoryParameters.resx">
+      <DependentUpon>202508220643103_CategoryParameters.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508220846073_CategoryParameters-fix.resx">
+      <DependentUpon>202508220846073_CategoryParameters-fix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508221210224_ProductParameters.resx">
+      <DependentUpon>202508221210224_ProductParameters.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508221224301_ProductParameters-fix.resx">
+      <DependentUpon>202508221224301_ProductParameters-fix.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>

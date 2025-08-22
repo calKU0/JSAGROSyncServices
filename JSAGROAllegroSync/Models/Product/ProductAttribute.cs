@@ -3,14 +3,14 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JSAGROAllegroSync.Models.Product
 {
-    public class ProductCategory
+    public class ProductAttribute
     {
         [Key]
         public int Id { get; set; }
 
-        public int CategoryId { get; set; }
-        public int ParentID { get; set; }
-        public string Name { get; set; }
+        public int AttributeId { get; set; }
+        public string AttributeName { get; set; }
+        public string AttributeValue { get; set; }
 
         [ForeignKey("Product")]
         public int ProductId { get; set; }

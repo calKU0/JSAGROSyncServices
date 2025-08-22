@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace JSAGROAllegroSync.Models
+namespace JSAGROAllegroSync.Models.Product
 {
     public class Component
     {

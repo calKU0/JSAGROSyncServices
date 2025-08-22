@@ -3,6 +3,8 @@ using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Models;
+using JSAGROAllegroSync.Models.Product;
+using Newtonsoft.Json.Linq;
 using Serilog;
 using Serilog.Core;
 using System;
@@ -97,54 +99,64 @@ namespace JSAGROAllegroSync.Services
         {
             int resultCategory = 0;
 
-            var token = await _auth.GetAccessTokenAsync(ct);
-
-            async Task<int> FetchCategory(string query, string queryType)
+            try
             {
-                var url = $"/sale/matching-categories?name={Uri.EscapeDataString(query)}";
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                var token = await _auth.GetAccessTokenAsync(ct);
 
-                var response = await _http.SendAsync(request, ct);
-
-                if (response.IsSuccessStatusCode)
+                async Task<int> FetchCategory(string query, string queryType)
                 {
+                    var url = $"/sale/matching-categories?name={Uri.EscapeDataString(query)}";
+                    var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                    var response = await _http.SendAsync(request, ct);
+                    if (!response.IsSuccessStatusCode)
+                        return 0;
+
                     var json = await response.Content.ReadAsStringAsync();
                     var result = JsonSerializer.Deserialize<MatchingCategoriesResponse>(json, options);
 
-                    var category = result?.MatchingCategories?.FirstOrDefault();
-                    if (category != null)
+                    var categories = result?.MatchingCategories;
+                    if (categories == null || !categories.Any())
+                        return 0;
+
+                    // Preferred root ID
+                    string preferredRootId = "99022"; // Motoryzacja/Części do maszyn i innych pojazdów
+
+                    // Keep only categories under the preferred root
+                    var candidates = categories
+                        .Where(c => BuildCategoryIdPath(c).Split('/').Contains(preferredRootId))
+                        .ToList();
+
+                    if (!candidates.Any())
                     {
-                        Log.Information($"Suggested Allegro category for product {code} by his {queryType}: {category.Name} ({category.Id})");
-                        return Convert.ToInt32(category.Id);
+                        // No category under the preferred root, do nothing
+                        return 0;
                     }
-                }
-                else
-                {
-                    Log.Error($"Error querying categories by {queryType}: {response.StatusCode}, {await response.Content.ReadAsStringAsync()}");
+
+                    // Pick the first direct child of the preferred child ID if it exists
+                    string preferredChildId = "252182"; // Części do maszyn rolniczych
+                    CategoryDto preferredCategory = candidates.FirstOrDefault(c => BuildCategoryIdPath(c).Split('/').Contains(preferredChildId));
+
+                    CategoryDto selectedCategory;
+
+                    if (preferredCategory != null)
+                    {
+                        selectedCategory = candidates
+                            .FirstOrDefault(c => c.Parent != null && c.Parent.Id == preferredChildId)
+                            ?? preferredCategory; // fallback to preferred itself
+                    }
+                    else
+                    {
+                        // If no preferred child ther return
+                        return 0;
+                    }
+
+                    Log.Information($"Suggested category for product {code}: {BuildCategoryPath(selectedCategory, c => c.Name)} ({BuildCategoryPath(selectedCategory, c => c.Id)})");
+                    return Convert.ToInt32(selectedCategory.Id);
                 }
 
-                return 0;
-            }
-
-            try
-            {
-                // 1 Try with product name first
                 resultCategory = await FetchCategory(name, "name");
-
-                // !!! DELETED OTHER MATCHING BECAUSE SOMETIMES IT RETURNED NOT RELEVANT CATEGORIES !!!
-
-                // 2️ If no match, try with product code
-                //if (resultCategory == 0 && !string.IsNullOrEmpty(code))
-                //{
-                //    resultCategory = await FetchCategory(code, "code");
-                //}
-
-                // 2️ If no match, try with product code
-                //if (resultCategory == 0 && !string.IsNullOrEmpty(ean))
-                //{
-                //    resultCategory = await FetchCategory(ean, "ean");
-                //}
             }
             catch (Exception ex)
             {
@@ -152,6 +164,183 @@ namespace JSAGROAllegroSync.Services
             }
 
             return resultCategory;
+
+            // Helpers
+            string BuildCategoryPath(CategoryDto category, Func<CategoryDto, string> selector)
+            {
+                var stack = new Stack<string>();
+                var current = category;
+                while (current != null)
+                {
+                    stack.Push(selector(current));
+                    current = current.Parent;
+                }
+                return string.Join("/", stack);
+            }
+
+            string BuildCategoryIdPath(CategoryDto category)
+            {
+                var stack = new Stack<string>();
+                var current = category;
+                while (current != null)
+                {
+                    stack.Push(current.Id);
+                    current = current.Parent;
+                }
+                return string.Join("/", stack);
+            }
+        }
+
+        public async Task FetchAndSaveCategoryParameters(CancellationToken ct = default)
+        {
+            try
+            {
+                var categories = await _productRepo.GetDefaultCategories(ct);
+
+                foreach (int category in categories)
+                {
+                    try
+                    {
+                        var token = await _auth.GetAccessTokenAsync(ct);
+                        var url = $"/sale/categories/{category}/parameters";
+                        var request = new HttpRequestMessage(HttpMethod.Get, url);
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                        var response = await _http.SendAsync(request, ct);
+
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            Log.Error($"Error fetching parameters for category {category}: {response.StatusCode}, {await response.Content.ReadAsStringAsync()}");
+                            continue;
+                        }
+
+                        var json = await response.Content.ReadAsStringAsync();
+                        var result = JsonSerializer.Deserialize<CategoryParametersResponse>(json, options);
+
+                        if (result?.Parameters == null || !result.Parameters.Any())
+                        {
+                            Log.Warning($"No parameters returned for category {category}");
+                            continue;
+                        }
+
+                        // Map API response to DTO
+                        var categoryResult = result.Parameters.Select(p => new CategoryParameter
+                        {
+                            ParameterId = Convert.ToInt32(p.Id),
+                            CategoryId = category,
+                            Name = p.Name,
+                            Type = p.Type,
+                            Required = p.Required,
+                            Min = p.Restrictions?.GetMin(),
+                            Max = p.Restrictions?.GetMax()
+                        }).ToList();
+
+                        await _productRepo.SaveCategoryParametersAsync(categoryResult, ct);
+
+                        Log.Information($"Saved {categoryResult.Count} parameters for category {category}");
+                    }
+                    catch (Exception exProd)
+                    {
+                        Log.Error(exProd, $"Error fetching parameters for category {category}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Fatal error in FetchAndSaveCategoryParametersForProducts.");
+            }
+        }
+
+        public async Task UpdateProductParameters(CancellationToken ct = default)
+        {
+            try
+            {
+                var products = await _productRepo.GetProductsWithDefaultCategory(ct);
+
+                foreach (var product in products)
+                {
+                    var categoryParams = await _productRepo.GetCategoryParametersAsync(product.DefaultAllegroCategory, ct);
+
+                    var productParams = new List<ProductParameter>();
+
+                    foreach (var catParam in categoryParams)
+                    {
+                        string value = MapProductToParameter(product, catParam);
+
+                        if (string.IsNullOrEmpty(value) && catParam.Required)
+                        {
+                            Log.Warning($"Missing required parameter {catParam.Name} for product {product.Id}");
+                            continue;
+                        }
+
+                        productParams.Add(new ProductParameter
+                        {
+                            ProductId = product.Id,
+                            ParameterId = catParam.ParameterId,
+                            Value = value
+                        });
+                    }
+
+                    await _productRepo.SaveProductParametersAsync(productParams, ct);
+
+                    Log.Information($"Updated {productParams.Count} parameters for product {product.Id}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, $"Error updating parameters for products.");
+            }
+        }
+
+        private string MapProductToParameter(Product product, CategoryParameter param)
+        {
+            switch (param.Name.ToLower())
+            {
+                case "stan": return "Nowy";
+                case "waga produktu z opakowaniem jednostkowym": return product.WeightNet.ToString();
+                case "ean (gtin)": return product.Ean;
+                case "numer katalogowy części": return product.CodeGaska;
+                case "numer katalogowy oryginału": return product.CodeGaska;
+                case "numery katalogowe zamienników":
+                    return product.CrossNumbers != null
+                        ? string.Join(",", product.CrossNumbers.Select(cn => cn.CrossNumberValue))
+                        : null;
+
+                case "stan opakowania": return "Oryginalne";
+                case "producent części": return product.SupplierName;
+                case "producent": return product.SupplierName;
+                case "marka": return GetApplicationNameFromBranch(product.Applications, branchIndex: 0, offsetFromEnd: 1);
+                case "marka maszyny": return GetApplicationNameFromBranch(product.Applications, branchIndex: 0, offsetFromEnd: 1);
+                default: return null;
+            }
+        }
+
+        private string GetApplicationNameFromBranch(ICollection<Application> applications, int branchIndex = 0, int offsetFromEnd = 0)
+        {
+            if (applications == null || !applications.Any())
+                return null;
+
+            // pick "branch" by leaf order (first leaf = branchIndex 0)
+            var leaf = applications.OrderBy(a => a.Id).Skip(branchIndex).FirstOrDefault();
+            if (leaf == null)
+                return null;
+
+            // reconstruct branch path: leaf → root
+            var branch = new List<Application>();
+            var current = leaf;
+            while (current != null)
+            {
+                branch.Add(current);
+                current = applications.FirstOrDefault(a => a.ApplicationId == current.ParentID);
+            }
+            branch.Reverse(); // root → leaf
+
+            // pick element from end
+            int idx = branch.Count - 1 - offsetFromEnd;
+            if (idx < 0 || idx >= branch.Count)
+                return null;
+
+            return branch[idx].Name;
         }
 
         //public async Task<string> GenerateXMLFile()
