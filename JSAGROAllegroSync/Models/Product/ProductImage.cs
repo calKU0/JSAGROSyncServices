@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JSAGROAllegroSync.Models.Product
@@ -10,6 +11,8 @@ namespace JSAGROAllegroSync.Models.Product
 
         public string Title { get; set; }
         public string Url { get; set; }
+        public string AllegroUrl { get; set; }
+        public DateTime AllegroExpirationDate { get; set; }
 
         [ForeignKey("Product")]
         public int ProductId { get; set; }

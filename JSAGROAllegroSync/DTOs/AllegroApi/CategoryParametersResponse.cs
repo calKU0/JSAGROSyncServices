@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -18,7 +19,17 @@ namespace JSAGROAllegroSync.DTOs.AllegroApiResponses
         public string Name { get; set; }
         public string Type { get; set; }
         public bool Required { get; set; }
+        public bool RequiredForProduct { get; set; }
         public Restrictions Restrictions { get; set; }
+        public List<Dictionary> Dictionary { get; set; }
+        public Options Options { get; set; }
+    }
+
+    public class Options
+    {
+        public bool CustomValuesEnabled { get; set; }
+        public string AmbiguousValueId { get; set; }
+        public bool DescribesProduct { get; set; }
     }
 
     public class Restrictions
@@ -41,5 +52,11 @@ namespace JSAGROAllegroSync.DTOs.AllegroApiResponses
             if (Max.Value.ValueKind == JsonValueKind.String && int.TryParse(Max.Value.GetString(), out var strNum)) return strNum;
             return null;
         }
+    }
+
+    public class Dictionary
+    {
+        public string Id { get; set; }
+        public string Value { get; set; }
     }
 }

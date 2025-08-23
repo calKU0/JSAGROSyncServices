@@ -1,5 +1,6 @@
 ﻿using JSAGROAllegroSync.Data;
 using JSAGROAllegroSync.DTOs;
+using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Models;
@@ -223,7 +224,7 @@ namespace JSAGROAllegroSync.Services
                             continue;
                         }
 
-                        // Map API response to DTO
+                        // Map API response to Model
                         var categoryResult = result.Parameters.Select(p => new CategoryParameter
                         {
                             ParameterId = Convert.ToInt32(p.Id),
@@ -231,8 +232,16 @@ namespace JSAGROAllegroSync.Services
                             Name = p.Name,
                             Type = p.Type,
                             Required = p.Required,
+                            RequiredForProduct = p.RequiredForProduct,
                             Min = p.Restrictions?.GetMin(),
-                            Max = p.Restrictions?.GetMax()
+                            Max = p.Restrictions?.GetMax(),
+                            AmbiguousValueId = p.Options.AmbiguousValueId,
+                            CustomValuesEnabled = p.Options.CustomValuesEnabled,
+                            DescribesProduct = p.Options.DescribesProduct,
+                            Values = p.Dictionary?.Select(d => new CategoryParameterValue
+                            {
+                                Value = d.Value
+                            }).ToList()
                         }).ToList();
 
                         await _productRepo.SaveCategoryParametersAsync(categoryResult, ct);
@@ -255,10 +264,11 @@ namespace JSAGROAllegroSync.Services
         {
             try
             {
-                var products = await _productRepo.GetProductsWithDefaultCategory(ct);
+                var products = await _productRepo.GetProductsToUpdateParameters(ct);
 
                 foreach (var product in products)
                 {
+                    // these are tracked CategoryParameter entities from DB
                     var categoryParams = await _productRepo.GetCategoryParametersAsync(product.DefaultAllegroCategory, ct);
 
                     var productParams = new List<ProductParameter>();
@@ -267,7 +277,7 @@ namespace JSAGROAllegroSync.Services
                     {
                         string value = MapProductToParameter(product, catParam);
 
-                        if (string.IsNullOrEmpty(value) && catParam.Required)
+                        if (string.IsNullOrEmpty(value) && (catParam.Required || catParam.RequiredForProduct))
                         {
                             Log.Warning($"Missing required parameter {catParam.Name} for product {product.Id}");
                             continue;
@@ -276,7 +286,8 @@ namespace JSAGROAllegroSync.Services
                         productParams.Add(new ProductParameter
                         {
                             ProductId = product.Id,
-                            ParameterId = catParam.ParameterId,
+                            CategoryParameterId = catParam.Id,
+                            IsForProduct = catParam.DescribesProduct,
                             Value = value
                         });
                     }
@@ -292,55 +303,438 @@ namespace JSAGROAllegroSync.Services
             }
         }
 
-        private string MapProductToParameter(Product product, CategoryParameter param)
+        public async Task ImportImages(CancellationToken ct = default)
         {
-            switch (param.Name.ToLower())
+            try
             {
-                case "stan": return "Nowy";
-                case "waga produktu z opakowaniem jednostkowym": return product.WeightNet.ToString();
-                case "ean (gtin)": return product.Ean;
-                case "numer katalogowy części": return product.CodeGaska;
-                case "numer katalogowy oryginału": return product.CodeGaska;
-                case "numery katalogowe zamienników":
-                    return product.CrossNumbers != null
-                        ? string.Join(",", product.CrossNumbers.Select(cn => cn.CrossNumberValue))
-                        : null;
+                var images = await _productRepo.GetImagesForImport(ct);
 
-                case "stan opakowania": return "Oryginalne";
-                case "producent części": return product.SupplierName;
-                case "producent": return product.SupplierName;
-                case "marka": return GetApplicationNameFromBranch(product.Applications, branchIndex: 0, offsetFromEnd: 1);
-                case "marka maszyny": return GetApplicationNameFromBranch(product.Applications, branchIndex: 0, offsetFromEnd: 1);
-                default: return null;
+                foreach (var image in images)
+                {
+                    try
+                    {
+                        var token = await _auth.GetAccessTokenAsync(ct);
+                        var url = "/sale/images";
+
+                        var request = new HttpRequestMessage(HttpMethod.Post, url);
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
+
+                        var imageResponse = await _http.GetAsync(image.Url, ct);
+                        if (!imageResponse.IsSuccessStatusCode)
+                        {
+                            Log.Error($"Failed to download image from {image.Url} for product {image.Product.CodeGaska}");
+                            continue;
+                        }
+
+                        var imageBytes = await imageResponse.Content.ReadAsByteArrayAsync();
+
+                        request.Content = new ByteArrayContent(imageBytes);
+                        request.Content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+
+                        var response = await _http.SendAsync(request, ct);
+                        var responseBody = await response.Content.ReadAsStringAsync();
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var result = JsonSerializer.Deserialize<AllegroImageResponse>(responseBody, options);
+
+                            if (result != null)
+                            {
+                                if (DateTime.TryParse(result.ExpiresAt, out var expiresAt))
+                                {
+                                    bool success = await _productRepo.UpdateProductAllegroImage(image.Id, result.Location, expiresAt, ct);
+
+                                    if (success)
+                                        Log.Information($"Image uploaded for product {image.Product.CodeGaska} ({image.Product.Name})");
+                                    else
+                                        Log.Error($"Couldn't save uploaded image data in database for product {image.Product.CodeGaska} ({image.Product.Name})");
+                                }
+                                else
+                                {
+                                    Log.Warning($"Couldn't parse Allegro expiration date for product {image.Product.CodeGaska} ({image.Product.Name})");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Log.Error($"Failed to upload image {image.Product.CodeGaska} ({image.Product.Name}. Response: {responseBody}");
+                        }
+                    }
+                    catch (Exception exImage)
+                    {
+                        Log.Error(exImage, $"Exception while uploading image for product {image.Product.CodeGaska} ({image.Product.Name}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Fatal error while importing images to Allegro.");
             }
         }
 
-        private string GetApplicationNameFromBranch(ICollection<Application> applications, int branchIndex = 0, int offsetFromEnd = 0)
+        public async Task FetchAndSaveCompatibleProducts(CancellationToken ct = default)
         {
-            if (applications == null || !applications.Any())
-                return null;
-
-            // pick "branch" by leaf order (first leaf = branchIndex 0)
-            var leaf = applications.OrderBy(a => a.Id).Skip(branchIndex).FirstOrDefault();
-            if (leaf == null)
-                return null;
-
-            // reconstruct branch path: leaf → root
-            var branch = new List<Application>();
-            var current = leaf;
-            while (current != null)
+            try
             {
-                branch.Add(current);
-                current = applications.FirstOrDefault(a => a.ApplicationId == current.ParentID);
-            }
-            branch.Reverse(); // root → leaf
+                var types = new[] { "TRACTOR" };
 
-            // pick element from end
-            int idx = branch.Count - 1 - offsetFromEnd;
-            if (idx < 0 || idx >= branch.Count)
+                foreach (var type in types)
+                {
+                    var groups = await GetCompatibleProductGroups(type, ct);
+
+                    foreach (var group in groups)
+                    {
+                        var products = await GetCompatibilityList(type, group.Id, ct);
+
+                        var productEntities = products.Select(p => new CompatibleProduct
+                        {
+                            Id = p.Id,
+                            Name = p.Text,
+                            Type = type,
+                            GroupName = group.Text
+                        }).ToList();
+
+                        await _productRepo.SaveCompatibleProductsAsync(productEntities, ct);
+
+                        Log.Information("💾 Saved {Count} products for type={Type}, group={GroupId}", productEntities.Count, type, group.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "🔥 Fatal error while fetching and saving compatible products.");
+            }
+        }
+
+        private async Task<List<CompatibleGroupDto>> GetCompatibleProductGroups(string type, CancellationToken ct = default)
+        {
+            var token = await _auth.GetAccessTokenAsync(ct);
+            var url = $"/sale/compatible-products/groups?type={type}&limit=200&offset=0";
+
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
+
+            var response = await _http.SendAsync(request, ct);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Log.Error("❌ Failed to get groups for type {Type}: Status={Status}, Body={Body}", type, response.StatusCode, body);
+                return new List<CompatibleGroupDto>();
+            }
+
+            try
+            {
+                var groupsResponse = JsonSerializer.Deserialize<CompatibleProductGroupsResponse>(body, options);
+                return groupsResponse.Groups;
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "❌ Failed to parse groups JSON for type {Type}", type);
+                return new List<CompatibleGroupDto>();
+            }
+        }
+
+        private async Task<List<CompatibleProductDto>> GetCompatibilityList(string type, string groupId, CancellationToken ct = default)
+        {
+            var allProducts = new List<CompatibleProductDto>();
+            var token = await _auth.GetAccessTokenAsync(ct);
+
+            int limit = 200;
+            int offset = 0;
+
+            while (true)
+            {
+                var url = $"/sale/compatible-products?type={type}&group.id={groupId}&limit={limit}&offset={offset}";
+
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
+
+                var response = await _http.SendAsync(request, ct);
+                var body = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Log.Error("❌ Failed to get products for type={Type}, group={GroupId}, offset={Offset}: Status={Status}, Body={Body}",
+                        type, groupId, offset, response.StatusCode, body);
+                    break; // stop fetching if request failed
+                }
+
+                try
+                {
+                    var compatResponse = JsonSerializer.Deserialize<CompatibleProductsResponse>(body, options);
+                    var products = compatResponse?.CompatibleProducts ?? new List<CompatibleProductDto>();
+
+                    if (!products.Any())
+                        break; // no more data → exit loop
+
+                    allProducts.AddRange(products);
+
+                    Log.Information("📥 Fetched {Count} products for type={Type}, group={GroupId}, offset={Offset}", products.Count, type, groupId, offset);
+                    foreach (var prod in products)
+                    {
+                        foreach (var app in prod.Attributes)
+                        {
+                            foreach (var val in app.Values)
+                            {
+                                Log.Debug("{product} - {AttrId}: {Value}", prod.Text, app.Id, val);
+                            }
+                        }
+                    }
+
+                    offset += limit; // move to next page
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "❌ Failed to parse products JSON for type={Type}, group={GroupId}, offset={Offset}", type, groupId, offset);
+                    break;
+                }
+            }
+
+            return allProducts;
+        }
+
+        public async Task CreateOffers(CancellationToken ct = default)
+        {
+            try
+            {
+                var products = await _productRepo.GetProductsToUpload(ct);
+
+                foreach (var product in products)
+                {
+                    try
+                    {
+                        var token = await _auth.GetAccessTokenAsync(ct);
+                        var url = "/sale/product-offers";
+                        var request = new HttpRequestMessage(HttpMethod.Post, url);
+                        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
+
+                        var offer = OfferFactory.BuildOffer(product);
+                        var jsonContent = JsonSerializer.Serialize(offer, options);
+                        request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/vnd.allegro.public.v1+json");
+
+                        var response = await _http.SendAsync(request, ct);
+                        var responseBody = await response.Content.ReadAsStringAsync();
+
+                        await LogAllegroResponse(product, response, responseBody);
+                    }
+                    catch (Exception exProd)
+                    {
+                        Log.Error(exProd, $"❌ Exception while creating offer for {product.Name} ({product.CodeGaska})");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "🔥 Fatal error while creating Allegro offers from products.");
+            }
+        }
+
+        /// <summary>
+        /// Logs Allegro API responses consistently.
+        /// </summary>
+        private async Task LogAllegroResponse(Product product, HttpResponseMessage response, string body)
+        {
+            switch ((int)response.StatusCode)
+            {
+                case 201:
+                    Log.Information($"✅ Offer created successfully for {product.Name} ({product.CodeGaska})");
+                    break;
+
+                case 202:
+                    Log.Information($"⌛ Offer creation accepted but still processing for {product.Name} ({product.CodeGaska})");
+                    break;
+
+                case 400:
+                case 422:
+                case 433:
+                    await LogAllegroErrors(product, response, body);
+                    break;
+
+                case 401:
+                    Log.Error($"🔒 Unauthorized (401). Check token for product {product.CodeGaska}.");
+                    break;
+
+                case 403:
+                    Log.Error($"🚫 Forbidden (403). No permission to create offer for {product.CodeGaska}.");
+                    break;
+
+                default:
+                    Log.Error($"⚠️ Unexpected status {(int)response.StatusCode} ({response.StatusCode}) for {product.CodeGaska}. Response: {body}");
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Parses and logs Allegro API error details.
+        /// </summary>
+        private async Task LogAllegroErrors(Product product, HttpResponseMessage response, string body)
+        {
+            try
+            {
+                var errorResponse = JsonSerializer.Deserialize<AllegroErrorResponse>(body, options);
+                if (errorResponse?.Errors != null)
+                {
+                    foreach (var err in errorResponse.Errors)
+                    {
+                        Log.Error($"❌ Offer error for {product.CodeGaska}: " +
+                                  $"Code={err.Code}, Message={err.Message}, " +
+                                  $"UserMessage={err.UserMessage ?? "N/A"}, Path={err.Path ?? "N/A"}, Details={err.Details ?? "N/A"}");
+
+                        // Special handling for Allegro 433 Validation errors
+                        if ((int)response.StatusCode == 433 && err.Metadata != null && err.Metadata.Any())
+                        {
+                            foreach (var kv in err.Metadata)
+                            {
+                                Log.Warning($"   ↳ Metadata: {kv.Key} = {kv.Value}");
+                            }
+                        }
+                        else if (err.Metadata != null && err.Metadata.Any())
+                        {
+                            var metaJson = JsonSerializer.Serialize(err.Metadata);
+                            Log.Warning($"   ↳ Metadata: {metaJson}");
+                        }
+                    }
+                }
+                else
+                {
+                    Log.Error($"❌ Offer error {response.StatusCode} for {product.CodeGaska}: {body}");
+                }
+            }
+            catch (Exception exParse)
+            {
+                Log.Error(exParse, $"Failed to parse Allegro error ({response.StatusCode}) for {product.CodeGaska}. Body={body}");
+            }
+        }
+
+        private static string Normalize(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
                 return null;
 
-            return branch[idx].Name;
+            var lowered = value.Trim().ToLowerInvariant();
+            return lowered == "rollon-solid" ? "rollon" : lowered;
+        }
+
+        private string MapProductToParameter(Product product, CategoryParameter param)
+        {
+            if (param == null) return null;
+
+            var name = param.Name?.ToLowerInvariant();
+
+            var directMappings = new Dictionary<string, Func<Product, string>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["stan"] = _ => "Nowy",
+                ["waga produktu z opakowaniem jednostkowym"] = p => p.WeightNet.ToString(), // bez ?. dla float
+                //["ean (gtin)"] = p => p.Ean,
+                ["numer katalogowy części"] = p => p.CodeGaska,
+                ["numer katalogowy oryginału"] = p => p.CodeGaska,
+                ["numery katalogowe zamienników"] = p => p.CrossNumbers != null ? string.Join(",", p.CrossNumbers.Select(cn => cn.CrossNumberValue)) : null,
+                ["stan opakowania"] = _ => "oryginalne",
+                ["jakość części (zgodnie z gvo)"] = _ => "P - zamiennik o jakości porównywalnej do oryginału"
+            };
+
+            Func<Product, string> resolver;
+            if (name != null && directMappings.TryGetValue(name, out resolver))
+                return resolver(product);
+
+            if (name == "producent" || name == "producent części")
+                return GetMatchingValue(product, param);
+
+            if (name == "marka" || name == "marka maszyny")
+                return GetBrandMatchingValue(product, param);
+
+            return null;
+        }
+
+        private string GetMatchingValue(Product product, CategoryParameter param)
+        {
+            const string fallback = "inny";
+
+            if (param?.Type?.Equals("dictionary", StringComparison.OrdinalIgnoreCase) == true
+                && param.Values?.Any() == true)
+            {
+                var dict = param.Values
+                    .Where(v => !string.IsNullOrWhiteSpace(v.Value))
+                    .Select(v => new { Raw = v.Value, Normalized = Normalize(v.Value) })
+                    .ToList();
+
+                var dictSet = new HashSet<string>(dict.Select(d => d.Normalized));
+
+                // 1. SupplierName exact match
+                if (!string.IsNullOrEmpty(product.SupplierName))
+                {
+                    var supplier = Normalize(product.SupplierName);
+                    var match = dict.FirstOrDefault(v => v.Normalized == supplier);
+                    if (match != null) return match.Raw;
+                }
+
+                // 2. Words from Product.Name
+                if (!string.IsNullOrEmpty(product.Name))
+                {
+                    var words = product.Name
+                        .Split(new[] { ' ', '-', '/', '_' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(Normalize)
+                        .Where(w => !string.IsNullOrEmpty(w));
+
+                    foreach (var word in words)
+                    {
+                        if (dictSet.Contains(word))
+                            return dict.First(v => v.Normalized == word).Raw;
+
+                        var contains = dict.FirstOrDefault(v =>
+                            (" " + v.Normalized + " ").Contains(" " + word + " "));
+                        if (contains != null) return contains.Raw;
+                    }
+                }
+
+                return fallback;
+            }
+
+            return !string.IsNullOrEmpty(product.SupplierName)
+                ? Normalize(product.SupplierName)
+                : fallback;
+        }
+
+        private string GetBrandMatchingValue(Product product, CategoryParameter param)
+        {
+            const string fallback = "inny";
+
+            if (product.Applications == null || !product.Applications.Any())
+                return fallback;
+
+            var rootBrands = product.Applications
+                .Where(a => a.ParentID == 0)
+                .Select(a => a.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToList();
+
+            if (!rootBrands.Any())
+                return fallback;
+
+            if (param?.Type?.Equals("dictionary", StringComparison.OrdinalIgnoreCase) == true
+                && param.Values?.Any() == true)
+            {
+                var dictValues = param.Values.Select(v => v.Value).ToList();
+
+                var brandMatch = dictValues.FirstOrDefault(dv =>
+                    rootBrands.Any(rb => dv.Equals(rb, StringComparison.OrdinalIgnoreCase)));
+
+                if (!string.IsNullOrEmpty(brandMatch)) return brandMatch;
+
+                if (!string.IsNullOrEmpty(product.SupplierName))
+                {
+                    var supplierMatch = dictValues.FirstOrDefault(dv =>
+                        dv.Equals(product.SupplierName, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrEmpty(supplierMatch)) return supplierMatch;
+                }
+            }
+
+            return product.SupplierName ?? rootBrands.FirstOrDefault() ?? fallback;
         }
 
         //public async Task<string> GenerateXMLFile()

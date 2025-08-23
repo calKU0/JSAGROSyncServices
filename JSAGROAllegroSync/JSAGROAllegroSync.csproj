@@ -106,7 +106,14 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DTOs\AllegroApiResponses\CategoryParametersResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\AllegroErrorResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\AllegroImageResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\CategoryParametersResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\CompatibleProductGroupsResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\CompatibleProductsResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\ProductOfferRequest.cs" />
+    <Compile Include="DTOs\AllegroApi\SupportedCategoriesReponse.cs" />
+    <Compile Include="Helpers\OfferFactory.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.Designer.cs">
       <DependentUpon>202508201113326_AddProductUnit.cs</DependentUpon>
@@ -131,20 +138,42 @@
     <Compile Include="Migrations\202508221224301_ProductParameters-fix.Designer.cs">
       <DependentUpon>202508221224301_ProductParameters-fix.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202508221802402_ParametersLink-Fix.cs" />
+    <Compile Include="Migrations\202508221802402_ParametersLink-Fix.Designer.cs">
+      <DependentUpon>202508221802402_ParametersLink-Fix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508231251205_ProductAllegoImages.cs" />
+    <Compile Include="Migrations\202508231251205_ProductAllegoImages.Designer.cs">
+      <DependentUpon>202508231251205_ProductAllegoImages.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508231340467_ParametersFields.cs" />
+    <Compile Include="Migrations\202508231340467_ParametersFields.Designer.cs">
+      <DependentUpon>202508231340467_ParametersFields.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508231810288_CompatibilityList.cs" />
+    <Compile Include="Migrations\202508231810288_CompatibilityList.Designer.cs">
+      <DependentUpon>202508231810288_CompatibilityList.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508231817277_CompatibilityFieldsFix.cs" />
+    <Compile Include="Migrations\202508231817277_CompatibilityFieldsFix.Designer.cs">
+      <DependentUpon>202508231817277_CompatibilityFieldsFix.cs</DependentUpon>
+    </Compile>
     <Compile Include="Models\CategoryParameter.cs" />
+    <Compile Include="Models\CategoryParameterValue.cs" />
+    <Compile Include="Models\CompatibileProduct.cs" />
     <Compile Include="Models\Product\ProductParameter.cs" />
     <Compile Include="Repositories\DbTokenRepository.cs" />
     <Compile Include="Repositories\IProductRepository.cs" />
     <Compile Include="Data\MyDbContext.cs" />
     <Compile Include="Repositories\ProductRepository.cs" />
-    <Compile Include="DTOs\AllegroApiResponses\MatchingCategoriesResponse.cs" />
-    <Compile Include="DTOs\GaskaApiResponse\ProductResponse.cs" />
-    <Compile Include="DTOs\GaskaApiResponse\ProductsResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\MatchingCategoriesResponse.cs" />
+    <Compile Include="DTOs\GaskaApi\ProductResponse.cs" />
+    <Compile Include="DTOs\GaskaApi\ProductsResponse.cs" />
     <Compile Include="DTOs\Settings\AllegroApiSettings.cs" />
-    <Compile Include="DTOs\AllegroApiResponses\DeviceCodeResponseDto.cs" />
+    <Compile Include="DTOs\AllegroApi\DeviceCodeResponseDto.cs" />
     <Compile Include="DTOs\Settings\GaskaApiSettings.cs" />
     <Compile Include="DTOs\TokenDto.cs" />
-    <Compile Include="DTOs\AllegroApiResponses\TokenResponseDto.cs" />
+    <Compile Include="DTOs\AllegroApi\TokenResponseDto.cs" />
     <Compile Include="Helpers\ApiHelper.cs" />
     <Compile Include="Helpers\AppSettingsLoader.cs" />
     <Compile Include="Helpers\CategoriesHelper.cs" />
@@ -209,6 +238,21 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202508221224301_ProductParameters-fix.resx">
       <DependentUpon>202508221224301_ProductParameters-fix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508221802402_ParametersLink-Fix.resx">
+      <DependentUpon>202508221802402_ParametersLink-Fix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508231251205_ProductAllegoImages.resx">
+      <DependentUpon>202508231251205_ProductAllegoImages.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508231340467_ParametersFields.resx">
+      <DependentUpon>202508231340467_ParametersFields.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508231810288_CompatibilityList.resx">
+      <DependentUpon>202508231810288_CompatibilityList.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508231817277_CompatibilityFieldsFix.resx">
+      <DependentUpon>202508231817277_CompatibilityFieldsFix.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>

@@ -33,47 +33,39 @@ namespace JSAGROAllegroSync.Data
 
         public async Task UpsertProducts(List<ApiProducts> apiProducts, HashSet<int> fetchedProductIds)
         {
-            using (var transaction = _context.Database.BeginTransaction())
+            foreach (var apiProduct in apiProducts)
             {
-                try
+                fetchedProductIds.Add(apiProduct.Id);
+
+                var product = await _context.Products
+                    .FirstOrDefaultAsync(p => p.Id == apiProduct.Id);
+
+                if (product == null)
                 {
-                    foreach (var apiProduct in apiProducts)
-                    {
-                        fetchedProductIds.Add(apiProduct.Id);
-
-                        var product = new Product
-                        {
-                            Id = apiProduct.Id,
-                            CodeGaska = apiProduct.CodeGaska,
-                            CodeCustomer = apiProduct.CodeCustomer,
-                            Name = apiProduct.Name,
-                            Description = apiProduct.Description,
-                            Ean = apiProduct.Ean,
-                            TechnicalDetails = apiProduct.TechnicalDetails,
-                            WeightGross = apiProduct.GrossWeight,
-                            WeightNet = apiProduct.NetWeight,
-                            SupplierName = apiProduct.SupplierName,
-                            SupplierLogo = apiProduct.SupplierLogo,
-                            InStock = apiProduct.InStock,
-                            Unit = apiProduct.Unit,
-                            CurrencyPrice = apiProduct.CurrencyPrice,
-                            PriceNet = apiProduct.NetPrice,
-                            PriceGross = apiProduct.GrossPrice,
-                            Archived = false
-                        };
-
-                        _context.Products.AddOrUpdate(product);
-                    }
-
-                    await _context.SaveChangesAsync();
-                    transaction.Commit();
+                    product = new Product { Id = apiProduct.Id };
+                    _context.Products.Add(product);
                 }
-                catch
-                {
-                    transaction.Rollback();
-                    throw;
-                }
+
+                // Map/overwrite properties
+                product.CodeGaska = apiProduct.CodeGaska;
+                product.CodeCustomer = apiProduct.CodeCustomer;
+                product.Name = apiProduct.Name;
+                product.Description = apiProduct.Description;
+                product.Ean = apiProduct.Ean;
+                product.TechnicalDetails = apiProduct.TechnicalDetails;
+                product.WeightGross = apiProduct.GrossWeight;
+                product.WeightNet = apiProduct.NetWeight;
+                product.SupplierName = apiProduct.SupplierName;
+                product.SupplierLogo = apiProduct.SupplierLogo;
+                product.InStock = apiProduct.InStock;
+                product.Unit = apiProduct.Unit;
+                product.CurrencyPrice = apiProduct.CurrencyPrice;
+                product.PriceNet = apiProduct.NetPrice;
+                product.PriceGross = apiProduct.GrossPrice;
+                product.Archived = false;
             }
+
+            await _context.SaveChangesAsync();
         }
 
         public async Task<int> ArchiveProductsNotIn(HashSet<int> fetchedProductIds)
@@ -220,17 +212,6 @@ namespace JSAGROAllegroSync.Data
             await _context.SaveChangesAsync();
         }
 
-        public async Task<List<Product>> GetProductsToUpload(CancellationToken ct)
-        {
-            return await _context.Products
-                .Include(p => p.CrossNumbers)
-                .Include(p => p.Applications)
-                .Include(p => p.Atributes)
-                .Include(p => p.Images)
-                .Where(p => p.Categories.Any() && !p.Archived)
-                .ToListAsync(ct);
-        }
-
         public async Task<List<Product>> GetProductsWithoutDefaultCategory(CancellationToken ct)
         {
             return await _context.Products
@@ -238,13 +219,33 @@ namespace JSAGROAllegroSync.Data
                 .ToListAsync(ct);
         }
 
-        public async Task<List<Product>> GetProductsWithDefaultCategory(CancellationToken ct)
+        public async Task<List<Product>> GetProductsToUpdateParameters(CancellationToken ct)
         {
+            // Step 1: products without parameters
+            var productsWithoutParameters = await _context.Products
+                .Include(p => p.CrossNumbers)
+                .Include(p => p.Applications)
+                .Include(p => p.Atributes)
+                .Include(p => p.Parameters.Select(pp => pp.CategoryParameter.Values))
+                .Where(p => p.Categories.Any()
+                            && !p.Archived
+                            && p.DefaultAllegroCategory != 0
+                            && !p.Parameters.Any())
+                .ToListAsync(ct);
+
+            if (productsWithoutParameters.Any())
+                return productsWithoutParameters;
+
             return await _context.Products
                 .Include(p => p.CrossNumbers)
                 .Include(p => p.Applications)
                 .Include(p => p.Atributes)
-                .Where(p => p.Categories.Any() && !p.Archived)
+                .Include(p => p.Parameters.Select(pp => pp.CategoryParameter.Values))
+                .Where(p => p.Categories.Any()
+                            && !p.Archived
+                            && p.DefaultAllegroCategory != 0)
+                .OrderByDescending(p => p.UpdatedDate)
+                .Take(1000)
                 .ToListAsync(ct);
         }
 
@@ -356,7 +357,26 @@ namespace JSAGROAllegroSync.Data
         {
             foreach (var param in parameters)
             {
-                _context.CategoryParameters.AddOrUpdate(param);
+                var existing = await _context.CategoryParameters
+                    .Include(cp => cp.Values)
+                    .FirstOrDefaultAsync(cp => cp.ParameterId == param.ParameterId
+                                            && cp.CategoryId == param.CategoryId, ct);
+
+                if (existing != null)
+                {
+                    existing.Name = param.Name;
+                    existing.Type = param.Type;
+                    existing.Required = param.Required;
+                    existing.Min = param.Min;
+                    existing.Max = param.Max;
+
+                    _context.CategoryParameterValues.RemoveRange(existing.Values); // clear old
+                    existing.Values = param.Values ?? new List<CategoryParameterValue>();
+                }
+                else
+                {
+                    _context.CategoryParameters.Add(param);
+                }
             }
 
             await _context.SaveChangesAsync(ct);
@@ -392,6 +412,43 @@ namespace JSAGROAllegroSync.Data
             await _context.SaveChangesAsync(ct);
         }
 
+        public async Task<List<Product>> GetProductsToUpload(CancellationToken ct)
+        {
+            return await _context.Products
+                .Include(p => p.CrossNumbers)
+                .Include(p => p.Applications)
+                .Include(p => p.Atributes)
+                .Include(p => p.Images)
+                .Include(p => p.Parameters)
+                .Include(p => p.Packages)
+                .Where(p => p.Categories.Any() && !p.Archived)
+                .Take(10000)
+                .ToListAsync(ct);
+        }
+
+        public async Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct = default)
+        {
+            foreach (var product in products)
+            {
+                _context.CompatibleProducts.AddOrUpdate(product);
+            }
+
+            await _context.SaveChangesAsync(ct);
+        }
+
+        public async Task<bool> UpdateProductAllegroImage(int imageId, string imageUrl, DateTime expiresAt, CancellationToken ct)
+        {
+            var image = await _context.ProductImages.FirstOrDefaultAsync(i => i.Id == imageId, ct);
+            if (image == null)
+                return false;
+
+            image.AllegroUrl = imageUrl;
+            image.AllegroExpirationDate = expiresAt;
+
+            var changes = await _context.SaveChangesAsync(ct);
+            return changes > 0;
+        }
+
         /// <summary>
         /// Recursively check if a category belongs to branch with given root.
         /// </summary>
@@ -405,6 +462,16 @@ namespace JSAGROAllegroSync.Data
                 return false;
 
             return IsInBranch(parent, rootId, allCategories);
+        }
+
+        public async Task<List<ProductImage>> GetImagesForImport(CancellationToken ct)
+        {
+            return await _context.ProductImages
+                .Include(pi => pi.Product)
+                .Where(pi => pi.Product.Categories.Any()
+                    && pi.Product.DefaultAllegroCategory != 0
+                    && (string.IsNullOrEmpty(pi.AllegroUrl) || (pi.AllegroExpirationDate != null && pi.AllegroExpirationDate <= DateTime.UtcNow)))
+                .ToListAsync(ct);
         }
     }
 }

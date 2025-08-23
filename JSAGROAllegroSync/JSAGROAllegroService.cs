@@ -86,29 +86,39 @@ namespace JSAGROAllegroSync
                 //Log.Information("Basic product sync completed.");
 
                 // 2. Get detailed info about products that are not in db yet
-                //if (_lastProductDetailsSyncDate.Date < DateTime.Today)
-                //{
-                //    Log.Information("Starting syncing product details...");
-                //    await _gaskaApiService.SyncProductDetails();
-                //    _lastProductDetailsSyncDate = DateTime.Today;
+                if (_lastProductDetailsSyncDate.Date < DateTime.Today)
+                {
+                    //Log.Information("Starting syncing product details...");
+                    //await _gaskaApiService.SyncProductDetails();
+                    //Log.Information("Detailed product sync completed.");
 
-                //    Log.Information("Detailed product sync completed.");
-                //}
+                    // 3. Update Allegro Categories
+                    //Log.Information("Starting Allegro categories mapping...");
+                    //await _allegroApiService.UpdateAllegroCategories();
+                    //Log.Information("Allegro Categories mapping completed.");
 
-                // 3. Update Allegro Categories
-                Log.Information("Starting Allegro categories mapping...");
-                await _allegroApiService.UpdateAllegroCategories();
-                Log.Information("Allegro Categories mapping completed.");
+                    // 4. Update Allegro Parameters
+                    //Log.Information("Starting Allegro parameters for category mapping...");
+                    //await _allegroApiService.FetchAndSaveCategoryParameters();
+                    //Log.Information("Allegro parameters for category mapping completed.");
 
-                // 4. Update Allegro Parameters
-                Log.Information("Starting Allegro parameters for category mapping...");
-                await _allegroApiService.FetchAndSaveCategoryParameters();
-                Log.Information("Allegro parameters for category mapping completed.");
+                    // 5. Feed Product Parameters
+                    //Log.Information("Starting product parameters update...");
+                    //await _allegroApiService.UpdateProductParameters();
+                    //Log.Information("Product parameters update completed.");
 
-                // 5. Feed Product Parameters
-                Log.Information("Starting product parameters update...");
-                await _allegroApiService.UpdateProductParameters();
-                Log.Information("Product parameters update completed");
+                    // 6. Images Upload
+                    //Log.Information("Starting importing images to allegro...");
+                    //await _allegroApiService.ImportImages();
+                    //Log.Information("Images import completed.");
+
+                    _lastProductDetailsSyncDate = DateTime.Today;
+                }
+
+                // 7. Send Allegro offers
+                Log.Information("Starting offers upload/update...");
+                await _allegroApiService.FetchAndSaveCompatibleProducts();
+                Log.Information("Offer upload/update completed");
 
                 DateTime nextRun = _lastRunTime.Add(_interval);
                 Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);

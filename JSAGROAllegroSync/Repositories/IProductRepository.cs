@@ -18,15 +18,19 @@ namespace JSAGROAllegroSync.Data
 
         Task<List<Product>> GetProductsForDetailUpdate(int limit);
 
+        Task<List<ProductImage>> GetImagesForImport(CancellationToken ct);
+
         Task UpdateProductDetails(Product product, ApiProduct updatedProduct);
 
         Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct);
+
+        Task<bool> UpdateProductAllegroImage(int imageId, string imageUrl, DateTime expiresAt, CancellationToken ct);
 
         Task<int?> GetMostCommonDefaultAllegroCategory(int productId, CancellationToken ct);
 
         Task<List<Product>> GetProductsWithoutDefaultCategory(CancellationToken ct);
 
-        Task<List<Product>> GetProductsWithDefaultCategory(CancellationToken ct);
+        Task<List<Product>> GetProductsToUpdateParameters(CancellationToken ct);
 
         Task<List<int>> GetDefaultCategories(CancellationToken ct);
 
@@ -41,5 +45,7 @@ namespace JSAGROAllegroSync.Data
         Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct);
 
         Task<List<CategoryParameter>> GetCategoryParametersAsync(int categoryId, CancellationToken ct);
+
+        Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct = default);
     }
 }

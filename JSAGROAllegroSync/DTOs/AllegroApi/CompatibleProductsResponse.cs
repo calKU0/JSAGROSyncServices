@@ -1,0 +1,38 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Text.Json.Serialization;
+using System.Threading.Tasks;
+
+namespace JSAGROAllegroSync.DTOs.AllegroApi
+{
+    // DTOs for deserialization
+    public class CompatibleProductsResponse
+    {
+        public List<CompatibleProductDto> CompatibleProducts { get; set; }
+    }
+
+    public class CompatibleProductDto
+    {
+        public string Id { get; set; }
+
+        public string Text { get; set; }
+
+        public CompatibleProductGroupDto Group { get; set; }
+
+        public List<CompatibleAttribute> Attributes { get; set; }
+    }
+
+    public class CompatibleProductGroupDto
+    {
+        public string Id { get; set; }
+    }
+
+    public class CompatibleAttribute
+    {
+        public string Id { get; set; }
+
+        public List<string> Values { get; set; }
+    }
+}
