@@ -16,9 +16,11 @@ using System.Runtime.Remoting.Contexts;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
+using System.Xml.Linq;
 
 namespace JSAGROAllegroSync.Data
 {
@@ -44,6 +46,17 @@ namespace JSAGROAllegroSync.Data
                 {
                     product = new Product { Id = apiProduct.Id };
                     _context.Products.Add(product);
+                }
+
+                if (!string.IsNullOrWhiteSpace(apiProduct.Name))
+                {
+                    // Match leading product code (numbers, dots, slashes, letters)
+                    var match = Regex.Match(apiProduct.Name, @"^(?<code>[0-9A-Za-z./x-]+)\s+(?<rest>.+)$");
+
+                    if (match.Success)
+                    {
+                        apiProduct.Name = $"{match.Groups["rest"].Value} {match.Groups["code"].Value}";
+                    }
                 }
 
                 // Map/overwrite properties
@@ -129,6 +142,17 @@ namespace JSAGROAllegroSync.Data
             _context.ProductFiles.RemoveRange(product.Files);
             _context.ProductCategories.RemoveRange(product.Categories);
 
+            if (!string.IsNullOrWhiteSpace(updatedProduct.Name))
+            {
+                // Match leading product code (numbers, dots, slashes, letters)
+                var match = Regex.Match(updatedProduct.Name, @"^(?<code>[0-9A-Za-z./x-]+)\s+(?<rest>.+)$");
+
+                if (match.Success)
+                {
+                    updatedProduct.Name = $"{match.Groups["rest"].Value} {match.Groups["code"].Value}";
+                }
+            }
+
             // Update fields
             product.CodeGaska = updatedProduct.CodeGaska;
             product.CodeCustomer = updatedProduct.CodeCustomer;
@@ -139,7 +163,7 @@ namespace JSAGROAllegroSync.Data
             product.CurrencyPrice = updatedProduct.CurrencyPrice;
             product.PriceNet = updatedProduct.PriceNet;
             product.PriceGross = updatedProduct.PriceGross;
-            product.UpdatedDate = DateTime.Now;
+            product.UpdatedDate = DateTime.UtcNow;
 
             // Map collections
             product.Packages = updatedProduct.Packages.Select(p => new Package
@@ -390,7 +414,6 @@ namespace JSAGROAllegroSync.Data
                 throw new InvalidOperationException($"Product {productId} not found.");
 
             product.DefaultAllegroCategory = categoryId;
-            product.UpdatedDate = DateTime.Now;
 
             await _context.SaveChangesAsync(ct);
         }
@@ -414,16 +437,38 @@ namespace JSAGROAllegroSync.Data
 
         public async Task<List<Product>> GetProductsToUpload(CancellationToken ct)
         {
-            return await _context.Products
+            var products = await _context.Products
                 .Include(p => p.CrossNumbers)
                 .Include(p => p.Applications)
                 .Include(p => p.Atributes)
-                .Include(p => p.Images)
+                .Include(p => p.Images) // cannot filter here in EF6
                 .Include(p => p.Parameters)
                 .Include(p => p.Packages)
-                .Where(p => p.Categories.Any() && !p.Archived)
-                .Take(10000)
+                .Where(p => p.Categories.Any()
+                            && !p.Archived
+                            && p.DefaultAllegroCategory != 0
+                            && p.PriceGross > 1.00m
+                            && p.InStock > 0
+                            && p.Images.Any(i => i.AllegroUrl != null))
                 .ToListAsync(ct);
+
+            // filter Images collection after query
+            foreach (var product in products)
+            {
+                product.Images = product.Images.Where(i => i.AllegroUrl != null).ToList();
+            }
+
+            return products;
+        }
+
+        public async Task<List<CompatibleProduct>> GetCompatibilityList(CancellationToken ct)
+        {
+            return await _context.CompatibleProducts.ToListAsync(ct);
+        }
+
+        public async Task<List<AllegroCategory>> GetAllegroCategories(CancellationToken ct)
+        {
+            return await _context.AllegroCategories.ToListAsync(ct);
         }
 
         public async Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct = default)
@@ -472,6 +517,50 @@ namespace JSAGROAllegroSync.Data
                     && pi.Product.DefaultAllegroCategory != 0
                     && (string.IsNullOrEmpty(pi.AllegroUrl) || (pi.AllegroExpirationDate != null && pi.AllegroExpirationDate <= DateTime.UtcNow)))
                 .ToListAsync(ct);
+        }
+
+        public async Task SaveCategoryTreeAsync(CategoryDto category, CancellationToken ct)
+        {
+            // Traverse up to root
+            var stack = new Stack<CategoryDto>();
+            var current = category;
+            while (current != null)
+            {
+                stack.Push(current);
+                current = current.Parent;
+            }
+
+            AllegroCategory parentEntity = null;
+
+            while (stack.Any())
+            {
+                var dto = stack.Pop();
+                var id = Convert.ToInt32(dto.Id);
+
+                var existing = await _context.AllegroCategories.FirstOrDefaultAsync(c => c.CategoryId == id, ct);
+
+                if (existing == null)
+                {
+                    existing = new AllegroCategory
+                    {
+                        CategoryId = id,
+                        Name = dto.Name,
+                        Parent = parentEntity
+                    };
+                    _context.AllegroCategories.Add(existing);
+                }
+                else
+                {
+                    // Update name in case Allegro renamed it
+                    existing.Name = dto.Name;
+                    if (parentEntity != null)
+                        existing.Parent = parentEntity;
+                }
+
+                await _context.SaveChangesAsync(ct);
+
+                parentEntity = existing;
+            }
         }
     }
 }

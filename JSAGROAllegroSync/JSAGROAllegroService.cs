@@ -92,32 +92,37 @@ namespace JSAGROAllegroSync
                     //await _gaskaApiService.SyncProductDetails();
                     //Log.Information("Detailed product sync completed.");
 
-                    // 3. Update Allegro Categories
+                    //3.Update Allegro Categories
                     //Log.Information("Starting Allegro categories mapping...");
                     //await _allegroApiService.UpdateAllegroCategories();
                     //Log.Information("Allegro Categories mapping completed.");
 
-                    // 4. Update Allegro Parameters
+                    //4.Update Allegro Parameters
                     //Log.Information("Starting Allegro parameters for category mapping...");
                     //await _allegroApiService.FetchAndSaveCategoryParameters();
                     //Log.Information("Allegro parameters for category mapping completed.");
 
-                    // 5. Feed Product Parameters
+                    //5.Feed Product Parameters
                     //Log.Information("Starting product parameters update...");
                     //await _allegroApiService.UpdateProductParameters();
                     //Log.Information("Product parameters update completed.");
 
-                    // 6. Images Upload
+                    //6.Images Upload
                     //Log.Information("Starting importing images to allegro...");
                     //await _allegroApiService.ImportImages();
                     //Log.Information("Images import completed.");
 
+                    //7.Get Compatible Products
+                    //Log.Information("Starting offers upload/update...");
+                    //await _allegroApiService.FetchAndSaveCompatibleProducts();
+                    //Log.Information("Offer upload/update completed");
+
                     _lastProductDetailsSyncDate = DateTime.Today;
                 }
 
-                // 7. Send Allegro offers
+                // 8. Send Allegro offers
                 Log.Information("Starting offers upload/update...");
-                await _allegroApiService.FetchAndSaveCompatibleProducts();
+                await _allegroApiService.CreateOffers();
                 Log.Information("Offer upload/update completed");
 
                 DateTime nextRun = _lastRunTime.Add(_interval);

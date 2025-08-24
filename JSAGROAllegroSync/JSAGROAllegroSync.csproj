@@ -68,6 +68,7 @@
     <Reference Include="System.Diagnostics.DiagnosticSource, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.Diagnostics.DiagnosticSource.9.0.8\lib\net462\System.Diagnostics.DiagnosticSource.dll</HintPath>
     </Reference>
+    <Reference Include="System.Drawing" />
     <Reference Include="System.IO.Pipelines, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.IO.Pipelines.9.0.8\lib\net462\System.IO.Pipelines.dll</HintPath>
     </Reference>
@@ -113,6 +114,7 @@
     <Compile Include="DTOs\AllegroApi\CompatibleProductsResponse.cs" />
     <Compile Include="DTOs\AllegroApi\ProductOfferRequest.cs" />
     <Compile Include="DTOs\AllegroApi\SupportedCategoriesReponse.cs" />
+    <Compile Include="Helpers\AsyncHelpers.cs" />
     <Compile Include="Helpers\OfferFactory.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.Designer.cs">
@@ -158,13 +160,32 @@
     <Compile Include="Migrations\202508231817277_CompatibilityFieldsFix.Designer.cs">
       <DependentUpon>202508231817277_CompatibilityFieldsFix.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202508240748362_AllegroCategories.cs" />
+    <Compile Include="Migrations\202508240748362_AllegroCategories.Designer.cs">
+      <DependentUpon>202508240748362_AllegroCategories.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508240825295_AllegroCategoriesFix.cs" />
+    <Compile Include="Migrations\202508240825295_AllegroCategoriesFix.Designer.cs">
+      <DependentUpon>202508240825295_AllegroCategoriesFix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508241131173_Datetime2ColumnChange.cs" />
+    <Compile Include="Migrations\202508241131173_Datetime2ColumnChange.Designer.cs">
+      <DependentUpon>202508241131173_Datetime2ColumnChange.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508241148432_AllegroExpirationDateFix.cs" />
+    <Compile Include="Migrations\202508241148432_AllegroExpirationDateFix.Designer.cs">
+      <DependentUpon>202508241148432_AllegroExpirationDateFix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Models\AllegroCategory.cs" />
     <Compile Include="Models\CategoryParameter.cs" />
     <Compile Include="Models\CategoryParameterValue.cs" />
     <Compile Include="Models\CompatibileProduct.cs" />
     <Compile Include="Models\Product\ProductParameter.cs" />
     <Compile Include="Repositories\DbTokenRepository.cs" />
+    <Compile Include="Repositories\IOfferRepository.cs" />
     <Compile Include="Repositories\IProductRepository.cs" />
     <Compile Include="Data\MyDbContext.cs" />
+    <Compile Include="Repositories\OfferRepository.cs" />
     <Compile Include="Repositories\ProductRepository.cs" />
     <Compile Include="DTOs\AllegroApi\MatchingCategoriesResponse.cs" />
     <Compile Include="DTOs\GaskaApi\ProductResponse.cs" />
@@ -253,6 +274,18 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202508231817277_CompatibilityFieldsFix.resx">
       <DependentUpon>202508231817277_CompatibilityFieldsFix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508240748362_AllegroCategories.resx">
+      <DependentUpon>202508240748362_AllegroCategories.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508240825295_AllegroCategoriesFix.resx">
+      <DependentUpon>202508240825295_AllegroCategoriesFix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508241131173_Datetime2ColumnChange.resx">
+      <DependentUpon>202508241131173_Datetime2ColumnChange.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508241148432_AllegroExpirationDateFix.resx">
+      <DependentUpon>202508241148432_AllegroExpirationDateFix.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>

@@ -27,9 +27,15 @@ namespace JSAGROAllegroSync.Models.Product
         public decimal PriceNet { get; set; }
         public decimal PriceGross { get; set; }
         public int DefaultAllegroCategory { get; set; }
+
         public bool Archived { get; set; } = false;
-        public DateTime CreatedDate { get; set; } = DateTime.Now;
-        public DateTime UpdatedDate { get; set; } = DateTime.Now;
+
+        [Column(TypeName = "datetime2")]
+        public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
+
+        [Column(TypeName = "datetime2")]
+        public DateTime UpdatedDate { get; set; } = DateTime.UtcNow;
+
         public virtual ICollection<Package> Packages { get; set; }
         public virtual ICollection<CrossNumber> CrossNumbers { get; set; }
         public virtual ICollection<Component> Components { get; set; }

@@ -1,4 +1,5 @@
 ﻿using JSAGROAllegroSync.DTOs;
+using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
 using System;
@@ -47,5 +48,11 @@ namespace JSAGROAllegroSync.Data
         Task<List<CategoryParameter>> GetCategoryParametersAsync(int categoryId, CancellationToken ct);
 
         Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct = default);
+
+        Task SaveCategoryTreeAsync(CategoryDto category, CancellationToken ct);
+
+        Task<List<CompatibleProduct>> GetCompatibilityList(CancellationToken ct);
+
+        Task<List<AllegroCategory>> GetAllegroCategories(CancellationToken ct);
     }
 }
