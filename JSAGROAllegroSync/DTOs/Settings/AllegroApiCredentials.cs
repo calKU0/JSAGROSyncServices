@@ -1,6 +1,6 @@
 ﻿namespace JSAGROAllegroSync.DTOs
 {
-    public class AllegroApiSettings
+    public class AllegroApiCredentials
     {
         public string ClientName { get; set; }
         public string ClientId { get; set; }

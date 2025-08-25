@@ -2,6 +2,7 @@
 using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
+using JSAGROAllegroSync.DTOs.Settings;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
@@ -19,9 +20,11 @@ using System.Net.Http.Headers;
 using System.Security.Policy;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
+using static JSAGROAllegroSync.DTOs.AllegroApi.OffersResponse;
 
 namespace JSAGROAllegroSync.Services
 {
@@ -30,6 +33,7 @@ namespace JSAGROAllegroSync.Services
         private readonly AllegroAuthService _auth;
         private readonly HttpClient _http;
         private readonly IProductRepository _productRepo;
+        private readonly AppSettings _appSettings;
 
         private readonly JsonSerializerOptions options = new JsonSerializerOptions
         {
@@ -38,11 +42,12 @@ namespace JSAGROAllegroSync.Services
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
 
-        public AllegroApiService(AllegroAuthService auth, IProductRepository productRepo, HttpClient httpClient)
+        public AllegroApiService(AllegroAuthService auth, IProductRepository productRepo, HttpClient httpClient, AppSettings appSettings)
         {
             _auth = auth;
             _productRepo = productRepo;
             _http = httpClient;
+            _appSettings = appSettings;
         }
 
         public async Task UpdateAllegroCategories(CancellationToken ct = default)
@@ -472,8 +477,7 @@ namespace JSAGROAllegroSync.Services
                     if (!response.IsSuccessStatusCode)
                     {
                         var body = await response.Content.ReadAsStringAsync();
-                        Log.Error("Failed to get products for type={Type}, group={GroupId}, offset={Offset}: Status={Status}, Body={Body}",
-                            type, groupId, offset, response.StatusCode, body);
+                        Log.Error("Failed to get products for type={Type}, group={GroupId}, offset={Offset}: Status={Status}, Body={Body}", type, groupId, offset, response.StatusCode, body);
                         break;
                     }
 
@@ -511,7 +515,7 @@ namespace JSAGROAllegroSync.Services
                         var url = "/sale/product-offers";
                         var request = await CreateAuthorizedRequestAsync(HttpMethod.Post, url, ct);
 
-                        var offer = OfferFactory.BuildOffer(product, compatibleProducts, allegroCategories);
+                        var offer = OfferFactory.BuildOffer(product, compatibleProducts, allegroCategories, _appSettings);
                         var jsonContent = JsonSerializer.Serialize(offer, options);
 
                         request.Content = new StringContent(jsonContent, Encoding.UTF8, "application/vnd.allegro.public.v1+json");
@@ -530,6 +534,109 @@ namespace JSAGROAllegroSync.Services
             catch (Exception ex)
             {
                 Log.Error(ex, "Fatal error while creating Allegro offers from products.");
+            }
+        }
+
+        public async Task GetAllegroOffers(CancellationToken ct = default)
+        {
+            try
+            {
+                // Fetch all offers
+                var allOffers = await FetchAllOffers(ct);
+                Log.Information("Fetched {Count} offers from Allegro.", allOffers.Count);
+
+                // Fetch shipping rates
+                var shippingRates = await FetchShippingRates(ct);
+
+                var shippingDict = shippingRates.ShippingRates.ToDictionary(s => s.Id, s => s.Name);
+
+                foreach (var offer in allOffers)
+                {
+                    if (offer.Delivery != null && !string.IsNullOrEmpty(offer.Delivery.ShippingRates.Id))
+                    {
+                        if (shippingDict.TryGetValue(offer.Delivery.ShippingRates.Id, out var name))
+                        {
+                            offer.Delivery.ShippingRates.Name = name;
+                        }
+                    }
+                }
+
+                // Save offers to DB
+                await _productRepo.UpsertOffers(allOffers, ct);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Fatal error while fetching and saving offers.");
+            }
+        }
+
+        private async Task<List<Offer>> FetchAllOffers(CancellationToken ct)
+        {
+            var allOffersPages = new List<OffersResponse>();
+            int limit = 1000;
+            int offset = 0;
+            bool hasMore = true;
+
+            while (hasMore && !ct.IsCancellationRequested)
+            {
+                try
+                {
+                    var url = $"/sale/offers?limit={limit}&offset={offset}";
+                    var request = await CreateAuthorizedRequestAsync(HttpMethod.Get, url, ct);
+                    var response = await _http.SendAsync(request, ct);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var body = await response.Content.ReadAsStringAsync();
+                        Log.Error("Failed to get offers: Status={Status}, Body={Body}", response.StatusCode, body);
+                        break;
+                    }
+
+                    var offersPage = await DeserializeResponseAsync<OffersResponse>(response);
+                    if (offersPage == null)
+                    {
+                        Log.Warning("Received null response when fetching offers at offset {Offset}", offset);
+                        break;
+                    }
+
+                    allOffersPages.Add(offersPage);
+
+                    if (offersPage.Offers.Count < limit)
+                        hasMore = false;
+                    else
+                        offset += limit;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Exception while fetching offers at offset {Offset}", offset);
+                    break;
+                }
+            }
+
+            return allOffersPages.SelectMany(p => p.Offers).ToList();
+        }
+
+        private async Task<ShippingRatesReponse> FetchShippingRates(CancellationToken ct)
+        {
+            try
+            {
+                var shippingUrl = $"/sale/shipping-rates";
+                var shippingRequest = await CreateAuthorizedRequestAsync(HttpMethod.Get, shippingUrl, ct);
+                var shippingResponse = await _http.SendAsync(shippingRequest, ct);
+
+                if (!shippingResponse.IsSuccessStatusCode)
+                {
+                    var body = await shippingResponse.Content.ReadAsStringAsync();
+                    Log.Error("Failed to get shipping rates: Status={Status}, Body={Body}", shippingResponse.StatusCode, body);
+                    return null;
+                }
+
+                return await DeserializeResponseAsync<ShippingRatesReponse>(shippingResponse);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Exception while fetching shipping rates.");
+                return null;
             }
         }
 

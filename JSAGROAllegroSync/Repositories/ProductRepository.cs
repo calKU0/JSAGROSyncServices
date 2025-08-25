@@ -1,4 +1,5 @@
 ﻿using JSAGROAllegroSync.DTOs;
+using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
@@ -7,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.Entity;
 using System.Data.Entity.Migrations;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -50,12 +52,59 @@ namespace JSAGROAllegroSync.Data
 
                 if (!string.IsNullOrWhiteSpace(apiProduct.Name))
                 {
-                    // Match leading product code (numbers, dots, slashes, letters)
-                    var match = Regex.Match(apiProduct.Name, @"^(?<code>[0-9A-Za-z./x-]+)\s+(?<rest>.+)$");
+                    // 1. Remove JAG variants (JAG, JAG16-0034, JAG124, etc.)
+                    bool jagRemoved = false;
+                    apiProduct.Name = Regex.Replace(
+                        apiProduct.Name,
+                        @"JAG[0-9A-Za-z\-]*",
+                        m =>
+                        {
+                            jagRemoved = true;
+                            return "";
+                        },
+                        RegexOptions.IgnoreCase
+                    );
 
-                    if (match.Success)
+                    // Collapse multiple spaces
+                    apiProduct.Name = Regex.Replace(apiProduct.Name, @"\s+", " ").Trim();
+
+                    // 2. Move leading product code (if exists) to the end
+                    var codeMatch = Regex.Match(apiProduct.Name, @"^(?<code>\d+[0-9A-Za-z./x-]*)\s+(?<rest>.+)$");
+                    if (codeMatch.Success)
                     {
-                        apiProduct.Name = $"{match.Groups["rest"].Value} {match.Groups["code"].Value}";
+                        apiProduct.Name = $"{codeMatch.Groups["rest"].Value} {codeMatch.Groups["code"].Value}";
+                    }
+
+                    // 3. Append CodeGaska
+                    bool codeGaskaAppended = false;
+                    var words = apiProduct.Name.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    if ((jagRemoved || words.Length < 3) && !string.IsNullOrWhiteSpace(apiProduct.CodeGaska))
+                    {
+                        apiProduct.Name = $"{apiProduct.Name} {apiProduct.CodeGaska}".Trim();
+                        codeGaskaAppended = true;
+                        words = apiProduct.Name.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    }
+
+                    // 4. If CodeGaska is in the name AND <3 words → add SupplierName or 'a'
+                    if (codeGaskaAppended && words.Length < 3)
+                    {
+                        if (!string.IsNullOrWhiteSpace(apiProduct.SupplierName))
+                        {
+                            apiProduct.Name = $"{apiProduct.Name} {apiProduct.SupplierName}".Trim();
+                        }
+                        else
+                        {
+                            apiProduct.Name = $"{apiProduct.Name} a".Trim();
+                        }
+                    }
+
+                    // 5. If longer than 75 chars → remove last words until < 75
+                    while (apiProduct.Name.Length > 75)
+                    {
+                        var parts = apiProduct.Name.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                        if (parts.Count <= 1) break; // stop if only 1 word left
+                        parts.RemoveAt(parts.Count - 1);
+                        apiProduct.Name = string.Join(" ", parts);
                     }
                 }
 
@@ -142,21 +191,9 @@ namespace JSAGROAllegroSync.Data
             _context.ProductFiles.RemoveRange(product.Files);
             _context.ProductCategories.RemoveRange(product.Categories);
 
-            if (!string.IsNullOrWhiteSpace(updatedProduct.Name))
-            {
-                // Match leading product code (numbers, dots, slashes, letters)
-                var match = Regex.Match(updatedProduct.Name, @"^(?<code>[0-9A-Za-z./x-]+)\s+(?<rest>.+)$");
-
-                if (match.Success)
-                {
-                    updatedProduct.Name = $"{match.Groups["rest"].Value} {match.Groups["code"].Value}";
-                }
-            }
-
             // Update fields
             product.CodeGaska = updatedProduct.CodeGaska;
             product.CodeCustomer = updatedProduct.CodeCustomer;
-            product.Name = updatedProduct.Name;
             product.SupplierName = updatedProduct.SupplierName;
             product.SupplierLogo = updatedProduct.SupplierLogo;
             product.InStock = updatedProduct.InStock;
@@ -441,18 +478,46 @@ namespace JSAGROAllegroSync.Data
                 .Include(p => p.CrossNumbers)
                 .Include(p => p.Applications)
                 .Include(p => p.Atributes)
-                .Include(p => p.Images) // cannot filter here in EF6
+                .Include(p => p.Images)
                 .Include(p => p.Parameters)
                 .Include(p => p.Packages)
+                .Include(p => p.AllegroOffers)
                 .Where(p => p.Categories.Any()
                             && !p.Archived
                             && p.DefaultAllegroCategory != 0
                             && p.PriceGross > 1.00m
                             && p.InStock > 0
-                            && p.Images.Any(i => i.AllegroUrl != null))
+                            && p.Images.Any(i => i.AllegroUrl != null)
+                            && !p.AllegroOffers.Any()
+                            )
                 .ToListAsync(ct);
 
-            // filter Images collection after query
+            foreach (var product in products)
+            {
+                product.Images = product.Images.Where(i => i.AllegroUrl != null).ToList();
+            }
+
+            return products;
+        }
+
+        public async Task<List<Product>> GetProductsToUpdateOffer(string apiDeliveryName, CancellationToken ct)
+        {
+            var products = await _context.Products
+                .Include(p => p.CrossNumbers)
+                .Include(p => p.Applications)
+                .Include(p => p.Atributes)
+                .Include(p => p.Images)
+                .Include(p => p.Parameters)
+                .Include(p => p.Packages)
+                .Include(p => p.AllegroOffers)
+                .Where(p => p.Categories.Any()
+                            && p.DefaultAllegroCategory != 0
+                            && p.PriceGross > 1.00m
+                            && p.Images.Any(i => i.AllegroUrl != null)
+                            && p.AllegroOffers.LastOrDefault() != null
+                            && p.AllegroOffers.LastOrDefault().DeliveryName == apiDeliveryName)
+                .ToListAsync(ct);
+
             foreach (var product in products)
             {
                 product.Images = product.Images.Where(i => i.AllegroUrl != null).ToList();
@@ -560,6 +625,39 @@ namespace JSAGROAllegroSync.Data
                 await _context.SaveChangesAsync(ct);
 
                 parentEntity = existing;
+            }
+        }
+
+        public async Task UpsertOffers(List<Offer> offers, CancellationToken ct)
+        {
+            foreach (var offer in offers)
+            {
+                var product = _context.Products.FirstOrDefault(o => o.CodeGaska == offer.External.Id);
+                if (product == null)
+                    continue;
+
+                var existing = _context.AllegroOffers.FirstOrDefault(o => o.Id == offer.Id);
+                if (existing == null)
+                {
+                    existing = new AllegroOffer
+                    {
+                        Id = offer.Id
+                    };
+                    _context.AllegroOffers.Add(existing);
+                }
+
+                existing.Name = offer.Name;
+                existing.ProductId = product.Id;
+                existing.CategoryId = Convert.ToInt32(offer.Category.Id);
+                existing.Price = Decimal.Parse(offer.SellingMode.Price.Amount, CultureInfo.InvariantCulture);
+                existing.Stock = offer.Stock.Available;
+                existing.WatchersCount = offer.Stats.WatchersCount;
+                existing.VisitsCount = offer.Stats.VisitsCount;
+                existing.Status = offer.Publication.Status;
+                existing.DeliveryName = offer.Delivery.ShippingRates.Name;
+                existing.ExternalId = offer.External?.Id;
+
+                await _context.SaveChangesAsync(ct);
             }
         }
     }

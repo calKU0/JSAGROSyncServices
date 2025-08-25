@@ -1,5 +1,6 @@
 ﻿using JSAGROAllegroSync.Data;
 using JSAGROAllegroSync.DTOs;
+using JSAGROAllegroSync.DTOs.Settings;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Logging;
 using JSAGROAllegroSync.Services;
@@ -19,9 +20,7 @@ namespace JSAGROAllegroSync
     {
         private readonly GaskaApiService _gaskaApiService;
         private readonly AllegroApiService _allegroApiService;
-
-        private readonly TimeSpan _interval;
-        private readonly int _logsExpirationDays;
+        private readonly AppSettings _appSettings;
 
         private Timer _timer;
         private DateTime _lastProductDetailsSyncDate = DateTime.MinValue;
@@ -30,16 +29,14 @@ namespace JSAGROAllegroSync
         public JSAGROAllegroService()
         {
             // Settings
-            var gaskaApiSettings = AppSettingsLoader.LoadApiSettings();
-            var allegroApiSettings = AppSettingsLoader.LoadFtpSettings();
+            var gaskaApiSettings = AppSettingsLoader.LoadGaskaCredentials();
+            var allegroApiSettings = AppSettingsLoader.LoadAllegroCredentials();
+            _appSettings = AppSettingsLoader.LoadAppSettings();
 
             var allegroHttp = new HttpClient { BaseAddress = new Uri(allegroApiSettings.BaseUrl) };
             var gaskaHttp = new HttpClient { BaseAddress = new Uri(gaskaApiSettings.BaseUrl) };
             var allegroAuthHttp = new HttpClient { BaseAddress = new Uri(allegroApiSettings.AuthBaseUrl) };
             ApiHelper.AddDefaultHeaders(gaskaApiSettings, gaskaHttp);
-
-            _interval = AppSettingsLoader.GetFetchInterval();
-            _logsExpirationDays = AppSettingsLoader.GetLogsExpirationDays();
 
             var dbContext = new MyDbContext();
             var tokenRepo = new DbTokenRepository(dbContext);
@@ -47,8 +44,8 @@ namespace JSAGROAllegroSync
 
             // Services initialization
             var allegroAuthService = new AllegroAuthService(allegroApiSettings, tokenRepo, allegroAuthHttp);
-            _allegroApiService = new AllegroApiService(allegroAuthService, productRepo, allegroHttp);
-            _gaskaApiService = new GaskaApiService(productRepo, gaskaHttp, gaskaApiSettings);
+            _allegroApiService = new AllegroApiService(allegroAuthService, productRepo, allegroHttp, _appSettings);
+            _gaskaApiService = new GaskaApiService(productRepo, gaskaHttp, gaskaApiSettings, _appSettings.CategoriesId);
 
             InitializeComponent();
         }
@@ -56,16 +53,16 @@ namespace JSAGROAllegroSync
         protected override void OnStart(string[] args)
         {
             // Serilog configuration and initialization
-            LogConfig.Configure(_logsExpirationDays);
+            LogConfig.Configure(_appSettings.LogsExpirationDays);
 
             _timer = new Timer(
                 async _ => await TimerTickAsync(),
                 null,
                 TimeSpan.Zero,
-                _interval
+                TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes)
             );
 
-            Log.Information("Service started. First run immediately. Interval: {Interval}", _interval);
+            Log.Information("Service started. First run immediately. Interval: {Interval}", TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes));
         }
 
         protected override void OnStop()
@@ -120,12 +117,17 @@ namespace JSAGROAllegroSync
                     _lastProductDetailsSyncDate = DateTime.Today;
                 }
 
+                // 9. Get Allegro offers
+                Log.Information("Starting syncing Allegro offers ");
+                await _allegroApiService.GetAllegroOffers();
+                Log.Information("Allegro offers sync completed");
+
                 // 8. Send Allegro offers
                 Log.Information("Starting offers upload/update...");
                 await _allegroApiService.CreateOffers();
                 Log.Information("Offer upload/update completed");
 
-                DateTime nextRun = _lastRunTime.Add(_interval);
+                DateTime nextRun = _lastRunTime.Add(TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes));
                 Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);
             }
             catch (Exception ex)

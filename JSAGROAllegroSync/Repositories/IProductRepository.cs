@@ -1,4 +1,5 @@
 ﻿using JSAGROAllegroSync.DTOs;
+using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
@@ -54,5 +55,9 @@ namespace JSAGROAllegroSync.Data
         Task<List<CompatibleProduct>> GetCompatibilityList(CancellationToken ct);
 
         Task<List<AllegroCategory>> GetAllegroCategories(CancellationToken ct);
+
+        Task UpsertOffers(List<Offer> offers, CancellationToken ct);
+
+        Task<List<Product>> GetProductsToUpdateOffer(string apiDeliveryName, CancellationToken ct);
     }
 }

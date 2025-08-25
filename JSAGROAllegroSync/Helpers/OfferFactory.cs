@@ -1,4 +1,5 @@
 ﻿using JSAGROAllegroSync.DTOs.AllegroApi;
+using JSAGROAllegroSync.DTOs.Settings;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
 using Serilog;
@@ -13,12 +14,12 @@ namespace JSAGROAllegroSync.Helpers
 {
     public static class OfferFactory
     {
-        public static ProductOfferRequest BuildOffer(Product product, List<CompatibleProduct> compatibleList, List<AllegroCategory> allegroCategories)
+        public static ProductOfferRequest BuildOffer(Product product, List<CompatibleProduct> compatibleList, List<AllegroCategory> allegroCategories, AppSettings appSettings)
         {
             return new ProductOfferRequest
             {
                 Name = product.Name,
-                ProductSet = BuildProductSet(product),
+                ProductSet = BuildProductSet(product, appSettings),
                 Category = new Category
                 {
                     Id = product.DefaultAllegroCategory.ToString()
@@ -33,7 +34,7 @@ namespace JSAGROAllegroSync.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(product.PriceGross).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(product.PriceGross, product.DeliveryType, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -52,9 +53,9 @@ namespace JSAGROAllegroSync.Helpers
                 {
                     ShippingRates = new ShippingRates
                     {
-                        Name = "JAG API"
+                        Name = appSettings.AllegroDeliveryName
                     },
-                    HandlingTime = "PT24H",
+                    HandlingTime = product.DeliveryType == 0 ? appSettings.AllegroHandlingTime : appSettings.AllegroHandlingTimeCustomProducts,
                     AdditionalInfo = "Przesyłki realizowane są w dni robocze od poniedziałku do piątku w godzinach 8:00 - 16:00.",
                     ShipmentDate = GetShipmentDate()
                 },
@@ -71,16 +72,16 @@ namespace JSAGROAllegroSync.Helpers
                 },
                 AfterSalesServices = new AfterSalesServices
                 {
-                    Warranty = new Warranty { Name = "default" },
-                    ReturnPolicy = new ReturnPolicy { Name = "default" },
-                    ImpliedWarranty = new ImpliedWarranty { Name = "default" }
+                    Warranty = new Warranty { Name = appSettings.AllegroWarranty },
+                    ReturnPolicy = new ReturnPolicy { Name = appSettings.AllegroReturnPolicy },
+                    ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
                 },
                 Parameters = BuildParameters(product.Parameters, false),
                 CompatibilityList = BuildCompatibilityList(product.DefaultAllegroCategory, product.Applications, allegroCategories, compatibleList)
             };
         }
 
-        private static List<ProductSet> BuildProductSet(Product product)
+        private static List<ProductSet> BuildProductSet(Product product, AppSettings appSettings)
         {
             var ProductSets = new List<ProductSet>();
 
@@ -101,17 +102,17 @@ namespace JSAGROAllegroSync.Helpers
                 },
                 ResponsiblePerson = new ResponsiblePerson
                 {
-                    Name = "JS-AGRO",
+                    Name = appSettings.AllegroResponsiblePerson,
                 },
                 ResponsibleProducer = new ResponsibleProducer
                 {
                     Type = "NAME",
-                    Name = "Gąska sp. z o.o.",
+                    Name = appSettings.AllegroResponsibleProducer,
                 },
                 SafetyInformation = new SafetyInformation
                 {
                     Type = "TEXT",
-                    Description = "Tekst bezpieczeństwa: \r\nLista ostrzeżeń dotyczących bezpieczeństwa części do kombajnów oparta o wymagania Rozporządzenia (UE) 2023/988 w sprawie ogólnego bezpieczeństwa produktów (GPSR):\r\n\r\n1.  Ostre krawędzie i elementy: Podczas montażu, demontażu i użytkowania części, zachowaj szczególną ostrożność ze względu na ostre krawędzie i wystające elementy, które mogą powodować skaleczenia. Używaj rękawic ochronnych.\r\n2.  Waga i stabilność: Nie przeciążaj kombajnu. Upewnij się, że każda część jest odpowiednio zamocowana i wyważona, aby uniknąć przewrócenia się maszyny.\r\n3.  Materiały łatwopalne: Unikaj używania otwartego ognia lub palenia w pobliżu części kombajnu. Przechowuj i używaj smarów, olejów i paliw z dala od źródeł ciepła i ognia.\r\n4.  Wysokie temperatury: Uważaj na gorące powierzchnie części, które mogą spowodować oparzenia. Odczekaj, aż ostygną przed dotknięciem.\r\n5.  Ciśnienie hydrauliczne: Przed odłączeniem przewodów hydraulicznych upewnij się, że ciśnienie w układzie zostało zredukowane. Wyciekający płyn hydrauliczny może być niebezpieczny dla skóry i oczu.\r\n6.  Zagrożenia mechaniczne: Upewnij się, że wszystkie osłony i zabezpieczenia są na swoim miejscu i w dobrym stanie, aby zapobiec kontaktowi z ruchomymi częściami maszyny. Wyłącz kombajn i poczekaj na zatrzymanie wszystkich ruchomych elementów przed rozpoczęciem jakiejkolwiek konserwacji lub naprawy.\r\n7.  Elektryczność: Przed pracami przy instalacji elektrycznej kombajnu, odłącz zasilanie, aby uniknąć porażenia prądem.\r\n8.  Ochrona słuchu: Podczas pracy z kombajnem używaj ochronników słuchu, aby zminimalizować ryzyko uszkodzenia słuchu.\r\n9.  Toksyczne substancje: Unikaj wdychania pyłów, oparów i gazów powstających podczas pracy kombajnu i konserwacji części. Zapewnij odpowiednią wentylację.\r\n10. Niebezpieczne środowisko: Zachowaj ostrożność podczas pracy w pobliżu linii energetycznych, rowów lub na nierównym terenie.\r\n11. Uszkodzenia strukturalne: Regularnie kontroluj stan części pod kątem korozji, pęknięć i innych uszkodzeń, które mogą osłabić strukturę i spowodować awarię. Uszkodzone elementy wymień niezwłocznie.\r\n12. Bezpieczeństwo dzieci i osób postronnych: Upewnij się, że dzieci i osoby postronne znajdują się w bezpiecznej odległości od pracującego kombajnu."
+                    Description = appSettings.AllegroSafetyMeasures
                 },
             });
 
@@ -194,11 +195,7 @@ namespace JSAGROAllegroSync.Helpers
             return result;
         }
 
-        public static CompatibilityList BuildCompatibilityList(
-    int categoryId,
-    IEnumerable<Application> applications,
-    IEnumerable<AllegroCategory> categories,
-    IEnumerable<CompatibleProduct> compatibleProducts)
+        public static CompatibilityList BuildCompatibilityList(int categoryId, IEnumerable<Application> applications, IEnumerable<AllegroCategory> categories, IEnumerable<CompatibleProduct> compatibleProducts)
         {
             if (applications == null || !applications.Any())
                 return null;
@@ -305,7 +302,7 @@ namespace JSAGROAllegroSync.Helpers
             if (!items.Any())
                 return null;
 
-            var cappedItems = items.Take(200).ToList();
+            var cappedItems = items.Take(100).ToList();
 
             return new CompatibilityList { Items = cappedItems };
         }
@@ -320,7 +317,7 @@ namespace JSAGROAllegroSync.Helpers
             var images = product.Images?.ToList() ?? new List<ProductImage>();
             int imageIndex = 0;
 
-            // 1. First image full-width on top
+            // 0. First image full-width on top
             if (images.Any())
             {
                 description.Sections.Add(new Section
@@ -331,6 +328,48 @@ namespace JSAGROAllegroSync.Helpers
                         {
                             Type = "IMAGE",
                             Url = images[imageIndex++].AllegroUrl
+                        }
+                    }
+                });
+            }
+
+            // 0. Product header (Name + Producer + Code)
+            if (!string.IsNullOrWhiteSpace(product.Name) ||
+                !string.IsNullOrWhiteSpace(product.SupplierName) ||
+                !string.IsNullOrWhiteSpace(product.CodeGaska))
+            {
+                // Bold if contains Oryginał, Original, Org, oryginal, JAG
+                string HighlightKeywords(string input)
+                {
+                    if (string.IsNullOrEmpty(input)) return string.Empty;
+
+                    var keywords = new[] { "oryginał", "original", "org", "oryginal", "jag" };
+
+                    string result = System.Net.WebUtility.HtmlEncode(input);
+
+                    foreach (var keyword in keywords)
+                    {
+                        var regex = new System.Text.RegularExpressions.Regex($"({System.Text.RegularExpressions.Regex.Escape(keyword)})",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                        result = regex.Replace(result, "<b>$1</b>");
+                    }
+
+                    return result;
+                }
+
+                string name = HighlightKeywords(product.Name);
+                string producer = !string.IsNullOrWhiteSpace(product.SupplierName) ? $"<p><b>Producent: </b>{System.Net.WebUtility.HtmlEncode(product.SupplierName)}</p>" : string.Empty;
+                string code = !string.IsNullOrWhiteSpace(product.CodeGaska) ? $"<p><b>Kod produktu: </b>{System.Net.WebUtility.HtmlEncode(product.CodeGaska)}</p>" : string.Empty;
+
+                description.Sections.Add(new Section
+                {
+                    SectionItems = new List<SectionItem>
+                    {
+                        new SectionItem
+                        {
+                            Type = "TEXT",
+                            Content = $"<p>{name}</p>{producer}{code}"
                         }
                     }
                 });
@@ -358,49 +397,50 @@ namespace JSAGROAllegroSync.Helpers
                 description.Sections.Add(new Section
                 {
                     SectionItems = new List<SectionItem>
-                    {
-                        new SectionItem
-                        {
-                            Type = "TEXT",
-                            Content = $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
-                        }
-                    }
+            {
+                new SectionItem
+                {
+                    Type = "TEXT",
+                    Content = $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
+                }
+            }
                 });
             }
 
             // 4. Attributes/parameters
             if (product.Atributes != null && product.Atributes.Any())
             {
-                var paramText = string.Join(", ", product.Atributes.Select(p => $"{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}"));
+                var paramText = string.Join(", ", product.Atributes
+                    .Select(p => $"{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}"));
 
                 description.Sections.Add(new Section
                 {
                     SectionItems = new List<SectionItem>
-                    {
-                        new SectionItem
-                        {
-                            Type = "TEXT",
-                            Content = $"<p><b>Parametry: </b>{paramText}</p>"
-                        }
-                    }
+            {
+                new SectionItem
+                {
+                    Type = "TEXT",
+                    Content = $"<p><b>Parametry: </b>{paramText}</p>"
+                }
+            }
                 });
             }
 
-            // 5. Cross numbers section (with top image)
+            // 5. Cross numbers
             if (product.CrossNumbers != null && product.CrossNumbers.Any())
             {
-                var crossNumbersText = string.Join(", ", product.CrossNumbers.Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
+                var crossNumbersText = string.Join(", ", product.CrossNumbers
+                    .Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
 
                 var sectionItems = new List<SectionItem>
-                {
-                    new SectionItem
-                    {
-                        Type = "TEXT",
-                        Content = $"<p><b>Numery referencyjne: </b>{crossNumbersText}</p>"
-                    }
-                };
+        {
+            new SectionItem
+            {
+                Type = "TEXT",
+                Content = $"<p><b>Numery referencyjne: </b>{crossNumbersText}</p>"
+            }
+        };
 
-                // First image in this section will appear on the right
                 if (imageIndex < images.Count)
                 {
                     sectionItems.Add(new SectionItem
@@ -413,7 +453,7 @@ namespace JSAGROAllegroSync.Helpers
                 description.Sections.Add(new Section { SectionItems = sectionItems });
             }
 
-            // 6. Applications section
+            // 6. Applications section (horizontal branches)
             if (product.Applications != null && product.Applications.Any())
             {
                 var applicationsByParent = product.Applications
@@ -424,21 +464,30 @@ namespace JSAGROAllegroSync.Helpers
                 {
                     var rootApps = applicationsByParent[0];
 
-                    string BuildApplicationText(List<Application> apps, int depth = 0)
+                    // recursive but horizontal (join by comma per branch)
+                    List<string> branches = new List<string>();
+
+                    void BuildBranch(Application app, string path)
                     {
-                        if (apps == null || !apps.Any()) return string.Empty;
-                        var sb = new StringBuilder();
-                        foreach (var app in apps)
+                        string currentPath = string.IsNullOrEmpty(path)
+                            ? app.Name
+                            : path + " → " + app.Name;
+
+                        if (applicationsByParent.ContainsKey(app.ApplicationId))
                         {
-                            sb.Append("<p>");
-                            sb.Append(new string('-', depth * 2));
-                            sb.Append(System.Net.WebUtility.HtmlEncode(app.Name));
-                            sb.Append("</p>");
-                            if (applicationsByParent.ContainsKey(app.ApplicationId))
-                                sb.Append(BuildApplicationText(applicationsByParent[app.ApplicationId], depth + 1));
+                            foreach (var child in applicationsByParent[app.ApplicationId])
+                                BuildBranch(child, currentPath);
                         }
-                        return sb.ToString();
+                        else
+                        {
+                            branches.Add(currentPath);
+                        }
                     }
+
+                    foreach (var app in rootApps)
+                        BuildBranch(app, string.Empty);
+
+                    string appsText = string.Join(", ", branches.Select(System.Net.WebUtility.HtmlEncode));
 
                     var sectionItems = new List<SectionItem>();
                     if (imageIndex < images.Count)
@@ -449,30 +498,15 @@ namespace JSAGROAllegroSync.Helpers
                             Url = images[imageIndex++].AllegroUrl
                         });
                     }
-                    // Applications section (TEXT)
+
                     sectionItems.Add(new SectionItem
                     {
                         Type = "TEXT",
-                        Content = "<p><b>Zastosowanie:</b></p>" + BuildApplicationText(rootApps)
+                        Content = $"<p><b>Zastosowanie: </b>{appsText}</p>"
                     });
+
                     description.Sections.Add(new Section { SectionItems = sectionItems });
                 }
-            }
-
-            // 3. Add remaining images (if any) after all sections
-            while (imageIndex < images.Count)
-            {
-                description.Sections.Add(new Section
-                {
-                    SectionItems = new List<SectionItem>
-                    {
-                        new SectionItem
-                        {
-                            Type = "IMAGE",
-                            Url = images[imageIndex++].AllegroUrl
-                        }
-                    }
-                });
             }
 
             // 7. Remaining images at the bottom
@@ -481,27 +515,48 @@ namespace JSAGROAllegroSync.Helpers
                 description.Sections.Add(new Section
                 {
                     SectionItems = new List<SectionItem>
-                    {
-                        new SectionItem
-                        {
-                            Type = "TEXT",
-                            Content = "<p><b>Zdjęcie produktu:</b></p>"
-                        },
-                        new SectionItem
-                        {
-                            Type = "IMAGE",
-                            Url = images[imageIndex++].AllegroUrl
-                        }
-                    }
+            {
+                new SectionItem
+                {
+                    Type = "IMAGE",
+                    Url = images[imageIndex++].AllegroUrl
+                }
+            }
                 });
             }
 
             return description;
         }
 
-        private static decimal CalculatePrice(decimal initialPrice)
+        private static decimal CalculatePrice(decimal initialPrice, int productType, decimal addPLNToBulky, decimal addPLNToCustom, decimal ownMarginPercent, decimal marginLessThan5PLN, decimal marginMoreThan5PLNPercent, decimal marginMoreThan1000PLN)
         {
-            return initialPrice = (initialPrice * 1.1m) * 1.13m;
+            var calculatedPrice = initialPrice;
+
+            calculatedPrice = initialPrice * (1 + (ownMarginPercent / 100m));
+
+            if (productType == 1) // bulky
+            {
+                calculatedPrice += addPLNToBulky;
+            }
+            else if (productType == 2) // custom
+            {
+                calculatedPrice += addPLNToCustom;
+            }
+
+            if (calculatedPrice < 5m)
+            {
+                calculatedPrice += marginLessThan5PLN;
+            }
+            else if (calculatedPrice >= 5m && calculatedPrice <= 1000m)
+            {
+                calculatedPrice *= (1 + marginMoreThan5PLNPercent / 100m);
+            }
+            else
+            {
+                calculatedPrice += marginMoreThan1000PLN;
+            }
+
+            return calculatedPrice;
         }
     }
 }

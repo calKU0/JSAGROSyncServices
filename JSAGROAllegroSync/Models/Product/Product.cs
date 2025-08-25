@@ -11,11 +11,14 @@ namespace JSAGROAllegroSync.Models.Product
         [DatabaseGenerated(DatabaseGeneratedOption.None)]
         public int Id { get; set; }
 
+        [MaxLength(100)]
         public string CodeGaska { get; set; }
+
         public string CodeCustomer { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
         public string Ean { get; set; }
+        public int DeliveryType { get; set; }
         public string TechnicalDetails { get; set; }
         public float WeightNet { get; set; }
         public float WeightGross { get; set; }
@@ -46,5 +49,6 @@ namespace JSAGROAllegroSync.Models.Product
         public virtual ICollection<ProductFile> Files { get; set; }
         public virtual ICollection<ProductCategory> Categories { get; set; }
         public virtual ICollection<ProductParameter> Parameters { get; set; }
+        public virtual ICollection<AllegroOffer> AllegroOffers { get; set; }
     }
 }

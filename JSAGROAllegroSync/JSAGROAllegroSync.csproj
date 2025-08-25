@@ -112,8 +112,11 @@
     <Compile Include="DTOs\AllegroApi\CategoryParametersResponse.cs" />
     <Compile Include="DTOs\AllegroApi\CompatibleProductGroupsResponse.cs" />
     <Compile Include="DTOs\AllegroApi\CompatibleProductsResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\OffersResponse.cs" />
     <Compile Include="DTOs\AllegroApi\ProductOfferRequest.cs" />
+    <Compile Include="DTOs\AllegroApi\ShippingRatesReponse.cs" />
     <Compile Include="DTOs\AllegroApi\SupportedCategoriesReponse.cs" />
+    <Compile Include="DTOs\Settings\AppSettings.cs" />
     <Compile Include="Helpers\AsyncHelpers.cs" />
     <Compile Include="Helpers\OfferFactory.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.cs" />
@@ -176,7 +179,24 @@
     <Compile Include="Migrations\202508241148432_AllegroExpirationDateFix.Designer.cs">
       <DependentUpon>202508241148432_AllegroExpirationDateFix.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202508251825424_DeliveryTypeProduct.cs" />
+    <Compile Include="Migrations\202508251825424_DeliveryTypeProduct.Designer.cs">
+      <DependentUpon>202508251825424_DeliveryTypeProduct.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508252118410_AllegroOffer.cs" />
+    <Compile Include="Migrations\202508252118410_AllegroOffer.Designer.cs">
+      <DependentUpon>202508252118410_AllegroOffer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508252150327_CodeGaskaUnique.cs" />
+    <Compile Include="Migrations\202508252150327_CodeGaskaUnique.Designer.cs">
+      <DependentUpon>202508252150327_CodeGaskaUnique.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508252202011_ProductOfferRealation.cs" />
+    <Compile Include="Migrations\202508252202011_ProductOfferRealation.Designer.cs">
+      <DependentUpon>202508252202011_ProductOfferRealation.cs</DependentUpon>
+    </Compile>
     <Compile Include="Models\AllegroCategory.cs" />
+    <Compile Include="Models\AllegroOffer.cs" />
     <Compile Include="Models\CategoryParameter.cs" />
     <Compile Include="Models\CategoryParameterValue.cs" />
     <Compile Include="Models\CompatibileProduct.cs" />
@@ -190,9 +210,9 @@
     <Compile Include="DTOs\AllegroApi\MatchingCategoriesResponse.cs" />
     <Compile Include="DTOs\GaskaApi\ProductResponse.cs" />
     <Compile Include="DTOs\GaskaApi\ProductsResponse.cs" />
-    <Compile Include="DTOs\Settings\AllegroApiSettings.cs" />
+    <Compile Include="DTOs\Settings\AllegroApiCredentials.cs" />
     <Compile Include="DTOs\AllegroApi\DeviceCodeResponseDto.cs" />
-    <Compile Include="DTOs\Settings\GaskaApiSettings.cs" />
+    <Compile Include="DTOs\Settings\GaskaApiCredentials.cs" />
     <Compile Include="DTOs\TokenDto.cs" />
     <Compile Include="DTOs\AllegroApi\TokenResponseDto.cs" />
     <Compile Include="Helpers\ApiHelper.cs" />
@@ -286,6 +306,18 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202508241148432_AllegroExpirationDateFix.resx">
       <DependentUpon>202508241148432_AllegroExpirationDateFix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508251825424_DeliveryTypeProduct.resx">
+      <DependentUpon>202508251825424_DeliveryTypeProduct.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508252118410_AllegroOffer.resx">
+      <DependentUpon>202508252118410_AllegroOffer.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508252150327_CodeGaskaUnique.resx">
+      <DependentUpon>202508252150327_CodeGaskaUnique.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508252202011_ProductOfferRealation.resx">
+      <DependentUpon>202508252202011_ProductOfferRealation.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>

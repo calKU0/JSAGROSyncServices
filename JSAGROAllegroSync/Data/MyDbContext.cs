@@ -27,6 +27,7 @@ namespace JSAGROAllegroSync.Data
         public DbSet<ProductParameter> ProductParameters { get; set; }
         public DbSet<CompatibleProduct> CompatibleProducts { get; set; }
         public DbSet<AllegroCategory> AllegroCategories { get; set; }
+        public DbSet<AllegroOffer> AllegroOffers { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -39,6 +40,10 @@ namespace JSAGROAllegroSync.Data
             modelBuilder.Entity<Product>()
                 .Property(p => p.UpdatedDate)
                 .HasColumnType("datetime2");
+
+            modelBuilder.Entity<Product>()
+                .HasIndex(p => p.CodeGaska)
+                .IsUnique();
 
             modelBuilder.Entity<CategoryParameter>()
                 .HasIndex(cp => new { cp.ParameterId, cp.CategoryId })

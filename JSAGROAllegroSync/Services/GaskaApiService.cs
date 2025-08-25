@@ -15,15 +15,17 @@ namespace JSAGROAllegroSync.Services
 {
     public class GaskaApiService
     {
-        private readonly GaskaApiSettings _apiSettings;
+        private readonly GaskaApiCredentials _apiSettings;
         private readonly IProductRepository _productRepo;
         private readonly HttpClient _http;
+        private readonly List<int> _categoriesIds;
 
-        public GaskaApiService(IProductRepository productRepo, HttpClient http, GaskaApiSettings apiSettings)
+        public GaskaApiService(IProductRepository productRepo, HttpClient http, GaskaApiCredentials apiSettings, List<int> categoriesIds)
         {
             _productRepo = productRepo;
             _http = http;
             _apiSettings = apiSettings;
+            _categoriesIds = categoriesIds;
         }
 
         public async Task SyncProducts()
@@ -31,7 +33,7 @@ namespace JSAGROAllegroSync.Services
             HashSet<int> fetchedProductIds = new HashSet<int>();
             bool hasErrors = false;
 
-            foreach (var categoryId in _apiSettings.CategoriesId)
+            foreach (var categoryId in _categoriesIds)
             {
                 int page = 1;
                 bool hasMore = true;

@@ -16,7 +16,7 @@ namespace JSAGROAllegroSync.Services
 {
     public class AllegroAuthService
     {
-        private readonly AllegroApiSettings _settings;
+        private readonly AllegroApiCredentials _settings;
         private readonly ITokenRepository _tokenRepo;
         private readonly HttpClient _http;
 
@@ -27,7 +27,7 @@ namespace JSAGROAllegroSync.Services
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
         };
 
-        public AllegroAuthService(AllegroApiSettings settings, ITokenRepository tokenRepo, HttpClient httpClient)
+        public AllegroAuthService(AllegroApiCredentials settings, ITokenRepository tokenRepo, HttpClient httpClient)
         {
             _settings = settings;
             _tokenRepo = tokenRepo;
