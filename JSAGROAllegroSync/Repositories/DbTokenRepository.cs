@@ -1,10 +1,11 @@
-﻿using JSAGROAllegroSync.DTOs;
-using JSAGROAllegroSync.Interfaces;
+﻿using JSAGROAllegroSync.Data;
+using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.Models;
+using JSAGROAllegroSync.Repositories.Interfaces;
 using System.Data.Entity;
 using System.Threading.Tasks;
 
-namespace JSAGROAllegroSync.Data
+namespace JSAGROAllegroSync.Repositories
 {
     public class DbTokenRepository : ITokenRepository
     {

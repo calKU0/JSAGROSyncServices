@@ -1,0 +1,44 @@
+﻿using JSAGROAllegroSync.Data;
+using JSAGROAllegroSync.Models.Product;
+using JSAGROAllegroSync.Repositories.Interfaces;
+using System;
+using System.Collections.Generic;
+using System.Data.Entity;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace JSAGROAllegroSync.Repositories
+{
+    public class ImageRepository : IImageRepository
+    {
+        private readonly MyDbContext _context;
+
+        public ImageRepository(MyDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<List<ProductImage>> GetImagesForImport(CancellationToken ct)
+        {
+            return await _context.ProductImages
+                .Include(pi => pi.Product)
+                .Where(pi => pi.Product.Categories.Any()
+                    && pi.Product.DefaultAllegroCategory != 0
+                    && (string.IsNullOrEmpty(pi.AllegroUrl) || (pi.AllegroExpirationDate != null && pi.AllegroExpirationDate <= DateTime.UtcNow)))
+                .ToListAsync(ct);
+        }
+
+        public async Task<bool> UpdateProductAllegroImage(int imageId, string imageUrl, DateTime expiresAt, CancellationToken ct)
+        {
+            var image = await _context.ProductImages.FirstOrDefaultAsync(i => i.Id == imageId, ct);
+            if (image == null) return false;
+
+            image.AllegroUrl = imageUrl;
+            image.AllegroExpirationDate = expiresAt;
+
+            return await _context.SaveChangesAsync(ct) > 0;
+        }
+    }
+}

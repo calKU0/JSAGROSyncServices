@@ -195,15 +195,23 @@
     <Compile Include="Migrations\202508252202011_ProductOfferRealation.Designer.cs">
       <DependentUpon>202508252202011_ProductOfferRealation.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202508261926390_OffertStartingAt.cs" />
+    <Compile Include="Migrations\202508261926390_OffertStartingAt.Designer.cs">
+      <DependentUpon>202508261926390_OffertStartingAt.cs</DependentUpon>
+    </Compile>
     <Compile Include="Models\AllegroCategory.cs" />
     <Compile Include="Models\AllegroOffer.cs" />
     <Compile Include="Models\CategoryParameter.cs" />
     <Compile Include="Models\CategoryParameterValue.cs" />
     <Compile Include="Models\CompatibileProduct.cs" />
     <Compile Include="Models\Product\ProductParameter.cs" />
+    <Compile Include="Repositories\CategoryRepository.cs" />
     <Compile Include="Repositories\DbTokenRepository.cs" />
-    <Compile Include="Repositories\IOfferRepository.cs" />
-    <Compile Include="Repositories\IProductRepository.cs" />
+    <Compile Include="Repositories\ImageRepository.cs" />
+    <Compile Include="Repositories\Interfaces\ICategoryRepository.cs" />
+    <Compile Include="Repositories\Interfaces\IImageRepository.cs" />
+    <Compile Include="Repositories\Interfaces\IOfferRepository.cs" />
+    <Compile Include="Repositories\Interfaces\IProductRepository.cs" />
     <Compile Include="Data\MyDbContext.cs" />
     <Compile Include="Repositories\OfferRepository.cs" />
     <Compile Include="Repositories\ProductRepository.cs" />
@@ -218,7 +226,7 @@
     <Compile Include="Helpers\ApiHelper.cs" />
     <Compile Include="Helpers\AppSettingsLoader.cs" />
     <Compile Include="Helpers\CategoriesHelper.cs" />
-    <Compile Include="Repositories\ITokenRepository.cs" />
+    <Compile Include="Repositories\Interfaces\ITokenRepository.cs" />
     <Compile Include="JSAGROAllegroService.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -250,8 +258,18 @@
       <DependentUpon>ProjectInstaller.cs</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Services\AllegroApiService.cs" />
-    <Compile Include="Services\AllegroAuthService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroApiClient.cs" />
+    <Compile Include="Services\AllegroApi\AllegroCategoryService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroCompatibilityService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroImageService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroOfferService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroParametersService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroCategoryService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroCompatibilityService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroImageService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroOfferService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroParametersService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroAuthService.cs" />
     <Compile Include="Services\GaskaApiService.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -318,6 +336,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202508252202011_ProductOfferRealation.resx">
       <DependentUpon>202508252202011_ProductOfferRealation.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508261926390_OffertStartingAt.resx">
+      <DependentUpon>202508261926390_OffertStartingAt.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>

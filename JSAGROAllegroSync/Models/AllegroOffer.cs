@@ -25,6 +25,7 @@ namespace JSAGROAllegroSync.Models
         public int VisitsCount { get; set; }
         public string Status { get; set; }
         public string DeliveryName { get; set; }
+        public DateTime StartingAt { get; set; }
 
         [ForeignKey(nameof(ProductId))]
         public virtual Product.Product Product { get; set; }

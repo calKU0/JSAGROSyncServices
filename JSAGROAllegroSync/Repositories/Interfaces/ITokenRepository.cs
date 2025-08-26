@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace JSAGROAllegroSync.Interfaces
+namespace JSAGROAllegroSync.Repositories.Interfaces
 {
     public interface ITokenRepository
     {

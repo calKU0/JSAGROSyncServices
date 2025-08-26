@@ -1,6 +1,6 @@
 ﻿using JSAGROAllegroSync.Data;
 using JSAGROAllegroSync.DTOs;
-using JSAGROAllegroSync.Interfaces;
+using JSAGROAllegroSync.Repositories.Interfaces;
 using Serilog;
 using System;
 using System.Collections.Generic;

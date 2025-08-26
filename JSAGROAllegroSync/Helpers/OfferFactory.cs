@@ -81,13 +81,67 @@ namespace JSAGROAllegroSync.Helpers
             };
         }
 
+        public static ProductOfferRequest PatchOffer(AllegroOffer offer, List<CompatibleProduct> compatibleList, List<AllegroCategory> allegroCategories, AppSettings appSettings)
+        {
+            return new ProductOfferRequest
+            {
+                Name = offer.Product.Name,
+                Category = new Category
+                {
+                    Id = offer.Product.DefaultAllegroCategory.ToString()
+                },
+                Stock = new Stock
+                {
+                    Available = Convert.ToInt32(Math.Floor(offer.Product.InStock)),
+                    Unit = MapAllegroUnit(offer.Product.Unit)
+                },
+                SellingMode = new SellingMode
+                {
+                    Format = "BUY_NOW",
+                    Price = new Price
+                    {
+                        Amount = CalculatePrice(offer.Product.PriceGross, offer.Product.DeliveryType, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
+                        Currency = "PLN"
+                    }
+                },
+                Images = offer.Product.Images.Select(i => i.AllegroUrl).ToList(),
+                Description = BuildDescription(offer.Product),
+                External = new External
+                {
+                    Id = offer.Product.CodeGaska
+                },
+                Publication = new Publication
+                {
+                    Status = offer.Product.InStock > 0 ? "ACTIVE" : "ENDED",
+                    StartingAt = offer.StartingAt,
+                },
+                Delivery = new Delivery
+                {
+                    ShippingRates = new ShippingRates
+                    {
+                        Name = appSettings.AllegroDeliveryName
+                    },
+                    HandlingTime = offer.Product.DeliveryType == 0 ? appSettings.AllegroHandlingTime : appSettings.AllegroHandlingTimeCustomProducts,
+                    AdditionalInfo = "Przesyłki realizowane są w dni robocze od poniedziałku do piątku w godzinach 8:00 - 16:00.",
+                    ShipmentDate = GetShipmentDate()
+                },
+                AfterSalesServices = new AfterSalesServices
+                {
+                    Warranty = new Warranty { Name = appSettings.AllegroWarranty },
+                    ReturnPolicy = new ReturnPolicy { Name = appSettings.AllegroReturnPolicy },
+                    ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
+                },
+                Parameters = BuildParameters(offer.Product.Parameters, false),
+                CompatibilityList = BuildCompatibilityList(offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories, compatibleList)
+            };
+        }
+
         private static List<ProductSet> BuildProductSet(Product product, AppSettings appSettings)
         {
             var ProductSets = new List<ProductSet>();
 
             var Product = new ProductObject
             {
-                Name = product.Name,
                 Category = new Category { Id = product.DefaultAllegroCategory.ToString() },
                 Images = product.Images.Select(i => i.AllegroUrl).ToList(),
                 Parameters = BuildParameters(product.Parameters, true),
@@ -124,16 +178,7 @@ namespace JSAGROAllegroSync.Helpers
             var now = DateTime.Now;
             DateTime shipmentLocal;
 
-            if (now.Hour >= 16)
-            {
-                // After 16:00 → add 1 day
-                shipmentLocal = now.AddDays(1);
-            }
-            else
-            {
-                // Before 16:00 → today 23:59
-                shipmentLocal = new DateTime(now.Year, now.Month, now.Day, 23, 59, 0);
-            }
+            shipmentLocal = new DateTime(now.Year, now.Month, now.Day, 23, 59, 0);
 
             // Convert to UTC
             return shipmentLocal.ToUniversalTime();
@@ -343,16 +388,25 @@ namespace JSAGROAllegroSync.Helpers
                 {
                     if (string.IsNullOrEmpty(input)) return string.Empty;
 
-                    var keywords = new[] { "oryginał", "original", "org", "oryginal", "jag" };
+                    var keywords = new[] { "oryginał", "original", "org", "oryginal", "jag premium" };
 
                     string result = System.Net.WebUtility.HtmlEncode(input);
 
                     foreach (var keyword in keywords)
                     {
-                        var regex = new System.Text.RegularExpressions.Regex($"({System.Text.RegularExpressions.Regex.Escape(keyword)})",
-                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        string pattern;
+                        if (keyword.Equals("jag premium", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Match JAG PREMIUM or JAG-PREMIUM
+                            pattern = @"\bjag[\s\-]+premium\b";
+                        }
+                        else
+                        {
+                            pattern = $@"\b{System.Text.RegularExpressions.Regex.Escape(keyword)}\b";
+                        }
 
-                        result = regex.Replace(result, "<b>$1</b>");
+                        var regex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        result = regex.Replace(result, "<b>$0</b>");
                     }
 
                     return result;
@@ -369,7 +423,7 @@ namespace JSAGROAllegroSync.Helpers
                         new SectionItem
                         {
                             Type = "TEXT",
-                            Content = $"<p>{name}</p>{producer}{code}"
+                            Content = $"<p><b>Nazwa: </b>{name}</p>{code}{producer}"
                         }
                     }
                 });
@@ -454,8 +508,10 @@ namespace JSAGROAllegroSync.Helpers
             }
 
             // 6. Applications section (horizontal branches)
+            // 6. Applications section (grouped leaf nodes)
             if (product.Applications != null && product.Applications.Any())
             {
+                // Build dictionary: parent path -> list of leaf names
                 var applicationsByParent = product.Applications
                     .GroupBy(a => a.ParentID)
                     .ToDictionary(g => g.Key, g => g.ToList());
@@ -463,9 +519,7 @@ namespace JSAGROAllegroSync.Helpers
                 if (applicationsByParent.ContainsKey(0))
                 {
                     var rootApps = applicationsByParent[0];
-
-                    // recursive but horizontal (join by comma per branch)
-                    List<string> branches = new List<string>();
+                    var branches = new Dictionary<string, List<string>>(); // path -> leafs
 
                     void BuildBranch(Application app, string path)
                     {
@@ -480,14 +534,27 @@ namespace JSAGROAllegroSync.Helpers
                         }
                         else
                         {
-                            branches.Add(currentPath);
+                            // Leaf node: add to dictionary
+                            if (!branches.ContainsKey(path))
+                                branches[path] = new List<string>();
+                            branches[path].Add(app.Name);
                         }
                     }
 
                     foreach (var app in rootApps)
                         BuildBranch(app, string.Empty);
 
-                    string appsText = string.Join(", ", branches.Select(System.Net.WebUtility.HtmlEncode));
+                    // Build display string
+                    var branchTexts = new List<string>();
+                    foreach (var kvp in branches)
+                    {
+                        string branchPath = kvp.Key; // parent path
+                        string leafs = string.Join(", ", kvp.Value); // grouped leaf names
+                        string fullText = string.IsNullOrEmpty(branchPath) ? leafs : branchPath + " → " + leafs;
+                        branchTexts.Add(fullText);
+                    }
+
+                    string appsText = string.Join(", ", branchTexts.Select(System.Net.WebUtility.HtmlEncode));
 
                     var sectionItems = new List<SectionItem>();
                     if (imageIndex < images.Count)

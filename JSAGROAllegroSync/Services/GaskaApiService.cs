@@ -3,12 +3,14 @@ using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
+using JSAGROAllegroSync.Repositories.Interfaces;
 using Newtonsoft.Json;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace JSAGROAllegroSync.Services
@@ -28,7 +30,7 @@ namespace JSAGROAllegroSync.Services
             _categoriesIds = categoriesIds;
         }
 
-        public async Task SyncProducts()
+        public async Task SyncProducts(CancellationToken ct = default)
         {
             HashSet<int> fetchedProductIds = new HashSet<int>();
             bool hasErrors = false;
@@ -64,7 +66,7 @@ namespace JSAGROAllegroSync.Services
 
                         try
                         {
-                            await _productRepo.UpsertProducts(apiResponse.Products, fetchedProductIds);
+                            await _productRepo.UpsertProducts(apiResponse.Products, fetchedProductIds, ct);
                             Log.Information($"Successfully fetched and updated {apiResponse.Products.Count} products for category {categoryId}.");
                         }
                         catch (Exception ex)
@@ -95,7 +97,7 @@ namespace JSAGROAllegroSync.Services
 
             try
             {
-                var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds);
+                var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds, ct);
                 Log.Information($"Archived {archivedCount} products.");
             }
             catch (Exception ex)
@@ -104,13 +106,13 @@ namespace JSAGROAllegroSync.Services
             }
         }
 
-        public async Task SyncProductDetails()
+        public async Task SyncProductDetails(CancellationToken ct = default)
         {
             List<Product> productsToUpdate;
 
             try
             {
-                productsToUpdate = await _productRepo.GetProductsForDetailUpdate(_apiSettings.ProductPerDay);
+                productsToUpdate = await _productRepo.GetProductsForDetailUpdate(_apiSettings.ProductPerDay, ct);
                 if (!productsToUpdate.Any()) return;
             }
             catch (Exception ex)
@@ -136,7 +138,7 @@ namespace JSAGROAllegroSync.Services
 
                     if (apiResponse?.Product == null) continue;
 
-                    await _productRepo.UpdateProductDetails(product, apiResponse.Product);
+                    await _productRepo.UpdateProductDetails(product, apiResponse.Product, ct);
                     Log.Information($"Successfully fetched and updated details of product with ID: {product.Id} and Code: {product.CodeGaska}");
                 }
                 catch (Exception ex)
