@@ -273,7 +273,7 @@ namespace JSAGROAllegroSync.Repositories
                             && !p.Archived
                             && p.DefaultAllegroCategory != 0)
                 .OrderByDescending(p => p.UpdatedDate)
-                .Take(1000)
+                .Take(500)
                 .ToListAsync(ct);
         }
 
@@ -281,9 +281,24 @@ namespace JSAGROAllegroSync.Repositories
         {
             var product = await _context.Products.Where(p => p.Id == productId).FirstOrDefaultAsync(ct);
 
-            if (product != null && categoryId != 0)
+            if (product != null && categoryId != 0 && product.DefaultAllegroCategory != categoryId)
             {
                 product.DefaultAllegroCategory = categoryId;
+                _context.ProductParameters.RemoveRange(product.Parameters);
+                await _context.SaveChangesAsync(ct);
+            }
+        }
+
+        public async Task UpdateProductAllegroCategory(string productCode, int categoryId, CancellationToken ct)
+        {
+            var product = await _context.Products
+                .Include(p => p.Parameters)
+                .Where(p => p.CodeGaska == productCode).FirstOrDefaultAsync(ct);
+
+            if (product != null && categoryId != 0 && product.DefaultAllegroCategory != categoryId)
+            {
+                product.DefaultAllegroCategory = categoryId;
+                _context.ProductParameters.RemoveRange(product.Parameters);
                 await _context.SaveChangesAsync(ct);
             }
         }
@@ -306,32 +321,6 @@ namespace JSAGROAllegroSync.Repositories
                             && p.Images.Any(i => i.AllegroUrl != null)
                             && !p.AllegroOffers.Any()
                             )
-                .ToListAsync(ct);
-
-            foreach (var product in products)
-            {
-                product.Images = product.Images.Where(i => i.AllegroUrl != null).ToList();
-            }
-
-            return products;
-        }
-
-        public async Task<List<Product>> GetProductsToUpdateOffer(string apiDeliveryName, CancellationToken ct)
-        {
-            var products = await _context.Products
-                .Include(p => p.CrossNumbers)
-                .Include(p => p.Applications)
-                .Include(p => p.Atributes)
-                .Include(p => p.Images)
-                .Include(p => p.Parameters)
-                .Include(p => p.Packages)
-                .Include(p => p.AllegroOffers)
-                .Where(p => p.Categories.Any()
-                            && p.DefaultAllegroCategory != 0
-                            && p.PriceGross > 1.00m
-                            && p.Images.Any(i => i.AllegroUrl != null)
-                            && p.AllegroOffers.LastOrDefault() != null
-                            && p.AllegroOffers.LastOrDefault().DeliveryName == apiDeliveryName)
                 .ToListAsync(ct);
 
             foreach (var product in products)
@@ -366,8 +355,9 @@ namespace JSAGROAllegroSync.Repositories
         {
             if (!string.IsNullOrWhiteSpace(name))
             {
-                // 1. Remove JAG variants (JAG, JAG16-0034, JAG124, etc.)
                 bool jagRemoved = false;
+
+                // 1. Remove JAG variants
                 name = Regex.Replace(
                     name,
                     @"\bJAG(?=[0-9\-])[\w\-/]*",
@@ -382,11 +372,15 @@ namespace JSAGROAllegroSync.Repositories
                 // Collapse multiple spaces
                 name = Regex.Replace(name, @"\s+", " ").Trim();
 
-                // 2. Move leading product code (if exists) to the end
-                var codeMatch = Regex.Match(name, @"^(?<code>[\d\w./x-]+)\s+(?<rest>.+)$", RegexOptions.IgnoreCase);
-                if (codeMatch.Success)
+                // 2. Only move leading product code from original name if it wasn't a JAG variant
+                if (!jagRemoved && !string.IsNullOrWhiteSpace(code))
                 {
-                    name = $"{codeMatch.Groups["rest"].Value} {codeMatch.Groups["code"].Value}";
+                    var match = Regex.Match(name, @"^(?<code>[0-9A-Za-z./x-]+)\s+(?<rest>.+)$");
+
+                    if (match.Success)
+                    {
+                        name = $"{match.Groups["rest"].Value} {match.Groups["code"].Value}";
+                    }
                 }
 
                 // 3. Append CodeGaska

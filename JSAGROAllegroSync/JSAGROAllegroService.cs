@@ -116,16 +116,16 @@ namespace JSAGROAllegroSync
                     //Log.Information("Allegro parameters for category mapping completed.");
 
                     // 5. Product parameters
-                    //Log.Information("Starting product parameters update...");
-                    //await _parametersService.UpdateParameters();
-                    //Log.Information("Product parameters update completed.");
+                    Log.Information("Starting product parameters update...");
+                    await _parametersService.UpdateParameters();
+                    Log.Information("Product parameters update completed.");
 
-                    // 6. Images
+                    //6.Images
                     //Log.Information("Starting importing images to allegro...");
                     //await _imageService.ImportImages();
                     //Log.Information("Images import completed.");
 
-                    // 7. Compatibility products
+                    //7.Compatibility products
                     //Log.Information("Starting fetching compatible products...");
                     //await _compatibilityService.FetchAndSaveCompatibleProducts();
                     //Log.Information("Compatible products fetched.");

@@ -95,15 +95,15 @@ namespace JSAGROAllegroSync.Services
                 return;
             }
 
-            try
-            {
-                var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds, ct);
-                Log.Information($"Archived {archivedCount} products.");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "An error occurred while checking for products to archive.");
-            }
+            //try
+            //{
+            //    var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds, ct);
+            //    Log.Information($"Archived {archivedCount} products.");
+            //}
+            //catch (Exception ex)
+            //{
+            //    Log.Error(ex, "An error occurred while checking for products to archive.");
+            //}
         }
 
         public async Task SyncProductDetails(CancellationToken ct = default)

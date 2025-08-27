@@ -32,7 +32,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             PropertyNameCaseInsensitive = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.Preserve,
+            ReferenceHandler = ReferenceHandler.Preserve,
             WriteIndented = true
         };
 
@@ -52,17 +52,27 @@ namespace JSAGROAllegroSync.Services.AllegroApi
 
                 var shippingRates = await _apiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
                 var shippingDict = shippingRates?.ShippingRates?.ToDictionary(s => s.Id, s => s.Name) ?? new Dictionary<string, string>();
+                var latestOffers = allOffers
+                    .GroupBy(o => o.External.Id)
+                    .Select(g => g.OrderByDescending(o => o.Id).FirstOrDefault())
+                    .ToList();
 
-                foreach (var offer in allOffers)
+                foreach (var offer in latestOffers)
                 {
                     if (offer.Delivery?.ShippingRates?.Id != null && shippingDict.TryGetValue(offer.Delivery.ShippingRates.Id, out var name))
                     {
                         offer.Delivery.ShippingRates.Name = name;
                     }
+
+                    await _productRepo.UpdateProductAllegroCategory(
+                        offer.External.Id,
+                        Convert.ToInt32(offer.Category.Id),
+                        ct
+                    );
                 }
 
-                await _offerRepo.UpsertOffers(allOffers, ct);
-                Log.Information("Fetched and saved {Count} offers from Allegro.", allOffers.Count);
+                await _offerRepo.UpsertOffers(latestOffers, ct);
+                Log.Information("Fetched and saved {Count} offers from Allegro.", latestOffers.Count);
             }
             catch (Exception ex)
             {

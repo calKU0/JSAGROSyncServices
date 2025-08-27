@@ -20,8 +20,6 @@ namespace JSAGROAllegroSync.Repositories.Interfaces
 
         Task<List<Product>> GetProductsToUpload(CancellationToken ct);
 
-        Task<List<Product>> GetProductsToUpdateOffer(string apiDeliveryName, CancellationToken ct);
-
         Task<int> ArchiveProductsNotIn(HashSet<int> fetchedProductIds, CancellationToken ct);
 
         Task UpsertProducts(List<ApiProducts> apiProducts, HashSet<int> fetchedProductIds, CancellationToken ct);
@@ -33,6 +31,8 @@ namespace JSAGROAllegroSync.Repositories.Interfaces
         Task<List<Product>> GetProductsToUpdateParameters(CancellationToken ct);
 
         Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct);
+
+        Task UpdateProductAllegroCategory(string productCode, int categoryId, CancellationToken ct);
 
         Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct);
 

@@ -30,11 +30,19 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             {
                 var products = await _productRepo.GetProductsToUpdateParameters(ct);
 
+                // cache kategorii
+                var categoryParamsCache = new Dictionary<int, List<CategoryParameter>>();
+
                 foreach (var product in products)
                 {
                     try
                     {
-                        var categoryParams = await _categoryRepo.GetCategoryParametersAsync(product.DefaultAllegroCategory, ct);
+                        if (!categoryParamsCache.TryGetValue(product.DefaultAllegroCategory, out var categoryParams))
+                        {
+                            categoryParams = await _categoryRepo.GetCategoryParametersAsync(product.DefaultAllegroCategory, ct);
+                            categoryParamsCache[product.DefaultAllegroCategory] = categoryParams;
+                        }
+
                         var productParams = new List<ProductParameter>();
 
                         foreach (var catParam in categoryParams)

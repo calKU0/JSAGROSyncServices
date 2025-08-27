@@ -99,7 +99,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                 var bitmap = new Bitmap(ms);
                 if (bitmap.Width < 400 && bitmap.Height < 400)
                 {
-                    Log.Warning("Skipping image upload for product {Name} ({CodeGaska}) because it is too small: {Width}x{Height}px", product.Name, product.CodeGaska, bitmap.Width, bitmap.Height);
+                    Log.Information("Skipping image upload for product {Name} ({CodeGaska}) because it is too small: {Width}x{Height}px", product.Name, product.CodeGaska, bitmap.Width, bitmap.Height);
                     return false;
                 }
                 return true;

@@ -85,6 +85,7 @@ namespace JSAGROAllegroSync.Helpers
             return new ProductOfferRequest
             {
                 Name = offer.Product.Name,
+                ProductSet = BuildProductSet(offer.Product, appSettings),
                 Category = new Category
                 {
                     Id = offer.Product.DefaultAllegroCategory.ToString() == "0" ? offer.CategoryId.ToString() : offer.Product.DefaultAllegroCategory.ToString(),
@@ -112,7 +113,7 @@ namespace JSAGROAllegroSync.Helpers
                 Publication = new Publication
                 {
                     Status = offer.Product.InStock > 0 ? "ACTIVE" : "ENDED",
-                    StartingAt = offer.StartingAt,
+                    StartingAt = null,
                 },
                 Delivery = new Delivery
                 {
@@ -129,17 +130,17 @@ namespace JSAGROAllegroSync.Helpers
                     ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
                 },
                 Parameters = BuildParameters(offer.Product.Parameters, false),
-                CompatibilityList = BuildCompatibilityList(offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories, compatibleList)
+                CompatibilityList = BuildCompatibilityList(offer.Product.DefaultAllegroCategory == 0 ? offer.CategoryId : offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories, compatibleList)
             };
         }
 
-        private static List<ProductSet> BuildProductSet(Product product, AppSettings appSettings)
+        private static List<ProductSet> BuildProductSet(Product product, AppSettings appSettings, string fallbackCat = "319123")
         {
             var ProductSets = new List<ProductSet>();
 
             var Product = new ProductObject
             {
-                Category = new Category { Id = product.DefaultAllegroCategory.ToString() },
+                Category = new Category { Id = product.DefaultAllegroCategory.ToString() == "0" ? fallbackCat : product.DefaultAllegroCategory.ToString() },
                 Images = product.Images.Select(i => i.AllegroUrl).ToList(),
                 Parameters = BuildParameters(product.Parameters, true),
             };
@@ -408,102 +409,63 @@ namespace JSAGROAllegroSync.Helpers
             string technicalHtml = !string.IsNullOrWhiteSpace(product.TechnicalDetails)
                 ? $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
                 : string.Empty;
-            string parametersHtml = product.Atributes != null && product.Atributes.Any()
-                ? $"<p><b>Parametry/Wymiary: </b>{string.Join(", ", product.Atributes.Select(p => $"{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}"))}</p>"
-                : string.Empty;
+            string parametersHtml = string.Empty;
 
-            description.Sections.Add(new Section
+            if (product.Atributes != null && product.Atributes.Any())
             {
-                SectionItems = new List<SectionItem>
-                {
-                    new SectionItem
-                    {
-                        Type = "TEXT",
-                        Content = $"{nameHtml}{codeHtml}{producerHtml}{descriptionHtml}{technicalHtml}{parametersHtml}"
-                    }
-                }
-            });
+                // Build <li> for each attribute
+                var attributesList = string.Join("",
+                    product.Atributes.Select(p =>
+                        $"<li>{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}</li>"));
 
-            // 2. Description
-            //if (!string.IsNullOrWhiteSpace(product.Description))
-            //{
-            //    description.Sections.Add(new Section
-            //    {
-            //        SectionItems = new List<SectionItem>
-            //        {
-            //            new SectionItem
-            //            {
-            //                Type = "TEXT",
-            //                Content = $"<p><b>Opis: </b>{System.Net.WebUtility.HtmlEncode(product.Description)}</p>"
-            //            }
-            //        }
-            //    });
-            //}
+                // Wrap in <p> with bold title and single <ul>
+                parametersHtml = $"<p><b>Parametry/Wymiary:</b></p><ul>{attributesList}</ul>";
+            }
 
-            // 3. Technical details
-            //if (!string.IsNullOrWhiteSpace(product.TechnicalDetails))
-            //{
-            //    description.Sections.Add(new Section
-            //    {
-            //        SectionItems = new List<SectionItem>
-            //        {
-            //            new SectionItem
-            //            {
-            //                Type = "TEXT",
-            //                Content = $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
-            //            }
-            //        }
-            //    });
-            //}
+            // Build the content string for text fields
+            var contentBuilder = new StringBuilder();
+            contentBuilder.Append(nameHtml)
+                          .Append(codeHtml)
+                          .Append(producerHtml)
+                          .Append(descriptionHtml)
+                          .Append(technicalHtml)
+                          .Append(parametersHtml);
 
-            // 4. Attributes/parameters
-            //if (product.Atributes != null && product.Atributes.Any())
-            //{
-            //    var paramText = string.Join(", ", product.Atributes .Select(p => $"{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}"));
-
-            //    description.Sections.Add(new Section
-            //    {
-            //        SectionItems = new List<SectionItem>
-            //        {
-            //            new SectionItem
-            //            {
-            //                Type = "TEXT",
-            //                Content = $"<p><b>Parametry/Wymiary: </b>{paramText}</p>"
-            //            }
-            //        }
-            //    });
-            //}
-
-            // 5. Cross numbers
+            // Add cross numbers inline
             if (product.CrossNumbers != null && product.CrossNumbers.Any())
             {
                 var crossNumbersText = string.Join(", ", product.CrossNumbers.Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
-
-                var sectionItems = new List<SectionItem>
-                {
-                    new SectionItem
-                    {
-                        Type = "TEXT",
-                        Content = $"<p><b>Numery referencyjne: </b>{crossNumbersText}</p>"
-                    }
-                };
-
-                if (imageIndex < images.Count)
-                {
-                    sectionItems.Add(new SectionItem
-                    {
-                        Type = "IMAGE",
-                        Url = images[imageIndex++].AllegroUrl
-                    });
-                }
-
-                description.Sections.Add(new Section { SectionItems = sectionItems });
+                contentBuilder.Append($"<p><b>Numery referencyjne: </b>{crossNumbersText}</p>");
             }
+
+            // Build the section
+            var sectionItems = new List<SectionItem>
+            {
+                new SectionItem
+                {
+                    Type = "TEXT",
+                    Content = contentBuilder.ToString()
+                }
+            };
+
+            // Add image to the same section
+            if (imageIndex < images.Count)
+            {
+                sectionItems.Add(new SectionItem
+                {
+                    Type = "IMAGE",
+                    Url = images[imageIndex++].AllegroUrl
+                });
+            }
+
+            description.Sections.Add(new Section
+            {
+                SectionItems = sectionItems
+            });
 
             // 6. Applications section
             if (product.Applications != null && product.Applications.Any())
             {
-                // Build dictionary: parent path -> list of leaf names
                 var applicationsByParent = product.Applications
                     .GroupBy(a => a.ParentID)
                     .ToDictionary(g => g.Key, g => g.ToList());
@@ -511,79 +473,65 @@ namespace JSAGROAllegroSync.Helpers
                 if (applicationsByParent.ContainsKey(0))
                 {
                     var rootApps = applicationsByParent[0];
-                    var branches = new Dictionary<string, List<string>>(); // path -> leafs
 
-                    void BuildBranch(Application app, string path)
+                    string GetLeafNames(int parentId)
                     {
-                        string currentPath = string.IsNullOrEmpty(path)
-                            ? app.Name
-                            : path + " → " + app.Name;
+                        if (!applicationsByParent.ContainsKey(parentId))
+                            return string.Empty;
 
-                        if (applicationsByParent.ContainsKey(app.ApplicationId))
+                        var leafNames = new List<string>();
+
+                        foreach (var child in applicationsByParent[parentId])
                         {
-                            foreach (var child in applicationsByParent[app.ApplicationId])
-                                BuildBranch(child, currentPath);
+                            if (applicationsByParent.ContainsKey(child.ApplicationId))
+                            {
+                                // Recurse into grandchildren
+                                leafNames.AddRange(GetLeafNames(child.ApplicationId).Split(new string[] { ", " }, StringSplitOptions.RemoveEmptyEntries));
+                            }
+                            else
+                            {
+                                leafNames.Add(System.Net.WebUtility.HtmlEncode(child.Name));
+                            }
                         }
-                        else
+
+                        return string.Join(", ", leafNames);
+                    }
+
+                    var listItems = new List<string>();
+
+                    foreach (var rootApp in rootApps)
+                    {
+                        if (!applicationsByParent.ContainsKey(rootApp.ApplicationId)) continue;
+                        foreach (var secondLevel in applicationsByParent[rootApp.ApplicationId])
                         {
-                            // Leaf node: add to dictionary
-                            if (!branches.ContainsKey(path))
-                                branches[path] = new List<string>();
-                            branches[path].Add(app.Name);
+                            string leafs = GetLeafNames(secondLevel.ApplicationId);
+                            // Bold both root and second-level names
+                            string li = $"<li><b>{System.Net.WebUtility.HtmlEncode(rootApp.Name)} - {System.Net.WebUtility.HtmlEncode(secondLevel.Name)}</b>: {leafs}</li>";
+                            listItems.Add(li);
                         }
                     }
 
-                    foreach (var app in rootApps)
-                        BuildBranch(app, string.Empty);
+                    string appsText = $"<ul>{string.Join("", listItems)}</ul>";
 
-                    // Build display string
-                    var branchTexts = new List<string>();
-                    foreach (var kvp in branches)
-                    {
-                        string branchPath = kvp.Key; // parent path
-                        string leafs = string.Join(", ", kvp.Value); // grouped leaf names
-                        string fullText = string.IsNullOrEmpty(branchPath) ? leafs : branchPath + " → " + leafs;
-                        branchTexts.Add(fullText);
-                    }
-
-                    string appsText = string.Join(", ", branchTexts.Select(System.Net.WebUtility.HtmlEncode));
-
-                    var sectionItems = new List<SectionItem>();
+                    var appSectionItems = new List<SectionItem>();
                     if (imageIndex < images.Count)
                     {
-                        sectionItems.Add(new SectionItem
+                        appSectionItems.Add(new SectionItem
                         {
                             Type = "IMAGE",
                             Url = images[imageIndex++].AllegroUrl
                         });
                     }
 
-                    sectionItems.Add(new SectionItem
+                    appSectionItems.Add(new SectionItem
                     {
                         Type = "TEXT",
-                        Content = $"<p><b>Zastosowanie: </b>{appsText}</p>"
+                        Content = $"<p><b>Zastosowanie: </b></p>{appsText}"
                     });
 
-                    description.Sections.Add(new Section { SectionItems = sectionItems });
+                    description.Sections.Add(new Section { SectionItems = appSectionItems });
                 }
             }
-
-            // 7. UWAGA section for packages (before remaining images)
-            //var package = product.Packages?.FirstOrDefault(p => p.PackRequired == 1);
-            //if (package != null)
-            //{
-            //    description.Sections.Add(new Section
-            //    {
-            //        SectionItems = new List<SectionItem>
-            //        {
-            //            new SectionItem
-            //            {
-            //                Type = "TEXT",
-            //                Content = $"<p><b>UWAGA:</b> PODANA CENA KUP TERAZ TO CENA ZA 1 KOMPLET = {package.Qty} {System.Net.WebUtility.HtmlEncode(package.Unit)}</p>"
-            //            }
-            //        }
-            //    });
-            //}
 
             // 8. Remaining images at the bottom
             while (imageIndex < images.Count)
