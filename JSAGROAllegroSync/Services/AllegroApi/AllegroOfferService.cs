@@ -49,21 +49,20 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             try
             {
                 var allOffers = await FetchAllOffers(ct);
-                Log.Information("Fetched {Count} offers from Allegro.", allOffers.Count);
 
                 var shippingRates = await _apiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
                 var shippingDict = shippingRates?.ShippingRates?.ToDictionary(s => s.Id, s => s.Name) ?? new Dictionary<string, string>();
 
                 foreach (var offer in allOffers)
                 {
-                    if (offer.Delivery?.ShippingRates?.Id != null &&
-                        shippingDict.TryGetValue(offer.Delivery.ShippingRates.Id, out var name))
+                    if (offer.Delivery?.ShippingRates?.Id != null && shippingDict.TryGetValue(offer.Delivery.ShippingRates.Id, out var name))
                     {
                         offer.Delivery.ShippingRates.Name = name;
                     }
                 }
 
                 await _offerRepo.UpsertOffers(allOffers, ct);
+                Log.Information("Fetched and saved {Count} offers from Allegro.", allOffers.Count);
             }
             catch (Exception ex)
             {
@@ -115,7 +114,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                         var offerDto = OfferFactory.PatchOffer(offer, compatibleProducts, allegroCategories, _appSettings);
                         var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", new HttpMethod("PATCH"), offerDto, ct);
                         var body = await response.Content.ReadAsStringAsync();
-                        await LogAllegroResponse(offer.Product, response, body);
+                        await LogAllegroResponse(offer.Product, response, body, true);
                     }
                     catch (Exception ex)
                     {
@@ -125,7 +124,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Fatal error while creating Allegro offers.");
+                Log.Error(ex, "Fatal error while updating Allegro offers.");
             }
         }
 
@@ -158,42 +157,45 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             }
         }
 
-        private async Task LogAllegroResponse(Product product, HttpResponseMessage response, string body)
+        private async Task LogAllegroResponse(Product product, HttpResponseMessage response, string body, bool isUpdate = false)
         {
+            var action = isUpdate ? "updating" : "creating";
+
             switch ((int)response.StatusCode)
             {
+                case 200:
+                    Log.Information($"Offer {action} successfully for {product.Name} ({product.CodeGaska})");
+                    break;
+
                 case 201:
-                    Log.Information($"Offer created successfully for {product.Name} ({product.CodeGaska})");
+                    Log.Information($"Offer {action} successfully for {product.Name} ({product.CodeGaska})");
                     break;
 
                 case 202:
-                    Log.Information($"Offer creation accepted but still processing for {product.Name} ({product.CodeGaska})");
+                    Log.Information($"Offer {action} accepted but still processing for {product.Name} ({product.CodeGaska})");
                     break;
 
                 case 400:
                 case 422:
                 case 433:
-                    await LogAllegroErrors(product, response, body);
+                    await LogAllegroErrors(product, response, body, action);
                     break;
 
                 case 401:
-                    Log.Error($"Unauthorized (401). Check token for product {product.CodeGaska}.");
+                    Log.Error($"Unauthorized (401). Check token for product {product.CodeGaska} when {action} offer.");
                     break;
 
                 case 403:
-                    Log.Error($"Forbidden (403). No permission to create offer for {product.CodeGaska}.");
+                    Log.Error($"Forbidden (403). No permission for {action} offer for {product.CodeGaska}.");
                     break;
 
                 default:
-                    Log.Error($"Unexpected status {(int)response.StatusCode} ({response.StatusCode}) for {product.CodeGaska}. Response: {body}");
+                    Log.Error($"Unexpected status {(int)response.StatusCode} ({response.StatusCode}) while {action} offer for {product.CodeGaska}. Response: {body}");
                     break;
             }
         }
 
-        /// <summary>
-        /// Parses and logs Allegro API error details.
-        /// </summary>
-        private async Task LogAllegroErrors(Product product, HttpResponseMessage response, string body)
+        private async Task LogAllegroErrors(Product product, HttpResponseMessage response, string body, string action)
         {
             try
             {
@@ -202,11 +204,10 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                 {
                     foreach (var err in errorResponse.Errors)
                     {
-                        Log.Error($"Offer creating error for {product.Name}: " +
+                        Log.Error($"Offer {action} error for {product.Name}: " +
                                   $"Code={err.Code}, Message={err.Message}, " +
                                   $"UserMessage={err.UserMessage ?? "N/A"}, Path={err.Path ?? "N/A"}, Details={err.Details ?? "N/A"}");
 
-                        // Special handling for Allegro 433 Validation errors
                         if ((int)response.StatusCode == 433 && err.Metadata != null && err.Metadata.Any())
                         {
                             foreach (var kv in err.Metadata)
@@ -223,12 +224,12 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                 }
                 else
                 {
-                    Log.Error($"Offer error {response.StatusCode} for {product.Name}: {body}");
+                    Log.Error($"Offer {action} error {response.StatusCode} for {product.Name}: {body}");
                 }
             }
             catch (Exception exParse)
             {
-                Log.Error(exParse, $"Failed to parse Allegro error ({response.StatusCode}) for {product.Name}. Body={body}");
+                Log.Error(exParse, $"Failed to parse Allegro error ({response.StatusCode}) while {action} offer for {product.Name}. Body={body}");
             }
         }
     }

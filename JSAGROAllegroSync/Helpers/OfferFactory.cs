@@ -9,6 +9,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace JSAGROAllegroSync.Helpers
 {
@@ -56,8 +57,6 @@ namespace JSAGROAllegroSync.Helpers
                         Name = appSettings.AllegroDeliveryName
                     },
                     HandlingTime = product.DeliveryType == 0 ? appSettings.AllegroHandlingTime : appSettings.AllegroHandlingTimeCustomProducts,
-                    AdditionalInfo = "Przesyłki realizowane są w dni robocze od poniedziałku do piątku w godzinach 8:00 - 16:00.",
-                    ShipmentDate = GetShipmentDate()
                 },
                 Location = new Location
                 {
@@ -88,7 +87,7 @@ namespace JSAGROAllegroSync.Helpers
                 Name = offer.Product.Name,
                 Category = new Category
                 {
-                    Id = offer.Product.DefaultAllegroCategory.ToString()
+                    Id = offer.Product.DefaultAllegroCategory.ToString() == "0" ? offer.CategoryId.ToString() : offer.Product.DefaultAllegroCategory.ToString(),
                 },
                 Stock = new Stock
                 {
@@ -121,9 +120,7 @@ namespace JSAGROAllegroSync.Helpers
                     {
                         Name = appSettings.AllegroDeliveryName
                     },
-                    HandlingTime = offer.Product.DeliveryType == 0 ? appSettings.AllegroHandlingTime : appSettings.AllegroHandlingTimeCustomProducts,
-                    AdditionalInfo = "Przesyłki realizowane są w dni robocze od poniedziałku do piątku w godzinach 8:00 - 16:00.",
-                    ShipmentDate = GetShipmentDate()
+                    HandlingTime = offer.Product.DeliveryType == 0 ? appSettings.AllegroHandlingTime : appSettings.AllegroHandlingTimeCustomProducts
                 },
                 AfterSalesServices = new AfterSalesServices
                 {
@@ -173,27 +170,16 @@ namespace JSAGROAllegroSync.Helpers
             return ProductSets;
         }
 
-        public static DateTime GetShipmentDate()
-        {
-            var now = DateTime.Now;
-            DateTime shipmentLocal;
-
-            shipmentLocal = new DateTime(now.Year, now.Month, now.Day, 23, 59, 0);
-
-            // Convert to UTC
-            return shipmentLocal.ToUniversalTime();
-        }
-
         private static string MapAllegroUnit(string productUnit)
         {
             if (string.IsNullOrWhiteSpace(productUnit))
                 return "UNIT"; // default
 
-            productUnit = productUnit.ToLower();
+            productUnit = productUnit.Trim().ToLower().Replace(".", "");
 
             if (productUnit == "szt")
                 return "UNIT";
-            else if (productUnit == "m" || productUnit == "mb")
+            else if (productUnit == "mb")
                 return "METER";
             else if (productUnit == "para")
                 return "PAIR";
@@ -379,121 +365,128 @@ namespace JSAGROAllegroSync.Helpers
             }
 
             // 0. Product header (Name + Producer + Code)
-            if (!string.IsNullOrWhiteSpace(product.Name) ||
-                !string.IsNullOrWhiteSpace(product.SupplierName) ||
-                !string.IsNullOrWhiteSpace(product.CodeGaska))
+
+            // Bold if contains Oryginał, Original, Org, oryginal, JAG
+            //string HighlightKeywords(string input)
+            //{
+            //    if (string.IsNullOrEmpty(input)) return string.Empty;
+
+            //    var keywords = new[] { "oryginał", "original", "org", "oryginal", "jag premium" };
+
+            //    string result = System.Net.WebUtility.HtmlEncode(input);
+
+            //    foreach (var keyword in keywords)
+            //    {
+            //        string pattern;
+            //        if (keyword.Equals("jag premium", StringComparison.OrdinalIgnoreCase))
+            //        {
+            //            // Match JAG PREMIUM or JAG-PREMIUM
+            //            pattern = @"\bjag[\s\-]+premium\b";
+            //        }
+            //        else
+            //        {
+            //            pattern = $@"\b{System.Text.RegularExpressions.Regex.Escape(keyword)}\b";
+            //        }
+
+            //        var regex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            //        result = regex.Replace(result, "<b>$0</b>");
+            //    }
+
+            //    return result;
+            //}
+
+            string nameHtml = $"<h2>{System.Net.WebUtility.HtmlEncode(product.Name)}</h2>";
+            string codeHtml = !string.IsNullOrWhiteSpace(product.CodeGaska)
+                ? $"<p><b>Kod produktu: </b>{System.Net.WebUtility.HtmlEncode(product.CodeGaska)}</p>"
+                : string.Empty;
+            string producerHtml = !string.IsNullOrWhiteSpace(product.SupplierName)
+                ? $"<p><b>Producent: </b>{System.Net.WebUtility.HtmlEncode(product.SupplierName)}</p>"
+                : string.Empty;
+            string descriptionHtml = !string.IsNullOrWhiteSpace(product.Description)
+                ? $"<p><b>Opis: </b>{System.Net.WebUtility.HtmlEncode(product.Description)}</p>"
+                : string.Empty;
+            string technicalHtml = !string.IsNullOrWhiteSpace(product.TechnicalDetails)
+                ? $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
+                : string.Empty;
+            string parametersHtml = product.Atributes != null && product.Atributes.Any()
+                ? $"<p><b>Parametry/Wymiary: </b>{string.Join(", ", product.Atributes.Select(p => $"{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}"))}</p>"
+                : string.Empty;
+
+            description.Sections.Add(new Section
             {
-                // Bold if contains Oryginał, Original, Org, oryginal, JAG
-                string HighlightKeywords(string input)
+                SectionItems = new List<SectionItem>
                 {
-                    if (string.IsNullOrEmpty(input)) return string.Empty;
-
-                    var keywords = new[] { "oryginał", "original", "org", "oryginal", "jag premium" };
-
-                    string result = System.Net.WebUtility.HtmlEncode(input);
-
-                    foreach (var keyword in keywords)
+                    new SectionItem
                     {
-                        string pattern;
-                        if (keyword.Equals("jag premium", StringComparison.OrdinalIgnoreCase))
-                        {
-                            // Match JAG PREMIUM or JAG-PREMIUM
-                            pattern = @"\bjag[\s\-]+premium\b";
-                        }
-                        else
-                        {
-                            pattern = $@"\b{System.Text.RegularExpressions.Regex.Escape(keyword)}\b";
-                        }
-
-                        var regex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        result = regex.Replace(result, "<b>$0</b>");
+                        Type = "TEXT",
+                        Content = $"{nameHtml}{codeHtml}{producerHtml}{descriptionHtml}{technicalHtml}{parametersHtml}"
                     }
-
-                    return result;
                 }
-
-                string name = HighlightKeywords(product.Name);
-                string producer = !string.IsNullOrWhiteSpace(product.SupplierName) ? $"<p><b>Producent: </b>{System.Net.WebUtility.HtmlEncode(product.SupplierName)}</p>" : string.Empty;
-                string code = !string.IsNullOrWhiteSpace(product.CodeGaska) ? $"<p><b>Kod produktu: </b>{System.Net.WebUtility.HtmlEncode(product.CodeGaska)}</p>" : string.Empty;
-
-                description.Sections.Add(new Section
-                {
-                    SectionItems = new List<SectionItem>
-                    {
-                        new SectionItem
-                        {
-                            Type = "TEXT",
-                            Content = $"<p><b>Nazwa: </b>{name}</p>{code}{producer}"
-                        }
-                    }
-                });
-            }
+            });
 
             // 2. Description
-            if (!string.IsNullOrWhiteSpace(product.Description))
-            {
-                description.Sections.Add(new Section
-                {
-                    SectionItems = new List<SectionItem>
-                    {
-                        new SectionItem
-                        {
-                            Type = "TEXT",
-                            Content = $"<p><b>Opis: </b>{System.Net.WebUtility.HtmlEncode(product.Description)}</p>"
-                        }
-                    }
-                });
-            }
+            //if (!string.IsNullOrWhiteSpace(product.Description))
+            //{
+            //    description.Sections.Add(new Section
+            //    {
+            //        SectionItems = new List<SectionItem>
+            //        {
+            //            new SectionItem
+            //            {
+            //                Type = "TEXT",
+            //                Content = $"<p><b>Opis: </b>{System.Net.WebUtility.HtmlEncode(product.Description)}</p>"
+            //            }
+            //        }
+            //    });
+            //}
 
             // 3. Technical details
-            if (!string.IsNullOrWhiteSpace(product.TechnicalDetails))
-            {
-                description.Sections.Add(new Section
-                {
-                    SectionItems = new List<SectionItem>
-            {
-                new SectionItem
-                {
-                    Type = "TEXT",
-                    Content = $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
-                }
-            }
-                });
-            }
+            //if (!string.IsNullOrWhiteSpace(product.TechnicalDetails))
+            //{
+            //    description.Sections.Add(new Section
+            //    {
+            //        SectionItems = new List<SectionItem>
+            //        {
+            //            new SectionItem
+            //            {
+            //                Type = "TEXT",
+            //                Content = $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
+            //            }
+            //        }
+            //    });
+            //}
 
             // 4. Attributes/parameters
-            if (product.Atributes != null && product.Atributes.Any())
-            {
-                var paramText = string.Join(", ", product.Atributes
-                    .Select(p => $"{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}"));
+            //if (product.Atributes != null && product.Atributes.Any())
+            //{
+            //    var paramText = string.Join(", ", product.Atributes .Select(p => $"{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}"));
 
-                description.Sections.Add(new Section
-                {
-                    SectionItems = new List<SectionItem>
-            {
-                new SectionItem
-                {
-                    Type = "TEXT",
-                    Content = $"<p><b>Parametry: </b>{paramText}</p>"
-                }
-            }
-                });
-            }
+            //    description.Sections.Add(new Section
+            //    {
+            //        SectionItems = new List<SectionItem>
+            //        {
+            //            new SectionItem
+            //            {
+            //                Type = "TEXT",
+            //                Content = $"<p><b>Parametry/Wymiary: </b>{paramText}</p>"
+            //            }
+            //        }
+            //    });
+            //}
 
             // 5. Cross numbers
             if (product.CrossNumbers != null && product.CrossNumbers.Any())
             {
-                var crossNumbersText = string.Join(", ", product.CrossNumbers
-                    .Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
+                var crossNumbersText = string.Join(", ", product.CrossNumbers.Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
 
                 var sectionItems = new List<SectionItem>
-        {
-            new SectionItem
-            {
-                Type = "TEXT",
-                Content = $"<p><b>Numery referencyjne: </b>{crossNumbersText}</p>"
-            }
-        };
+                {
+                    new SectionItem
+                    {
+                        Type = "TEXT",
+                        Content = $"<p><b>Numery referencyjne: </b>{crossNumbersText}</p>"
+                    }
+                };
 
                 if (imageIndex < images.Count)
                 {
@@ -507,8 +500,7 @@ namespace JSAGROAllegroSync.Helpers
                 description.Sections.Add(new Section { SectionItems = sectionItems });
             }
 
-            // 6. Applications section (horizontal branches)
-            // 6. Applications section (grouped leaf nodes)
+            // 6. Applications section
             if (product.Applications != null && product.Applications.Any())
             {
                 // Build dictionary: parent path -> list of leaf names
@@ -576,19 +568,36 @@ namespace JSAGROAllegroSync.Helpers
                 }
             }
 
-            // 7. Remaining images at the bottom
+            // 7. UWAGA section for packages (before remaining images)
+            //var package = product.Packages?.FirstOrDefault(p => p.PackRequired == 1);
+            //if (package != null)
+            //{
+            //    description.Sections.Add(new Section
+            //    {
+            //        SectionItems = new List<SectionItem>
+            //        {
+            //            new SectionItem
+            //            {
+            //                Type = "TEXT",
+            //                Content = $"<p><b>UWAGA:</b> PODANA CENA KUP TERAZ TO CENA ZA 1 KOMPLET = {package.Qty} {System.Net.WebUtility.HtmlEncode(package.Unit)}</p>"
+            //            }
+            //        }
+            //    });
+            //}
+
+            // 8. Remaining images at the bottom
             while (imageIndex < images.Count)
             {
                 description.Sections.Add(new Section
                 {
                     SectionItems = new List<SectionItem>
-            {
-                new SectionItem
-                {
-                    Type = "IMAGE",
-                    Url = images[imageIndex++].AllegroUrl
-                }
-            }
+                    {
+                        new SectionItem
+                        {
+                            Type = "IMAGE",
+                            Url = images[imageIndex++].AllegroUrl
+                        }
+                    }
                 });
             }
 

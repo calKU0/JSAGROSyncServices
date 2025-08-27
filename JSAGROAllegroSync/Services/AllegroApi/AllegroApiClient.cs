@@ -41,10 +41,19 @@ namespace JSAGROAllegroSync.Services.AllegroApi
         public async Task<T> PostAsync<T>(string url, object body, CancellationToken ct, string contentType = "application/vnd.allegro.public.v1+json")
         {
             var request = await CreateRequest(HttpMethod.Post, url, ct);
+
             if (body != null)
             {
-                var json = JsonSerializer.Serialize(body, _options);
-                request.Content = new StringContent(json, Encoding.UTF8, contentType);
+                if (body is byte[] bytes)
+                {
+                    request.Content = new ByteArrayContent(bytes);
+                    request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+                }
+                else
+                {
+                    var json = JsonSerializer.Serialize(body, _options);
+                    request.Content = new StringContent(json, Encoding.UTF8, contentType);
+                }
             }
 
             var response = await _http.SendAsync(request, ct);

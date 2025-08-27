@@ -24,6 +24,7 @@ namespace JSAGROAllegroSync.DTOs
         public decimal NetPrice { get; set; }
         public decimal GrossPrice { get; set; }
         public string CurrencyPrice { get; set; }
+        public int DeliveryType { get; set; }
         public float NetWeight { get; set; }
         public float GrossWeight { get; set; }
         public float InStock { get; set; }

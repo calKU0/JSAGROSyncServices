@@ -94,41 +94,41 @@ namespace JSAGROAllegroSync
                 _lastRunTime = DateTime.Now;
 
                 // 1. Sync base products
-                Log.Information("Starting syncing basic products info...");
-                await _gaskaApiService.SyncProducts();
-                Log.Information("Basic product sync completed.");
+                //Log.Information("Starting syncing basic products info...");
+                //await _gaskaApiService.SyncProducts();
+                //Log.Information("Basic product sync completed.");
 
                 // 2. Sync product details once per day
                 if (_lastProductDetailsSyncDate.Date < DateTime.Today)
                 {
-                    Log.Information("Starting syncing product details...");
-                    await _gaskaApiService.SyncProductDetails();
-                    Log.Information("Detailed product sync completed.");
+                    //Log.Information("Starting syncing product details...");
+                    //await _gaskaApiService.SyncProductDetails();
+                    //Log.Information("Detailed product sync completed.");
 
-                    // 3. Allegro categories
-                    Log.Information("Starting Allegro categories mapping...");
-                    await _categoryService.UpdateAllegroCategories();
-                    Log.Information("Allegro Categories mapping completed.");
+                    //// 3. Allegro categories
+                    //Log.Information("Starting Allegro categories mapping...");
+                    //await _categoryService.UpdateAllegroCategories();
+                    //Log.Information("Allegro Categories mapping completed.");
 
-                    // 4. Allegro parameters for categories
-                    Log.Information("Starting Allegro parameters for category mapping...");
-                    await _categoryService.FetchAndSaveCategoryParameters();
-                    Log.Information("Allegro parameters for category mapping completed.");
+                    //// 4. Allegro parameters for categories
+                    //Log.Information("Starting Allegro parameters for category mapping...");
+                    //await _categoryService.FetchAndSaveCategoryParameters();
+                    //Log.Information("Allegro parameters for category mapping completed.");
 
                     // 5. Product parameters
-                    Log.Information("Starting product parameters update...");
-                    await _parametersService.UpdateParameters();
-                    Log.Information("Product parameters update completed.");
+                    //Log.Information("Starting product parameters update...");
+                    //await _parametersService.UpdateParameters();
+                    //Log.Information("Product parameters update completed.");
 
                     // 6. Images
-                    Log.Information("Starting importing images to allegro...");
-                    await _imageService.ImportImages();
-                    Log.Information("Images import completed.");
+                    //Log.Information("Starting importing images to allegro...");
+                    //await _imageService.ImportImages();
+                    //Log.Information("Images import completed.");
 
                     // 7. Compatibility products
-                    Log.Information("Starting fetching compatible products...");
-                    await _compatibilityService.FetchAndSaveCompatibleProducts();
-                    Log.Information("Compatible products fetched.");
+                    //Log.Information("Starting fetching compatible products...");
+                    //await _compatibilityService.FetchAndSaveCompatibleProducts();
+                    //Log.Information("Compatible products fetched.");
 
                     _lastProductDetailsSyncDate = DateTime.Today;
                 }
@@ -144,9 +144,9 @@ namespace JSAGROAllegroSync
                 Log.Information("Allegro offers update completed.");
 
                 // 9. Create/Update offers
-                Log.Information("Starting offers upload/update...");
-                await _offerService.CreateOffers();
-                Log.Information("Offer upload/update completed.");
+                //Log.Information("Starting offers upload/update...");
+                //await _offerService.CreateOffers();
+                //Log.Information("Offer upload/update completed.");
 
                 DateTime nextRun = _lastRunTime.Add(TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes));
                 Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);

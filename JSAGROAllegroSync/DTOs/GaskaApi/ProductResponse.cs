@@ -21,6 +21,7 @@ namespace JSAGROAllegroSync.DTOs
         public string CurrencyPrice { get; set; }
         public decimal PriceNet { get; set; }
         public decimal PriceGross { get; set; }
+        public int DeliveryType { get; set; }
         public List<ApiPackage> Packages { get; set; }
         public List<ApiCrossNumber> CrossNumbers { get; set; }
         public List<ApiComponent> Components { get; set; }

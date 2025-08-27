@@ -85,24 +85,22 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task<int> ArchiveProductsNotIn(HashSet<int> fetchedProductIds, CancellationToken ct)
         {
-            var table = new DataTable();
-            table.Columns.Add("Id", typeof(int));
-            foreach (var id in fetchedProductIds)
-                table.Rows.Add(id);
-
-            var param = new SqlParameter("@Ids", SqlDbType.Structured)
-            {
-                TypeName = "dbo.IntListType",
-                Value = table
-            };
-
-            string sql = @"
+            string ids = string.Join(",", fetchedProductIds);
+            string sql = $@"
                 UPDATE Products
                 SET Archived = 1
-                WHERE Archived = 0
-                AND Id NOT IN (SELECT Id FROM @Ids)";
+                WHERE Archived = 0 AND Id NOT IN ({ids})";
 
-            return await _context.Database.ExecuteSqlCommandAsync(sql, param, ct);
+            var prevTimeout = _context.Database.CommandTimeout;
+            try
+            {
+                _context.Database.CommandTimeout = 240;
+                return await _context.Database.ExecuteSqlCommandAsync(sql, ct);
+            }
+            finally
+            {
+                _context.Database.CommandTimeout = prevTimeout;
+            }
         }
 
         public async Task UpsertProducts(List<ApiProducts> apiProducts, HashSet<int> fetchedProductIds, CancellationToken ct)
@@ -110,7 +108,18 @@ namespace JSAGROAllegroSync.Repositories
             foreach (var apiProduct in apiProducts)
             {
                 fetchedProductIds.Add(apiProduct.Id);
-                var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == apiProduct.Id, ct) ?? new Product { Id = apiProduct.Id };
+
+                var product = await _context.Products
+                    .FirstOrDefaultAsync(p => p.Id == apiProduct.Id, ct);
+
+                if (product == null)
+                {
+                    product = new Product
+                    {
+                        Id = apiProduct.Id
+                    };
+                    _context.Products.Add(product);
+                }
 
                 product.Name = FixName(apiProduct.Name, apiProduct.CodeGaska, apiProduct.CodeCustomer);
                 product.CodeGaska = apiProduct.CodeGaska;
@@ -127,9 +136,8 @@ namespace JSAGROAllegroSync.Repositories
                 product.CurrencyPrice = apiProduct.CurrencyPrice;
                 product.PriceNet = apiProduct.NetPrice;
                 product.PriceGross = apiProduct.GrossPrice;
+                product.DeliveryType = apiProduct.DeliveryType;
                 product.Archived = false;
-
-                if (product.Id == 0) _context.Products.Add(product);
             }
 
             await _context.SaveChangesAsync(ct);
@@ -158,6 +166,7 @@ namespace JSAGROAllegroSync.Repositories
             product.CurrencyPrice = updatedProduct.CurrencyPrice;
             product.PriceNet = updatedProduct.PriceNet;
             product.PriceGross = updatedProduct.PriceGross;
+            product.DeliveryType = updatedProduct.DeliveryType;
             product.UpdatedDate = DateTime.UtcNow;
 
             // Map collections
@@ -361,7 +370,7 @@ namespace JSAGROAllegroSync.Repositories
                 bool jagRemoved = false;
                 name = Regex.Replace(
                     name,
-                    @"\bJAG(?=[0-9\-])[\w\-]*",
+                    @"\bJAG(?=[0-9\-])[\w\-/]*",
                     m =>
                     {
                         jagRemoved = true;
@@ -374,7 +383,7 @@ namespace JSAGROAllegroSync.Repositories
                 name = Regex.Replace(name, @"\s+", " ").Trim();
 
                 // 2. Move leading product code (if exists) to the end
-                var codeMatch = Regex.Match(name, @"^(?<code>\d+[0-9A-Za-z./x-]*)\s+(?<rest>.+)$");
+                var codeMatch = Regex.Match(name, @"^(?<code>[\d\w./x-]+)\s+(?<rest>.+)$", RegexOptions.IgnoreCase);
                 if (codeMatch.Success)
                 {
                     name = $"{codeMatch.Groups["rest"].Value} {codeMatch.Groups["code"].Value}";

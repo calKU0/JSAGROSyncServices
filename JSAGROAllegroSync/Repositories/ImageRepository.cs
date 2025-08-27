@@ -24,9 +24,11 @@ namespace JSAGROAllegroSync.Repositories
         {
             return await _context.ProductImages
                 .Include(pi => pi.Product)
+                .Include(pi => pi.Product.AllegroOffers)
                 .Where(pi => pi.Product.Categories.Any()
                     && pi.Product.DefaultAllegroCategory != 0
-                    && (string.IsNullOrEmpty(pi.AllegroUrl) || (pi.AllegroExpirationDate != null && pi.AllegroExpirationDate <= DateTime.UtcNow)))
+                    && ((string.IsNullOrEmpty(pi.AllegroUrl) || pi.AllegroExpirationDate <= DateTime.UtcNow)
+                        && pi.Product.AllegroOffers.OrderByDescending(o => o.Id).FirstOrDefault().Status != "ACTIVE"))
                 .ToListAsync(ct);
         }
 

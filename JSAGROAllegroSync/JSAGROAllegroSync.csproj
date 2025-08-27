@@ -118,6 +118,7 @@
     <Compile Include="DTOs\AllegroApi\SupportedCategoriesReponse.cs" />
     <Compile Include="DTOs\Settings\AppSettings.cs" />
     <Compile Include="Helpers\AsyncHelpers.cs" />
+    <Compile Include="Helpers\ConjugationHelper.cs" />
     <Compile Include="Helpers\OfferFactory.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.cs" />
     <Compile Include="Migrations\202508201113326_AddProductUnit.Designer.cs">
@@ -198,6 +199,10 @@
     <Compile Include="Migrations\202508261926390_OffertStartingAt.cs" />
     <Compile Include="Migrations\202508261926390_OffertStartingAt.Designer.cs">
       <DependentUpon>202508261926390_OffertStartingAt.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508271155454_OfferDatetime2Convert.cs" />
+    <Compile Include="Migrations\202508271155454_OfferDatetime2Convert.Designer.cs">
+      <DependentUpon>202508271155454_OfferDatetime2Convert.cs</DependentUpon>
     </Compile>
     <Compile Include="Models\AllegroCategory.cs" />
     <Compile Include="Models\AllegroOffer.cs" />
@@ -339,6 +344,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202508261926390_OffertStartingAt.resx">
       <DependentUpon>202508261926390_OffertStartingAt.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508271155454_OfferDatetime2Convert.resx">
+      <DependentUpon>202508271155454_OfferDatetime2Convert.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>

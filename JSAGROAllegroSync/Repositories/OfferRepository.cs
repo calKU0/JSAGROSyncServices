@@ -49,7 +49,7 @@ namespace JSAGROAllegroSync.Repositories
                 existing.Status = offer.Publication.Status;
                 existing.DeliveryName = offer.Delivery.ShippingRates.Name;
                 existing.ExternalId = offer.External?.Id;
-                existing.StartingAt = offer.Publication.StartingAt;
+                existing.StartingAt = offer.Publication?.StartingAt ?? DateTime.MinValue;
             }
 
             await _context.SaveChangesAsync(ct);
@@ -62,7 +62,17 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
         {
-            return await _context.AllegroOffers
+            var lastOffers = _context.AllegroOffers
+                .Where(o => (o.Status == "ACTIVE" || o.Status == "ENDED")
+                            && o.DeliveryName == "JAG API")
+                .GroupBy(o => o.ExternalId)
+                .Select(g => g.OrderByDescending(o => o.Id).FirstOrDefault())
+                .ToList();
+
+            var offerIds = lastOffers.Select(o => o.Id).ToList();
+
+            var result = _context.AllegroOffers
+                .Where(o => offerIds.Contains(o.Id))
                 .Include(o => o.Product)
                 .Include(o => o.Product.Applications)
                 .Include(o => o.Product.Atributes)
@@ -70,9 +80,9 @@ namespace JSAGROAllegroSync.Repositories
                 .Include(o => o.Product.Images)
                 .Include(o => o.Product.Packages)
                 .Include(o => o.Product.CrossNumbers)
-                .Where(o => (o.Status == "ACTIVE" || o.Status == "INACTIVE" || o.Status == "ENDED")
-                && o.DeliveryName == "JAG API")
-                .ToListAsync(ct);
+                .ToList();
+
+            return result;
         }
     }
 }

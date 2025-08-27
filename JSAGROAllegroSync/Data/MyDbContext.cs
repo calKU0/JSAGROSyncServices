@@ -41,6 +41,10 @@ namespace JSAGROAllegroSync.Data
                 .Property(p => p.UpdatedDate)
                 .HasColumnType("datetime2");
 
+            modelBuilder.Entity<AllegroOffer>()
+                .Property(p => p.StartingAt)
+                .HasColumnType("datetime2");
+
             modelBuilder.Entity<Product>()
                 .HasIndex(p => p.CodeGaska)
                 .IsUnique();

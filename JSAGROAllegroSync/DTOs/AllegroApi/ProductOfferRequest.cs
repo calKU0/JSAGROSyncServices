@@ -93,7 +93,7 @@ namespace JSAGROAllegroSync.DTOs.AllegroApi
         public string HandlingTime { get; set; }
         public ShippingRates ShippingRates { get; set; }
         public string AdditionalInfo { get; set; }
-        public DateTime ShipmentDate { get; set; }
+        //public DateTime ShipmentDate { get; set; }
     }
 
     public class ShippingRates
@@ -200,7 +200,7 @@ namespace JSAGROAllegroSync.DTOs.AllegroApi
     public class Publication
     {
         public string Duration { get; set; }
-        public DateTime StartingAt { get; set; }
+        public DateTime? StartingAt { get; set; }
         public string Status { get; set; }
         public bool Republish { get; set; }
     }
