@@ -12,6 +12,7 @@ namespace JSAGROAllegroSync.Models.Product
         public string Title { get; set; }
         public string Url { get; set; }
         public string AllegroUrl { get; set; }
+        public string AllegroLogoUrl { get; set; }
 
         [Column(TypeName = "datetime2")]
         public DateTime AllegroExpirationDate { get; set; }

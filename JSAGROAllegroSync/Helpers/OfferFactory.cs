@@ -40,7 +40,7 @@ namespace JSAGROAllegroSync.Helpers
                         Currency = "PLN"
                     }
                 },
-                Images = product.Images.Select(i => i.AllegroUrl).ToList(),
+                Images = GetOfferImages(product),
                 Description = BuildDescription(product),
                 External = new External
                 {
@@ -86,12 +86,6 @@ namespace JSAGROAllegroSync.Helpers
             int productQuantity = offer.Product.Packages.Any(p => p.PackRequired == 1) ? Convert.ToInt32(offer.Product.Packages.Where(p => p.PackRequired == 1).Select(p => p.PackQty).FirstOrDefault()) : 1;
             return new ProductOfferRequest
             {
-                Name = offer.Product.Name,
-                ProductSet = BuildProductSet(offer.Product, productQuantity, appSettings),
-                Category = new Category
-                {
-                    Id = offer.Product.DefaultAllegroCategory.ToString() == "0" ? offer.CategoryId.ToString() : offer.Product.DefaultAllegroCategory.ToString(),
-                },
                 Stock = new Stock
                 {
                     Available = Convert.ToInt32(Math.Floor(offer.Product.InStock)),
@@ -106,7 +100,7 @@ namespace JSAGROAllegroSync.Helpers
                         Currency = "PLN"
                     }
                 },
-                Images = offer.Product.Images.Select(i => i.AllegroUrl).ToList(),
+                Images = GetOfferImages(offer.Product),
                 Description = BuildDescription(offer.Product),
                 External = new External
                 {
@@ -134,6 +128,15 @@ namespace JSAGROAllegroSync.Helpers
                 Parameters = BuildParameters(offer.Product.Parameters, false),
                 CompatibilityList = BuildCompatibilityList(offer.Product.DefaultAllegroCategory == 0 ? offer.CategoryId : offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories, compatibleList)
             };
+        }
+
+        private static List<string> GetOfferImages(Product product)
+        {
+            List<string> images = new List<string>();
+
+            images = product.Images.Select(i => i.AllegroUrl).ToList();
+            images.Add(product.Images.Select(i => i.AllegroLogoUrl).FirstOrDefault());
+            return images;
         }
 
         private static List<ProductSet> BuildProductSet(Product product, int quantity, AppSettings appSettings, string fallbackCat = "319123")
@@ -237,10 +240,10 @@ namespace JSAGROAllegroSync.Helpers
 
             bool IsCategoryOrParent(int catId, int targetCategoryId)
             {
-                var category = categories.FirstOrDefault(c => c.CategoryId == catId);
+                var category = categories.FirstOrDefault(c => c.Id == catId);
                 while (category != null)
                 {
-                    if (category.CategoryId == targetCategoryId)
+                    if (category.Id == targetCategoryId)
                         return true;
 
                     if (category.ParentId == null)
@@ -337,7 +340,7 @@ namespace JSAGROAllegroSync.Helpers
             if (!items.Any())
                 return null;
 
-            var cappedItems = items.Take(100).ToList();
+            var cappedItems = items.Take(99).ToList();
 
             return new CompatibilityList { Items = cappedItems };
         }
@@ -516,20 +519,62 @@ namespace JSAGROAllegroSync.Helpers
                 }
             }
 
-            // 8. Remaining images at the bottom
+            // Group product images by 2 per section
             while (imageIndex < images.Count)
             {
+                var sectionImageItems = new List<SectionItem>();
+
+                // First image
+                sectionImageItems.Add(new SectionItem
+                {
+                    Type = "IMAGE",
+                    Url = images[imageIndex++].AllegroUrl
+                });
+
+                // Add second image if available
+                if (imageIndex < images.Count)
+                {
+                    sectionImageItems.Add(new SectionItem
+                    {
+                        Type = "IMAGE",
+                        Url = images[imageIndex++].AllegroUrl
+                    });
+                }
+
                 description.Sections.Add(new Section
                 {
-                    SectionItems = new List<SectionItem>
-                    {
-                        new SectionItem
-                        {
-                            Type = "IMAGE",
-                            Url = images[imageIndex++].AllegroUrl
-                        }
-                    }
+                    SectionItems = sectionImageItems
                 });
+            }
+
+            // Add Allegro logo last (and try to group it if possible)
+            var allegroLogoUrl = product.Images.Select(i => i.AllegroLogoUrl)?.FirstOrDefault();
+            if (!string.IsNullOrEmpty(allegroLogoUrl))
+            {
+                if (description.Sections.Any() && description.Sections.Last().SectionItems.Count == 1)
+                {
+                    // Add logo to the last section (so it has 2 items)
+                    description.Sections.Last().SectionItems.Add(new SectionItem
+                    {
+                        Type = "IMAGE",
+                        Url = allegroLogoUrl
+                    });
+                }
+                else
+                {
+                    // Otherwise, new section for logo
+                    description.Sections.Add(new Section
+                    {
+                        SectionItems = new List<SectionItem>
+                        {
+                            new SectionItem
+                            {
+                                Type = "IMAGE",
+                                Url = allegroLogoUrl
+                            }
+                        }
+                    });
+                }
             }
 
             return description;

@@ -32,12 +32,13 @@ namespace JSAGROAllegroSync.Repositories
                 .ToListAsync(ct);
         }
 
-        public async Task<bool> UpdateProductAllegroImage(int imageId, string imageUrl, DateTime expiresAt, CancellationToken ct)
+        public async Task<bool> UpdateProductAllegroImage(int imageId, string imageUrl, string logoUrl, DateTime expiresAt, CancellationToken ct)
         {
             var image = await _context.ProductImages.FirstOrDefaultAsync(i => i.Id == imageId, ct);
             if (image == null) return false;
 
             image.AllegroUrl = imageUrl;
+            image.AllegroLogoUrl = logoUrl;
             image.AllegroExpirationDate = expiresAt;
 
             return await _context.SaveChangesAsync(ct) > 0;

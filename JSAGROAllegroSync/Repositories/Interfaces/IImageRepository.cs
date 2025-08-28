@@ -12,6 +12,6 @@ namespace JSAGROAllegroSync.Repositories.Interfaces
     {
         Task<List<ProductImage>> GetImagesForImport(CancellationToken ct);
 
-        Task<bool> UpdateProductAllegroImage(int imageId, string imageUrl, DateTime expiresAt, CancellationToken ct);
+        Task<bool> UpdateProductAllegroImage(int imageId, string imageUrl, string logoUrl, DateTime expiresAt, CancellationToken ct);
     }
 }

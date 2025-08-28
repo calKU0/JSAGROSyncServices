@@ -38,13 +38,12 @@ namespace JSAGROAllegroSync.Repositories
             while (stack.Any())
             {
                 var dto = stack.Pop();
-                var id = Convert.ToInt32(dto.Id);
 
-                var existing = await _context.AllegroCategories.FirstOrDefaultAsync(c => c.CategoryId == id, ct);
+                var existing = await _context.AllegroCategories.FirstOrDefaultAsync(c => c.CategoryId == dto.Id, ct);
 
                 if (existing == null)
                 {
-                    existing = new AllegroCategory { CategoryId = id, Name = dto.Name, Parent = parentEntity };
+                    existing = new AllegroCategory { CategoryId = dto.Id, Name = dto.Name, Parent = parentEntity };
                     _context.AllegroCategories.Add(existing);
                 }
                 else

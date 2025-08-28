@@ -36,6 +36,17 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                 {
                     try
                     {
+                        string logoUrl = string.Empty;
+                        try
+                        {
+                            var logoImageBytes = File.ReadAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Images", "jsagro-logo.png"));
+                            var logoResult = await _apiClient.PostAsync<AllegroImageResponse>("/sale/images", logoImageBytes, ct, "image/jpeg");
+                            logoUrl = logoResult?.Location;
+                        }
+                        catch
+                        {
+                        }
+
                         // Download image bytes
                         var imageBytes = await DownloadImageAsync(image.Url, image.Product.CodeGaska, ct);
                         if (imageBytes == null) continue;
@@ -53,7 +64,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                         }
 
                         // Save to DB
-                        var success = await _imageRepo.UpdateProductAllegroImage(image.Id, result.Location, expiresAt, ct);
+                        var success = await _imageRepo.UpdateProductAllegroImage(image.Id, result.Location, logoUrl, expiresAt, ct);
                         if (success)
                             Log.Information("Image uploaded for product {Name} ({Code})", image.Product.Name, image.Product.CodeGaska);
                         else

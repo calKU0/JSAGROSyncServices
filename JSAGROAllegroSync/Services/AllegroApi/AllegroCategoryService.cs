@@ -1,4 +1,6 @@
 ﻿using JSAGROAllegroSync.Data;
+
+//using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
@@ -74,7 +76,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                         }
                         else
                         {
-                            Log.Warning("No Allegro category resolved for product {Name} ({Code})", product.Name, product.CodeGaska);
+                            await _productRepo.UpdateProductAllegroCategory(product.Id, 319159, ct);
                         }
                     }
                     catch (Exception ex)
