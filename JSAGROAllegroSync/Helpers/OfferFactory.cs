@@ -17,10 +17,11 @@ namespace JSAGROAllegroSync.Helpers
     {
         public static ProductOfferRequest BuildOffer(Product product, List<CompatibleProduct> compatibleList, List<AllegroCategory> allegroCategories, AppSettings appSettings)
         {
+            int productQuantity = product.Packages.Any(p => p.PackRequired == 1) ? Convert.ToInt32(product.Packages.Where(p => p.PackRequired == 1).Select(p => p.PackQty).FirstOrDefault()) : 1;
             return new ProductOfferRequest
             {
                 Name = product.Name,
-                ProductSet = BuildProductSet(product, appSettings),
+                ProductSet = BuildProductSet(product, productQuantity, appSettings),
                 Category = new Category
                 {
                     Id = product.DefaultAllegroCategory.ToString()
@@ -35,7 +36,7 @@ namespace JSAGROAllegroSync.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(product.PriceGross, product.DeliveryType, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(product.PriceGross, product.DeliveryType, productQuantity, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -82,10 +83,11 @@ namespace JSAGROAllegroSync.Helpers
 
         public static ProductOfferRequest PatchOffer(AllegroOffer offer, List<CompatibleProduct> compatibleList, List<AllegroCategory> allegroCategories, AppSettings appSettings)
         {
+            int productQuantity = offer.Product.Packages.Any(p => p.PackRequired == 1) ? Convert.ToInt32(offer.Product.Packages.Where(p => p.PackRequired == 1).Select(p => p.PackQty).FirstOrDefault()) : 1;
             return new ProductOfferRequest
             {
                 Name = offer.Product.Name,
-                ProductSet = BuildProductSet(offer.Product, appSettings),
+                ProductSet = BuildProductSet(offer.Product, productQuantity, appSettings),
                 Category = new Category
                 {
                     Id = offer.Product.DefaultAllegroCategory.ToString() == "0" ? offer.CategoryId.ToString() : offer.Product.DefaultAllegroCategory.ToString(),
@@ -100,7 +102,7 @@ namespace JSAGROAllegroSync.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(offer.Product.PriceGross, offer.Product.DeliveryType, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(offer.Product.PriceGross, offer.Product.DeliveryType, productQuantity, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -134,7 +136,7 @@ namespace JSAGROAllegroSync.Helpers
             };
         }
 
-        private static List<ProductSet> BuildProductSet(Product product, AppSettings appSettings, string fallbackCat = "319123")
+        private static List<ProductSet> BuildProductSet(Product product, int quantity, AppSettings appSettings, string fallbackCat = "319123")
         {
             var ProductSets = new List<ProductSet>();
 
@@ -151,7 +153,7 @@ namespace JSAGROAllegroSync.Helpers
                 ProductObject = Product,
                 Quantity = new Quantity
                 {
-                    Value = 1,
+                    Value = quantity,
                 },
                 ResponsiblePerson = new ResponsiblePerson
                 {
@@ -536,6 +538,7 @@ namespace JSAGROAllegroSync.Helpers
         private static decimal CalculatePrice(
             decimal initialPrice,
             int productType,
+            int quantity,
             decimal addPLNToBulky,
             decimal addPLNToCustom,
             decimal ownMarginPercent,
@@ -546,7 +549,7 @@ namespace JSAGROAllegroSync.Helpers
             var calculatedPrice = initialPrice;
 
             // Apply own margin
-            calculatedPrice = initialPrice * (1 + (ownMarginPercent / 100m));
+            calculatedPrice = initialPrice * quantity * (1 + (ownMarginPercent / 100m));
 
             // Product type adjustments
             if (productType == 1) // bulky

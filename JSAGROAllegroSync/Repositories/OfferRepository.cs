@@ -64,7 +64,8 @@ namespace JSAGROAllegroSync.Repositories
         {
             var lastOffers = await _context.AllegroOffers
                 .Where(o => (o.Status == "ACTIVE" || o.Status == "ENDED")
-                            && o.DeliveryName == "JAG API" && o.ExternalId == "002860.40")
+                            && o.DeliveryName == "JAG API"
+                            && o.ExternalId == "002860.40")
                 .GroupBy(o => o.ExternalId)
                 .Select(g => g.OrderByDescending(o => o.Id).FirstOrDefault())
                 .ToListAsync(ct);

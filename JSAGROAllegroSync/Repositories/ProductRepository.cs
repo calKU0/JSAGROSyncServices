@@ -58,7 +58,7 @@ namespace JSAGROAllegroSync.Repositories
                 .Include(p => p.Images)
                 .Include(p => p.Files)
                 .Include(p => p.Categories)
-                .Where(p => !p.Categories.Any() && !p.Archived && p.DeliveryType == 2)
+                .Where(p => !p.Categories.Any() && !p.Archived)
                 .Take(limit)
                 .ToListAsync(ct);
 
@@ -318,11 +318,8 @@ namespace JSAGROAllegroSync.Repositories
                             && p.DefaultAllegroCategory != 0
                             && p.PriceGross > 1.00m
                             && p.InStock > 0
-                            && p.Packages.Any(pa => pa.PackRequired == 1)
                             && p.Images.Any(i => i.AllegroUrl != null)
-                            && !p.AllegroOffers.Any()
-                            )
-                .Take(1)
+                            && !p.AllegroOffers.Any())
                 .ToListAsync(ct);
 
             foreach (var product in products)
