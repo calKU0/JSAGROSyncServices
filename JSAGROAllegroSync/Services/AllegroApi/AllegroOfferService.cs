@@ -64,11 +64,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                         offer.Delivery.ShippingRates.Name = name;
                     }
 
-                    await _productRepo.UpdateProductAllegroCategory(
-                        offer.External.Id,
-                        Convert.ToInt32(offer.Category.Id),
-                        ct
-                    );
+                    await _productRepo.UpdateProductAllegroCategory(offer.External.Id, Convert.ToInt32(offer.Category.Id), ct);
                 }
 
                 await _offerRepo.UpsertOffers(latestOffers, ct);
@@ -169,7 +165,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
 
         private async Task LogAllegroResponse(Product product, HttpResponseMessage response, string body, bool isUpdate = false)
         {
-            var action = isUpdate ? "updating" : "creating";
+            var action = isUpdate ? "updated" : "created";
 
             switch ((int)response.StatusCode)
             {
@@ -182,13 +178,13 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                     break;
 
                 case 202:
-                    Log.Information($"Offer {action} accepted but still processing for {product.Name} ({product.CodeGaska})");
+                    Log.Information($"Offer {action} successfully but still processing for {product.Name} ({product.CodeGaska})");
                     break;
 
                 case 400:
                 case 422:
                 case 433:
-                    await LogAllegroErrors(product, response, body, action);
+                    await LogAllegroErrors(product, response, body, isUpdate);
                     break;
 
                 case 401:
@@ -205,8 +201,9 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             }
         }
 
-        private async Task LogAllegroErrors(Product product, HttpResponseMessage response, string body, string action)
+        private async Task LogAllegroErrors(Product product, HttpResponseMessage response, string body, bool isUpdate = false)
         {
+            var action = isUpdate ? "updating" : "creating";
             try
             {
                 var errorResponse = JsonSerializer.Deserialize<AllegroErrorResponse>(body, _options);
@@ -214,22 +211,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                 {
                     foreach (var err in errorResponse.Errors)
                     {
-                        Log.Error($"Offer {action} error for {product.Name}: " +
-                                  $"Code={err.Code}, Message={err.Message}, " +
-                                  $"UserMessage={err.UserMessage ?? "N/A"}, Path={err.Path ?? "N/A"}, Details={err.Details ?? "N/A"}");
-
-                        if ((int)response.StatusCode == 433 && err.Metadata != null && err.Metadata.Any())
-                        {
-                            foreach (var kv in err.Metadata)
-                            {
-                                Log.Warning($"   ↳ Metadata: {kv.Key} = {kv.Value}");
-                            }
-                        }
-                        else if (err.Metadata != null && err.Metadata.Any())
-                        {
-                            var metaJson = JsonSerializer.Serialize(err.Metadata);
-                            Log.Warning($"   ↳ Metadata: {metaJson}");
-                        }
+                        Log.Error($"Offer {action} error for {product.Name}: Code={err.Code}, Message={err.Message} UserMessage={err.UserMessage ?? "N/A"}, Path={err.Path ?? "N/A"}, Details={err.Details ?? "N/A"}");
                     }
                 }
                 else

@@ -98,6 +98,11 @@ namespace JSAGROAllegroSync
                 //await _gaskaApiService.SyncProducts();
                 //Log.Information("Basic product sync completed.");
 
+                // 8. Sync Allegro offers
+                Log.Information("Starting syncing Allegro offers...");
+                await _offerService.SyncAllegroOffers();
+                Log.Information("Allegro offers sync completed.");
+
                 // 2. Sync product details once per day
                 if (_lastProductDetailsSyncDate.Date < DateTime.Today)
                 {
@@ -106,9 +111,9 @@ namespace JSAGROAllegroSync
                     //Log.Information("Detailed product sync completed.");
 
                     //// 3. Allegro categories
-                    //Log.Information("Starting Allegro categories mapping...");
-                    //await _categoryService.UpdateAllegroCategories();
-                    //Log.Information("Allegro Categories mapping completed.");
+                    Log.Information("Starting Allegro categories mapping...");
+                    await _categoryService.UpdateAllegroCategories();
+                    Log.Information("Allegro Categories mapping completed.");
 
                     //// 4. Allegro parameters for categories
                     //Log.Information("Starting Allegro parameters for category mapping...");
@@ -121,9 +126,9 @@ namespace JSAGROAllegroSync
                     Log.Information("Product parameters update completed.");
 
                     //6.Images
-                    //Log.Information("Starting importing images to allegro...");
-                    //await _imageService.ImportImages();
-                    //Log.Information("Images import completed.");
+                    Log.Information("Starting importing images to allegro...");
+                    await _imageService.ImportImages();
+                    Log.Information("Images import completed.");
 
                     //7.Compatibility products
                     //Log.Information("Starting fetching compatible products...");
@@ -133,20 +138,15 @@ namespace JSAGROAllegroSync
                     _lastProductDetailsSyncDate = DateTime.Today;
                 }
 
-                // 8. Sync Allegro offers
-                Log.Information("Starting syncing Allegro offers...");
-                await _offerService.SyncAllegroOffers();
-                Log.Information("Allegro offers sync completed.");
-
                 // 9. Update Allegro offers
                 Log.Information("Starting updating Allegro offers...");
                 await _offerService.UpdateOffers();
                 Log.Information("Allegro offers update completed.");
 
                 // 9. Create/Update offers
-                //Log.Information("Starting offers upload/update...");
-                //await _offerService.CreateOffers();
-                //Log.Information("Offer upload/update completed.");
+                Log.Information("Starting offers upload/update...");
+                await _offerService.CreateOffers();
+                Log.Information("Offer upload/update completed.");
 
                 DateTime nextRun = _lastRunTime.Add(TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes));
                 Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);

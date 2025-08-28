@@ -62,16 +62,16 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
         {
-            var lastOffers = _context.AllegroOffers
+            var lastOffers = await _context.AllegroOffers
                 .Where(o => (o.Status == "ACTIVE" || o.Status == "ENDED")
-                            && o.DeliveryName == "JAG API")
+                            && o.DeliveryName == "JAG API" && o.ExternalId == "002860.40")
                 .GroupBy(o => o.ExternalId)
                 .Select(g => g.OrderByDescending(o => o.Id).FirstOrDefault())
-                .ToList();
+                .ToListAsync(ct);
 
             var offerIds = lastOffers.Select(o => o.Id).ToList();
 
-            var result = _context.AllegroOffers
+            var result = await _context.AllegroOffers
                 .Where(o => offerIds.Contains(o.Id))
                 .Include(o => o.Product)
                 .Include(o => o.Product.Applications)
@@ -80,7 +80,7 @@ namespace JSAGROAllegroSync.Repositories
                 .Include(o => o.Product.Images)
                 .Include(o => o.Product.Packages)
                 .Include(o => o.Product.CrossNumbers)
-                .ToList();
+                .ToListAsync(ct);
 
             return result;
         }

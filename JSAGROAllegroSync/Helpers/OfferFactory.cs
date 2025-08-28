@@ -140,6 +140,7 @@ namespace JSAGROAllegroSync.Helpers
 
             var Product = new ProductObject
             {
+                Name = product.Name,
                 Category = new Category { Id = product.DefaultAllegroCategory.ToString() == "0" ? fallbackCat : product.DefaultAllegroCategory.ToString() },
                 Images = product.Images.Select(i => i.AllegroUrl).ToList(),
                 Parameters = BuildParameters(product.Parameters, true),
@@ -367,35 +368,6 @@ namespace JSAGROAllegroSync.Helpers
 
             // 0. Product header (Name + Producer + Code)
 
-            // Bold if contains Oryginał, Original, Org, oryginal, JAG
-            //string HighlightKeywords(string input)
-            //{
-            //    if (string.IsNullOrEmpty(input)) return string.Empty;
-
-            //    var keywords = new[] { "oryginał", "original", "org", "oryginal", "jag premium" };
-
-            //    string result = System.Net.WebUtility.HtmlEncode(input);
-
-            //    foreach (var keyword in keywords)
-            //    {
-            //        string pattern;
-            //        if (keyword.Equals("jag premium", StringComparison.OrdinalIgnoreCase))
-            //        {
-            //            // Match JAG PREMIUM or JAG-PREMIUM
-            //            pattern = @"\bjag[\s\-]+premium\b";
-            //        }
-            //        else
-            //        {
-            //            pattern = $@"\b{System.Text.RegularExpressions.Regex.Escape(keyword)}\b";
-            //        }
-
-            //        var regex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            //        result = regex.Replace(result, "<b>$0</b>");
-            //    }
-
-            //    return result;
-            //}
-
             string nameHtml = $"<h2>{System.Net.WebUtility.HtmlEncode(product.Name)}</h2>";
             string codeHtml = !string.IsNullOrWhiteSpace(product.CodeGaska)
                 ? $"<p><b>Kod produktu: </b>{System.Net.WebUtility.HtmlEncode(product.CodeGaska)}</p>"
@@ -409,17 +381,32 @@ namespace JSAGROAllegroSync.Helpers
             string technicalHtml = !string.IsNullOrWhiteSpace(product.TechnicalDetails)
                 ? $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
                 : string.Empty;
-            string parametersHtml = string.Empty;
 
+            string parametersHtml = string.Empty;
             if (product.Atributes != null && product.Atributes.Any())
             {
-                // Build <li> for each attribute
-                var attributesList = string.Join("",
-                    product.Atributes.Select(p =>
-                        $"<li>{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}</li>"));
-
-                // Wrap in <p> with bold title and single <ul>
+                var attributesList = string.Join("", product.Atributes.Select(p => $"<li>{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}</li>"));
                 parametersHtml = $"<p><b>Parametry/Wymiary:</b></p><ul>{attributesList}</ul>";
+            }
+
+            var package = product.Packages?.FirstOrDefault(p => p.PackRequired == 1);
+            string warning = string.Empty;
+
+            if (string.Equals(product.Unit, "MB", StringComparison.OrdinalIgnoreCase))
+            {
+                warning = $"<p><b>UWAGA:</b> {System.Net.WebUtility.HtmlEncode($"PODANA CENA KUP TERAZ TO CENA ZA 1 METR BIEŻĄCY")}</p>";
+            }
+
+            if (package != null)
+            {
+                warning = $"<p><b>UWAGA:</b> {System.Net.WebUtility.HtmlEncode($"PODANA CENA KUP TERAZ TO CENA ZA 1 KOMPLET = {package.PackQty} {ConjugationHelper.Unit(Convert.ToInt32(package.PackQty), product.Unit).ToUpper()}")}</p>";
+            }
+
+            string crossNumbersText = string.Empty;
+            if (product.CrossNumbers != null && product.CrossNumbers.Any())
+            {
+                var crossNumbers = string.Join(", ", product.CrossNumbers.Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
+                crossNumbersText = $"<p><b>Numery referencyjne: </b>{crossNumbers}</p>";
             }
 
             // Build the content string for text fields
@@ -429,14 +416,9 @@ namespace JSAGROAllegroSync.Helpers
                           .Append(producerHtml)
                           .Append(descriptionHtml)
                           .Append(technicalHtml)
-                          .Append(parametersHtml);
-
-            // Add cross numbers inline
-            if (product.CrossNumbers != null && product.CrossNumbers.Any())
-            {
-                var crossNumbersText = string.Join(", ", product.CrossNumbers.Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
-                contentBuilder.Append($"<p><b>Numery referencyjne: </b>{crossNumbersText}</p>");
-            }
+                          .Append(parametersHtml)
+                          .Append(crossNumbersText)
+                          .Append(warning);
 
             // Build the section
             var sectionItems = new List<SectionItem>
@@ -448,7 +430,7 @@ namespace JSAGROAllegroSync.Helpers
                 }
             };
 
-            // Add image to the same section
+            // Add image
             if (imageIndex < images.Count)
             {
                 sectionItems.Add(new SectionItem
@@ -505,7 +487,6 @@ namespace JSAGROAllegroSync.Helpers
                         foreach (var secondLevel in applicationsByParent[rootApp.ApplicationId])
                         {
                             string leafs = GetLeafNames(secondLevel.ApplicationId);
-                            // Bold both root and second-level names
                             string li = $"<li><b>{System.Net.WebUtility.HtmlEncode(rootApp.Name)} - {System.Net.WebUtility.HtmlEncode(secondLevel.Name)}</b>: {leafs}</li>";
                             listItems.Add(li);
                         }
@@ -552,12 +533,22 @@ namespace JSAGROAllegroSync.Helpers
             return description;
         }
 
-        private static decimal CalculatePrice(decimal initialPrice, int productType, decimal addPLNToBulky, decimal addPLNToCustom, decimal ownMarginPercent, decimal marginLessThan5PLN, decimal marginMoreThan5PLNPercent, decimal marginMoreThan1000PLN)
+        private static decimal CalculatePrice(
+            decimal initialPrice,
+            int productType,
+            decimal addPLNToBulky,
+            decimal addPLNToCustom,
+            decimal ownMarginPercent,
+            decimal marginLessThan5PLN,
+            decimal marginMoreThan5PLNPercent,
+            decimal marginMoreThan1000PLN)
         {
             var calculatedPrice = initialPrice;
 
+            // Apply own margin
             calculatedPrice = initialPrice * (1 + (ownMarginPercent / 100m));
 
+            // Product type adjustments
             if (productType == 1) // bulky
             {
                 calculatedPrice += addPLNToBulky;
@@ -567,19 +558,39 @@ namespace JSAGROAllegroSync.Helpers
                 calculatedPrice += addPLNToCustom;
             }
 
+            // Tiered pricing rules
             if (calculatedPrice < 5m)
             {
-                calculatedPrice += marginLessThan5PLN;
-            }
-            else if (calculatedPrice >= 5m && calculatedPrice <= 1000m)
-            {
-                calculatedPrice *= (1 + marginMoreThan5PLNPercent / 100m);
-            }
-            else
-            {
-                calculatedPrice += marginMoreThan1000PLN;
+                var withSmallMargin = calculatedPrice + marginLessThan5PLN;
+
+                if (withSmallMargin < 5m)
+                {
+                    calculatedPrice = withSmallMargin;
+                    return calculatedPrice;
+                }
+                else
+                {
+                    return calculatedPrice * (1 + marginMoreThan5PLNPercent / 100m);
+                }
             }
 
+            if (calculatedPrice >= 5m && calculatedPrice <= 1000m)
+            {
+                var tempPrice = calculatedPrice * (1 + marginMoreThan5PLNPercent / 100m);
+
+                if (tempPrice > 1000m)
+                {
+                    // ignore percent margin, apply 1000+ rule
+                    calculatedPrice += marginMoreThan1000PLN;
+                    return calculatedPrice;
+                }
+
+                calculatedPrice = tempPrice;
+                return calculatedPrice;
+            }
+
+            // Over 1000 case
+            calculatedPrice += marginMoreThan1000PLN;
             return calculatedPrice;
         }
     }

@@ -58,7 +58,7 @@ namespace JSAGROAllegroSync.Repositories
                 .Include(p => p.Images)
                 .Include(p => p.Files)
                 .Include(p => p.Categories)
-                .Where(p => !p.Categories.Any() && !p.Archived)
+                .Where(p => !p.Categories.Any() && !p.Archived && p.DeliveryType == 2)
                 .Take(limit)
                 .ToListAsync(ct);
 
@@ -318,9 +318,11 @@ namespace JSAGROAllegroSync.Repositories
                             && p.DefaultAllegroCategory != 0
                             && p.PriceGross > 1.00m
                             && p.InStock > 0
+                            && p.Packages.Any(pa => pa.PackRequired == 1)
                             && p.Images.Any(i => i.AllegroUrl != null)
                             && !p.AllegroOffers.Any()
                             )
+                .Take(1)
                 .ToListAsync(ct);
 
             foreach (var product in products)
@@ -335,7 +337,20 @@ namespace JSAGROAllegroSync.Repositories
         {
             foreach (var param in parameters)
             {
-                _context.ProductParameters.AddOrUpdate(param);
+                var existing = await _context.ProductParameters
+                    .FirstOrDefaultAsync(p =>
+                        p.ProductId == param.ProductId &&
+                        p.CategoryParameterId == param.CategoryParameterId, ct);
+
+                if (existing == null)
+                {
+                    _context.ProductParameters.Add(param);
+                }
+                else
+                {
+                    existing.Value = param.Value;
+                    existing.IsForProduct = param.IsForProduct;
+                }
             }
 
             await _context.SaveChangesAsync(ct);
