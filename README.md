@@ -1,10 +1,10 @@
-# AllegroProductSync
+# JSAGROAllegroSync
 
 > 💼 **Commercial Project** — Part of a private or client-facing initiative.
 
 ## Overview
 
-AllegroProductSync is a Windows Service that automates the management of product listings on Allegro. It fetches products from a supplier database via API, updates the local database, enriches products with category suggestions, parameters, and images, and synchronizes listings with an Allegro account.
+JSAGROAllegroSync is a Windows Service that automates the management of product listings on Allegro. It fetches products from a supplier database via API, updates the local database, enriches products with category suggestions, parameters, and images, and synchronizes listings with an Allegro account.
 
 The project also includes a WPF-based configurator, enabling administrators to monitor logs, review daily warnings and errors, and manage service settings effortlessly.
 
@@ -22,9 +22,11 @@ The project also includes a WPF-based configurator, enabling administrators to m
 ## Screenshots
 
 ### Configurator - Log View
+
 ![Configurator Log](./screenshots/log_view.png)
 
 ### Configurator - Settings
+
 ![Configurator Settings](./screenshots/settings_view.png)
 
 ## Technologies Used
@@ -37,7 +39,7 @@ The project also includes a WPF-based configurator, enabling administrators to m
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/AllegroProductSync.git
+   git clone https://github.com/calKU0/JSAGROAllegroSync.git
    ```
 2. Open the solution in Visual Studio and build the project.
 3. Configure the service using the WPF configurator or by editing `app.config`.
@@ -51,4 +53,3 @@ This project is proprietary and confidential. See the [LICENSE](LICENSE) file fo
 ---
 
 © 2025-present [calKU0](https://github.com/calKU0)
-
