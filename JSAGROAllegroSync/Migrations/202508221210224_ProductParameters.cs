@@ -1,8 +1,7 @@
 ﻿namespace JSAGROAllegroSync.Migrations
 {
-    using System;
     using System.Data.Entity.Migrations;
-    
+
     public partial class ProductParameters : DbMigration
     {
         public override void Up()
@@ -10,17 +9,17 @@
             CreateTable(
                 "dbo.ProductAttributes",
                 c => new
-                    {
-                        Id = c.Int(nullable: false, identity: true),
-                        AttributeId = c.Int(nullable: false),
-                        AttributeName = c.String(),
-                        AttributeValue = c.String(),
-                        ProductId = c.Int(nullable: false),
-                    })
+                {
+                    Id = c.Int(nullable: false, identity: true),
+                    AttributeId = c.Int(nullable: false),
+                    AttributeName = c.String(),
+                    AttributeValue = c.String(),
+                    ProductId = c.Int(nullable: false),
+                })
                 .PrimaryKey(t => t.Id)
                 .ForeignKey("dbo.Products", t => t.ProductId, cascadeDelete: true)
                 .Index(t => t.ProductId);
-            
+
             AddColumn("dbo.ProductParameters", "ParameterId", c => c.Int(nullable: false));
             AddColumn("dbo.ProductParameters", "Value", c => c.String());
             AddColumn("dbo.ProductParameters", "CategoryParameter_ParameterId", c => c.Int());
@@ -31,7 +30,7 @@
             DropColumn("dbo.ProductParameters", "AttributeName");
             DropColumn("dbo.ProductParameters", "AttributeValue");
         }
-        
+
         public override void Down()
         {
             AddColumn("dbo.ProductParameters", "AttributeValue", c => c.String());

@@ -1,6 +1,5 @@
 ﻿using JSAGROAllegroSync.Data;
 using JSAGROAllegroSync.DTOs.AllegroApi;
-using JSAGROAllegroSync.DTOs.Settings;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Repositories.Interfaces;
@@ -11,7 +10,6 @@ using System.Data.Entity;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,7 +18,7 @@ namespace JSAGROAllegroSync.Repositories
     public class OfferRepository : IOfferRepository
     {
         private readonly MyDbContext _context;
-        private readonly string _deliveryName = Helpers.AppSettingsLoader.LoadAppSettings().AllegroDeliveryName;
+        private readonly string _deliveryName = AppSettingsLoader.LoadAppSettings().AllegroDeliveryName;
 
         public OfferRepository(MyDbContext context)
         {

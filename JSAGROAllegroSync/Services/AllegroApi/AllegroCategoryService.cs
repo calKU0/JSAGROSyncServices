@@ -1,16 +1,14 @@
-﻿using JSAGROAllegroSync.Data;
-
-//using JSAGROAllegroSync.DTOs.AllegroApi;
+﻿//using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
 using JSAGROAllegroSync.Repositories;
+using JSAGROAllegroSync.Repositories.Interfaces;
 using JSAGROAllegroSync.Services.AllegroApi.Interfaces;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -18,8 +16,8 @@ namespace JSAGROAllegroSync.Services.AllegroApi
 {
     public class AllegroCategoryService : IAllegroCategoryService
     {
-        private readonly ProductRepository _productRepo;
-        private readonly CategoryRepository _categoryRepo;
+        private readonly IProductRepository _productRepo;
+        private readonly ICategoryRepository _categoryRepo;
         private readonly AllegroApiClient _apiClient;
 
         public AllegroCategoryService(ProductRepository productRepo, CategoryRepository categoryRepo, AllegroApiClient apiClient)

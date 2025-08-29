@@ -1,5 +1,4 @@
-﻿using JSAGROAllegroSync.Data;
-using JSAGROAllegroSync.DTOs;
+﻿using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.Repositories.Interfaces;
 using Serilog;
 using System;

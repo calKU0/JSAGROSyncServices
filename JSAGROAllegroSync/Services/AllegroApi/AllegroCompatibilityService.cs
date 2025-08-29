@@ -1,5 +1,4 @@
-﻿using JSAGROAllegroSync.Data;
-using JSAGROAllegroSync.DTOs.AllegroApi;
+﻿using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Repositories.Interfaces;
 using JSAGROAllegroSync.Services.AllegroApi.Interfaces;

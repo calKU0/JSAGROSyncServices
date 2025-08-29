@@ -1,12 +1,10 @@
 ﻿using JSAGROAllegroServiceConfiguration.Enums;
 using JSAGROAllegroServiceConfiguration.Models;
-using System;
 using System.Collections.ObjectModel;
 using System.Configuration;
 using System.Globalization;
 using System.IO;
 using System.ServiceProcess;
-using System.Timers;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;

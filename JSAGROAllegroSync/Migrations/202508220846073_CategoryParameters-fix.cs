@@ -1,8 +1,7 @@
 ﻿namespace JSAGROAllegroSync.Migrations
 {
-    using System;
     using System.Data.Entity.Migrations;
-    
+
     public partial class CategoryParametersfix : DbMigration
     {
         public override void Up()
@@ -15,7 +14,7 @@
             DropColumn("dbo.CategoryParameters", "Id");
             DropColumn("dbo.CategoryParameters", "ProductId");
         }
-        
+
         public override void Down()
         {
             AddColumn("dbo.CategoryParameters", "ProductId", c => c.Int(nullable: false));

@@ -1,8 +1,7 @@
 ﻿namespace JSAGROAllegroSync.Migrations
 {
-    using System;
     using System.Data.Entity.Migrations;
-    
+
     public partial class ParametersFields : DbMigration
     {
         public override void Up()
@@ -13,7 +12,7 @@
             AddColumn("dbo.CategoryParameters", "CustomValuesEnabled", c => c.Boolean(nullable: false));
             AddColumn("dbo.CategoryParameters", "AmbiguousValueId", c => c.String());
         }
-        
+
         public override void Down()
         {
             DropColumn("dbo.CategoryParameters", "AmbiguousValueId");

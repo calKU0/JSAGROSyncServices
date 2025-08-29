@@ -1,8 +1,7 @@
 ﻿namespace JSAGROAllegroSync.Migrations
 {
-    using System;
     using System.Data.Entity.Migrations;
-    
+
     public partial class CompatibilityFieldsFix : DbMigration
     {
         public override void Up()
@@ -12,7 +11,7 @@
             DropColumn("dbo.CompatibleProducts", "Text");
             DropColumn("dbo.CompatibleProducts", "GroupId");
         }
-        
+
         public override void Down()
         {
             AddColumn("dbo.CompatibleProducts", "GroupId", c => c.String());

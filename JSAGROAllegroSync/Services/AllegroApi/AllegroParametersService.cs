@@ -1,13 +1,12 @@
-﻿using JSAGROAllegroSync.Data;
-using JSAGROAllegroSync.Models;
+﻿using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
 using JSAGROAllegroSync.Repositories;
+using JSAGROAllegroSync.Repositories.Interfaces;
 using JSAGROAllegroSync.Services.AllegroApi.Interfaces;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,8 +14,8 @@ namespace JSAGROAllegroSync.Services.AllegroApi
 {
     public class AllegroParametersService : IAllegroParametersService
     {
-        private readonly ProductRepository _productRepo;
-        private readonly CategoryRepository _categoryRepo;
+        private readonly IProductRepository _productRepo;
+        private readonly ICategoryRepository _categoryRepo;
 
         public AllegroParametersService(ProductRepository productRepo, CategoryRepository categoryRepo)
         {

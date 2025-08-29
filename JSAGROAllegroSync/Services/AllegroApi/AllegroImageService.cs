@@ -39,7 +39,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                         string logoUrl = string.Empty;
                         try
                         {
-                            var logoImageBytes = File.ReadAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Images", "jsagro-logo.png"));
+                            var logoImageBytes = File.ReadAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Images", "jsagro-logo.jpg"));
                             var logoResult = await _apiClient.PostAsync<AllegroImageResponse>("/sale/images", logoImageBytes, ct, "image/jpeg");
                             logoUrl = logoResult?.Location;
                         }

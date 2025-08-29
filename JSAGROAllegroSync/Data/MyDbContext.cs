@@ -1,6 +1,5 @@
 ﻿using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
-using System;
 using System.Data.Entity;
 
 namespace JSAGROAllegroSync.Data

@@ -1,6 +1,5 @@
 ﻿namespace JSAGROAllegroSync.Migrations
 {
-    using System;
     using System.Data.Entity.Migrations;
 
     public partial class AddProductAllegroCategory : DbMigration

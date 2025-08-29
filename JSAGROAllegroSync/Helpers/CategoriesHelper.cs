@@ -1,5 +1,4 @@
-﻿using JSAGROAllegroSync.Models;
-using JSAGROAllegroSync.Models.Product;
+﻿using JSAGROAllegroSync.Models.Product;
 using System.Collections.Generic;
 
 namespace JSAGROAllegroSync.Helpers

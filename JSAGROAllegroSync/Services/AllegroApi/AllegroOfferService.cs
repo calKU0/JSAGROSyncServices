@@ -1,6 +1,4 @@
-﻿using JSAGROAllegroSync.Data;
-using JSAGROAllegroSync.DTOs.AllegroApi;
-using JSAGROAllegroSync.DTOs.AllegroApiResponses;
+﻿using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.DTOs.Settings;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Models.Product;
@@ -11,7 +9,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;

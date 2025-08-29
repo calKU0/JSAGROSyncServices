@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace JSAGROAllegroSync.DTOs
+﻿namespace JSAGROAllegroSync.DTOs
 {
     public class GaskaApiCredentials
     {

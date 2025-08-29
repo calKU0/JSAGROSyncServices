@@ -1,12 +1,7 @@
 ﻿using JSAGROAllegroSync.DTOs;
-using JSAGROAllegroSync.DTOs.AllegroApi;
-using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 

@@ -1,8 +1,7 @@
 ﻿namespace JSAGROAllegroSync.Migrations
 {
-    using System;
     using System.Data.Entity.Migrations;
-    
+
     public partial class ProductOfferRealation : DbMigration
     {
         public override void Up()
@@ -12,7 +11,7 @@
             CreateIndex("dbo.AllegroOffers", "ProductId");
             AddForeignKey("dbo.AllegroOffers", "ProductId", "dbo.Products", "Id");
         }
-        
+
         public override void Down()
         {
             DropForeignKey("dbo.AllegroOffers", "ProductId", "dbo.Products");

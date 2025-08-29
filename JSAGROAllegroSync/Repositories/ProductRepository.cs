@@ -1,33 +1,17 @@
 ﻿using JSAGROAllegroSync.Data;
 using JSAGROAllegroSync.DTOs;
-using JSAGROAllegroSync.DTOs.AllegroApi;
-using JSAGROAllegroSync.DTOs.AllegroApiResponses;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
 using JSAGROAllegroSync.Repositories.Interfaces;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Entity;
-using System.Data.Entity.Migrations;
-using System.Data.SqlClient;
 using System.Diagnostics;
-using System.Globalization;
-using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Runtime.Remoting.Contexts;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Xml;
-using System.Xml.Linq;
 
 namespace JSAGROAllegroSync.Repositories
 {

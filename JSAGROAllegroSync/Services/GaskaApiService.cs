@@ -1,7 +1,4 @@
-﻿using JSAGROAllegroSync.Data;
-using JSAGROAllegroSync.DTOs;
-using JSAGROAllegroSync.Helpers;
-using JSAGROAllegroSync.Models;
+﻿using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.Models.Product;
 using JSAGROAllegroSync.Repositories.Interfaces;
 using Newtonsoft.Json;
@@ -129,7 +126,7 @@ namespace JSAGROAllegroSync.Services
 
                     if (!response.IsSuccessStatusCode)
                     {
-                        Log.Error($"API error while fetching product details. Product ID: {product.Id}. Product Code: {product.CodeGaska}. Response Status: {response.StatusCode}");
+                        Log.Error($"API error while fetching product details. Product name: {product.Name}. Product Code: {product.CodeGaska}. Response Status: {response.StatusCode}");
                         continue;
                     }
 
@@ -139,11 +136,11 @@ namespace JSAGROAllegroSync.Services
                     if (apiResponse?.Product == null) continue;
 
                     await _productRepo.UpdateProductDetails(product, apiResponse.Product, ct);
-                    Log.Information($"Successfully fetched and updated details of product with ID: {product.Id} and Code: {product.CodeGaska}");
+                    Log.Information($"Successfully fetched and updated details of product {product.Name} ({product.CodeGaska})");
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, $"Error while updating product details. Product ID: {product.Id} Code: {product.CodeGaska}");
+                    Log.Error(ex, $"Error while updating product details. Product name: {product.Name} Code: {product.CodeGaska}");
                 }
                 finally
                 {

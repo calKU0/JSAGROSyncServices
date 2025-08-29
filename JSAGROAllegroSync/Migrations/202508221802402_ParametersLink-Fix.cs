@@ -1,8 +1,7 @@
 ﻿namespace JSAGROAllegroSync.Migrations
 {
-    using System;
     using System.Data.Entity.Migrations;
-    
+
     public partial class ParametersLinkFix : DbMigration
     {
         public override void Up()
@@ -11,15 +10,15 @@
             CreateTable(
                 "dbo.CategoryParameterValues",
                 c => new
-                    {
-                        Id = c.Int(nullable: false, identity: true),
-                        CategoryParameterId = c.Int(nullable: false),
-                        Value = c.String(),
-                    })
+                {
+                    Id = c.Int(nullable: false, identity: true),
+                    CategoryParameterId = c.Int(nullable: false),
+                    Value = c.String(),
+                })
                 .PrimaryKey(t => t.Id)
                 .ForeignKey("dbo.CategoryParameters", t => t.CategoryParameterId, cascadeDelete: true)
                 .Index(t => t.CategoryParameterId);
-            
+
             AddColumn("dbo.ProductParameters", "CategoryParameterId", c => c.Int(nullable: false));
             AddColumn("dbo.CategoryParameters", "Id", c => c.Int(nullable: false, identity: true));
             AddPrimaryKey("dbo.CategoryParameters", "Id");
@@ -28,7 +27,7 @@
             AddForeignKey("dbo.ProductParameters", "CategoryParameterId", "dbo.CategoryParameters", "Id", cascadeDelete: true);
             DropColumn("dbo.ProductParameters", "ParameterId");
         }
-        
+
         public override void Down()
         {
             AddColumn("dbo.ProductParameters", "ParameterId", c => c.Int(nullable: false));

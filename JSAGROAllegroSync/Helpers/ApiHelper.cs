@@ -1,14 +1,9 @@
 ﻿using JSAGROAllegroSync.DTOs;
-using JSAGROAllegroSync.DTOs.AllegroApi;
-using JSAGROAllegroSync.DTOs.AllegroApiResponses;
-using JSAGROAllegroSync.Models.Product;
-using Serilog;
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace JSAGROAllegroSync.Helpers
 {
