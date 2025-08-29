@@ -179,12 +179,14 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             try
             {
                 var categories = await _categoryRepo.GetDefaultCategories(ct);
+                var allCategoryParameters = new List<CategoryParameter>();
 
                 foreach (var category in categories)
                 {
                     try
                     {
-                        var result = await _apiClient.GetAsync<CategoryParametersResponse>($"/sale/categories/{category}/parameters", ct);
+                        var result = await _apiClient.GetAsync<CategoryParametersResponse>(
+                            $"/sale/categories/{category}/parameters", ct);
 
                         if (result?.Parameters == null || !result.Parameters.Any())
                         {
@@ -192,7 +194,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                             continue;
                         }
 
-                        var categoryResult = result.Parameters.Select(p => new CategoryParameter
+                        var categoryParameters = result.Parameters.Select(p => new CategoryParameter
                         {
                             ParameterId = Convert.ToInt32(p.Id),
                             CategoryId = category,
@@ -208,17 +210,24 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                             Values = p.Dictionary?.Select(d => new CategoryParameterValue
                             {
                                 Value = d.Value
-                            }).ToList()
+                            }).ToList() ?? new List<CategoryParameterValue>()
                         }).ToList();
 
-                        await _categoryRepo.SaveCategoryParametersAsync(categoryResult, ct);
-
-                        Log.Information("Saved {Count} parameters for category {Category}", categoryResult.Count, category);
+                        allCategoryParameters.AddRange(categoryParameters);
+                        Log.Information("Fetched {Count} parameters for category {Category}.", categoryParameters.Count, category);
                     }
                     catch (Exception exCategory)
                     {
                         Log.Error(exCategory, "Error fetching parameters for category {Category}", category);
                     }
+                }
+
+                if (allCategoryParameters.Any())
+                {
+                    // Bulk save all categories at once
+                    await _categoryRepo.SaveCategoryParametersAsync(allCategoryParameters, ct);
+                    Log.Information("Saved total {Count} parameters for {CategoryCount} categories",
+                        allCategoryParameters.Count, categories.Count);
                 }
             }
             catch (Exception ex)

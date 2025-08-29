@@ -30,8 +30,11 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             {
                 var products = await _productRepo.GetProductsToUpdateParameters(ct);
 
-                // cache kategorii
+                // Cache category parameters
                 var categoryParamsCache = new Dictionary<int, List<CategoryParameter>>();
+
+                // Collect all parameter inserts before saving
+                var allProductParameters = new List<ProductParameter>();
 
                 foreach (var product in products)
                 {
@@ -51,7 +54,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
 
                             if (string.IsNullOrEmpty(value) && (catParam.Required || catParam.RequiredForProduct))
                             {
-                                Log.Warning("Missing required parameter {ParamName} for product {ProductId}", catParam.Name, product.Id);
+                                Log.Warning("Missing required parameter {ParamName} for product {Name} ({Code})", product.Name, product.CodeGaska);
                                 continue;
                             }
 
@@ -64,13 +67,23 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                             });
                         }
 
-                        await _productRepo.SaveProductParametersAsync(productParams, ct);
-                        Log.Information("Updated {Count} parameters for product {ProductId}", productParams.Count, product.Id);
+                        if (productParams.Count > 0)
+                        {
+                            allProductParameters.AddRange(productParams);
+                            Log.Information("Assigned {Count} parameters for product {Name} ({Code})", productParams.Count, product.Name, product.CodeGaska);
+                        }
                     }
                     catch (Exception exProduct)
                     {
-                        Log.Error(exProduct, "Error updating parameters for product {ProductId}", product.Id);
+                        Log.Error(exProduct, "Error updating parameters for product {Name} ({Code})", product.Name, product.CodeGaska);
                     }
+                }
+
+                // Single bulk save at the end instead of per product
+                if (allProductParameters.Any())
+                {
+                    await _productRepo.SaveProductParametersAsync(allProductParameters, ct);
+                    Log.Information("Saved {Count} parameters for {ProductsCount} products", allProductParameters.Count, products.Count);
                 }
             }
             catch (Exception ex)

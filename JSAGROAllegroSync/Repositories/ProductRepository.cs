@@ -12,6 +12,7 @@ using System.Data;
 using System.Data.Entity;
 using System.Data.Entity.Migrations;
 using System.Data.SqlClient;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -283,21 +284,21 @@ namespace JSAGROAllegroSync.Repositories
 
             if (product != null && categoryId != 0 && product.DefaultAllegroCategory != categoryId)
             {
-                product.DefaultAllegroCategory = categoryId;
                 _context.ProductParameters.RemoveRange(product.Parameters);
+                product.DefaultAllegroCategory = categoryId;
                 await _context.SaveChangesAsync(ct);
             }
         }
 
-        public async Task UpdateProductAllegroCategory(string productCode, int categoryId, CancellationToken ct)
+        public async Task UpdateProductAllegroCategory(string productCode, string categoryId, CancellationToken ct)
         {
             var product = await _context.Products
                 .Include(p => p.Parameters)
                 .Where(p => p.CodeGaska == productCode).FirstOrDefaultAsync(ct);
 
-            if (product != null && categoryId != 0 && product.DefaultAllegroCategory != categoryId)
+            if (product != null && categoryId != "" && product.DefaultAllegroCategory != Convert.ToInt32(categoryId))
             {
-                product.DefaultAllegroCategory = categoryId;
+                product.DefaultAllegroCategory = Convert.ToInt32(categoryId);
                 _context.ProductParameters.RemoveRange(product.Parameters);
                 await _context.SaveChangesAsync(ct);
             }
@@ -332,35 +333,120 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct)
         {
-            foreach (var param in parameters)
+            if (parameters == null || !parameters.Any())
+                return;
+
+            const int batchSize = 150;
+
+            // Split parameters into batches
+            var parameterBatches = parameters
+                .Select((p, index) => new { p, index })
+                .GroupBy(x => x.index / batchSize)
+                .Select(g => g.Select(x => x.p).ToList());
+
+            int batchNumber = 0;
+            foreach (var batch in parameterBatches)
             {
-                var existing = await _context.ProductParameters
-                    .FirstOrDefaultAsync(p =>
-                        p.ProductId == param.ProductId &&
-                        p.CategoryParameterId == param.CategoryParameterId, ct);
+                batchNumber++;
+                var stopwatchBatch = Stopwatch.StartNew();
 
-                if (existing == null)
+                // 1. Get product/category ids
+                var productIds = batch.Select(p => p.ProductId).Distinct().ToList();
+                var categoryParamIds = batch.Select(p => p.CategoryParameterId).Distinct().ToList();
+
+                // 2. Fetch existing parameters
+                var existingParams = _context.ProductParameters
+                    .Where(p => productIds.Contains(p.ProductId) && categoryParamIds.Contains(p.CategoryParameterId))
+                    .ToList();
+
+                var existingDict = existingParams.ToDictionary(
+                    p => (p.ProductId, p.CategoryParameterId)
+                );
+
+                var toInsert = new List<ProductParameter>();
+
+                foreach (var param in batch)
                 {
-                    _context.ProductParameters.Add(param);
+                    if (existingDict.TryGetValue((param.ProductId, param.CategoryParameterId), out var existing))
+                    {
+                        existing.Value = param.Value;
+                        existing.IsForProduct = param.IsForProduct;
+                    }
+                    else
+                    {
+                        toInsert.Add(param);
+                    }
                 }
-                else
-                {
-                    existing.Value = param.Value;
-                    existing.IsForProduct = param.IsForProduct;
-                }
+
+                // 3. Add new parameters in bulk
+                if (toInsert.Any())
+                    _context.ProductParameters.AddRange(toInsert);
+
+                // 4. Save changes
+                await _context.SaveChangesAsync(ct);
             }
-
-            await _context.SaveChangesAsync(ct);
         }
 
         public async Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct = default)
         {
-            foreach (var product in products)
+            if (products == null || !products.Any())
+                return;
+
+            const int batchSize = 500; // Adjust batch size
+
+            var productList = products.ToList();
+
+            var stopwatchTotal = Stopwatch.StartNew();
+
+            var batches = productList
+                .Select((p, index) => new { p, index })
+                .GroupBy(x => x.index / batchSize)
+                .Select(g => g.Select(x => x.p).ToList());
+
+            int batchNumber = 0;
+            foreach (var batch in batches)
             {
-                _context.CompatibleProducts.AddOrUpdate(product);
+                batchNumber++;
+                var stopwatchBatch = Stopwatch.StartNew();
+
+                var ids = batch.Select(p => p.Id).ToList();
+
+                // Fetch existing products in this batch
+                var existingProducts = _context.CompatibleProducts
+                    .Where(p => ids.Contains(p.Id))
+                    .ToList();
+
+                var existingDict = existingProducts.ToDictionary(p => p.Id);
+
+                var toInsert = new List<CompatibleProduct>();
+
+                foreach (var product in batch)
+                {
+                    if (existingDict.TryGetValue(product.Id, out var existing))
+                    {
+                        // Update fields
+                        existing.Name = product.Name;
+                        existing.Type = product.Type;
+                        existing.GroupName = product.GroupName;
+                    }
+                    else
+                    {
+                        toInsert.Add(product);
+                    }
+                }
+
+                // Bulk insert
+                if (toInsert.Any())
+                    _context.CompatibleProducts.AddRange(toInsert);
+
+                await _context.SaveChangesAsync(ct);
+
+                stopwatchBatch.Stop();
+                Console.WriteLine($"Batch {batchNumber} saved in {stopwatchBatch.ElapsedMilliseconds} ms");
             }
 
-            await _context.SaveChangesAsync(ct);
+            stopwatchTotal.Stop();
+            Console.WriteLine($"Total save time: {stopwatchTotal.ElapsedMilliseconds} ms");
         }
 
         private string FixName(string name, string code, string supplierName)

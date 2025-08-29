@@ -64,7 +64,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                         offer.Delivery.ShippingRates.Name = name;
                     }
 
-                    await _productRepo.UpdateProductAllegroCategory(offer.External.Id, Convert.ToInt32(offer.Category.Id), ct);
+                    await _productRepo.UpdateProductAllegroCategory(offer.External.Id, offer.Category.Id, ct);
                 }
 
                 await _offerRepo.UpsertOffers(latestOffers, ct);

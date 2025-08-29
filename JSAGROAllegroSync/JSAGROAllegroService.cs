@@ -94,9 +94,9 @@ namespace JSAGROAllegroSync
                 _lastRunTime = DateTime.Now;
 
                 // 1. Sync base products
-                Log.Information("Starting syncing basic products info...");
-                await _gaskaApiService.SyncProducts();
-                Log.Information("Basic product sync completed.");
+                //Log.Information("Starting syncing basic products info...");
+                //await _gaskaApiService.SyncProducts();
+                //Log.Information("Basic product sync completed.");
 
                 // 8. Sync Allegro offers
                 Log.Information("Starting syncing Allegro offers...");
@@ -104,11 +104,11 @@ namespace JSAGROAllegroSync
                 Log.Information("Allegro offers sync completed.");
 
                 // 2. Sync product details once per day
-                if (_lastProductDetailsSyncDate.Date < DateTime.Today)
+                if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 0 && DateTime.Now.Hour < 16)
                 {
-                    Log.Information("Starting syncing product details...");
-                    await _gaskaApiService.SyncProductDetails();
-                    Log.Information("Detailed product sync completed.");
+                    //Log.Information("Starting syncing product details...");
+                    //await _gaskaApiService.SyncProductDetails();
+                    //Log.Information("Detailed product sync completed.");
 
                     //// 3. Allegro categories
                     Log.Information("Starting Allegro categories mapping...");
@@ -125,15 +125,15 @@ namespace JSAGROAllegroSync
                     await _parametersService.UpdateParameters();
                     Log.Information("Product parameters update completed.");
 
-                    //6.Images
-                    Log.Information("Starting importing images to allegro...");
-                    await _imageService.ImportImages();
-                    Log.Information("Images import completed.");
-
                     //7.Compatibility products
                     Log.Information("Starting fetching compatible products...");
                     await _compatibilityService.FetchAndSaveCompatibleProducts();
                     Log.Information("Compatible products fetched.");
+
+                    //6.Images
+                    Log.Information("Starting importing images to allegro...");
+                    await _imageService.ImportImages();
+                    Log.Information("Images import completed.");
 
                     _lastProductDetailsSyncDate = DateTime.Today;
                 }

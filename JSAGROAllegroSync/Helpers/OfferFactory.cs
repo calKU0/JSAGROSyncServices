@@ -132,10 +132,21 @@ namespace JSAGROAllegroSync.Helpers
 
         private static List<string> GetOfferImages(Product product)
         {
-            List<string> images = new List<string>();
+            List<string> images = product.Images
+                .Where(i => !string.IsNullOrEmpty(i.AllegroUrl))
+                .Select(i => i.AllegroUrl)
+                .ToList();
 
-            images = product.Images.Select(i => i.AllegroUrl).ToList();
-            images.Add(product.Images.Select(i => i.AllegroLogoUrl).FirstOrDefault());
+            string logoUrl = product.Images
+                .Where(i => !string.IsNullOrEmpty(i.AllegroLogoUrl))
+                .Select(i => i.AllegroLogoUrl)
+                .FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(logoUrl))
+            {
+                images.Add(logoUrl);
+            }
+
             return images;
         }
 
@@ -223,11 +234,14 @@ namespace JSAGROAllegroSync.Helpers
                     values = new List<string> { param.Value };
                 }
 
-                result.Add(new Parameter
+                if (!string.IsNullOrEmpty(param.Value))
                 {
-                    Name = param.CategoryParameter.Name,
-                    Values = values
-                });
+                    result.Add(new Parameter
+                    {
+                        Name = param.CategoryParameter.Name,
+                        Values = values
+                    });
+                }
             }
 
             return result;
@@ -238,12 +252,12 @@ namespace JSAGROAllegroSync.Helpers
             if (applications == null || !applications.Any())
                 return null;
 
-            bool IsCategoryOrParent(int catId, int targetCategoryId)
+            bool IsCategoryOrParent(int catId, string targetCategoryId)
             {
-                var category = categories.FirstOrDefault(c => c.Id == catId);
+                var category = categories.FirstOrDefault(c => c.CategoryId == catId.ToString() || c.Id == catId);
                 while (category != null)
                 {
-                    if (category.Id == targetCategoryId)
+                    if (category.CategoryId == targetCategoryId)
                         return true;
 
                     if (category.ParentId == null)
@@ -261,12 +275,11 @@ namespace JSAGROAllegroSync.Helpers
 
             List<Item> items = new List<Item>();
 
-            if (IsCategoryOrParent(categoryId, 252204))
+            if (IsCategoryOrParent(categoryId, "252204"))
             {
                 foreach (var leaf in leafApps)
                 {
-                    var compatItem = compatibleProducts
-                        .FirstOrDefault(cp => cp.Name == leaf.Name && cp.Type == "ID");
+                    var compatItem = compatibleProducts.FirstOrDefault(cp => cp.Name == leaf.Name && cp.Type == "ID");
 
                     if (compatItem != null)
                     {
@@ -352,7 +365,7 @@ namespace JSAGROAllegroSync.Helpers
                 Sections = new List<Section>()
             };
 
-            var images = product.Images?.ToList() ?? new List<ProductImage>();
+            var images = GetOfferImages(product);
             int imageIndex = 0;
 
             // 0. First image full-width on top
@@ -365,7 +378,7 @@ namespace JSAGROAllegroSync.Helpers
                         new SectionItem
                         {
                             Type = "IMAGE",
-                            Url = images[imageIndex++].AllegroUrl
+                            Url = images[imageIndex++]
                         }
                     }
                 });
@@ -373,24 +386,26 @@ namespace JSAGROAllegroSync.Helpers
 
             // 0. Product header (Name + Producer + Code)
 
-            string nameHtml = $"<h2>{System.Net.WebUtility.HtmlEncode(product.Name)}</h2>";
+            string nameHtml = $"<p><b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Name))}</b></p>";
             string codeHtml = !string.IsNullOrWhiteSpace(product.CodeGaska)
-                ? $"<p><b>Kod produktu: </b>{System.Net.WebUtility.HtmlEncode(product.CodeGaska)}</p>"
+                ? $"<p><b>Kod produktu: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.CodeGaska))}</p>"
                 : string.Empty;
             string producerHtml = !string.IsNullOrWhiteSpace(product.SupplierName)
-                ? $"<p><b>Producent: </b>{System.Net.WebUtility.HtmlEncode(product.SupplierName)}</p>"
+                ? $"<p><b>Producent: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.SupplierName))}</p>"
                 : string.Empty;
             string descriptionHtml = !string.IsNullOrWhiteSpace(product.Description)
-                ? $"<p><b>Opis: </b>{System.Net.WebUtility.HtmlEncode(product.Description)}</p>"
+                ? $"<p><b>Opis: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Description))}</p>"
                 : string.Empty;
             string technicalHtml = !string.IsNullOrWhiteSpace(product.TechnicalDetails)
-                ? $"<p><b>Porady techniczne: </b>{System.Net.WebUtility.HtmlEncode(product.TechnicalDetails)}</p>"
+                ? $"<p><b>Porady techniczne: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.TechnicalDetails))}</p>"
                 : string.Empty;
 
             string parametersHtml = string.Empty;
             if (product.Atributes != null && product.Atributes.Any())
             {
-                var attributesList = string.Join("", product.Atributes.Select(p => $"<li>{System.Net.WebUtility.HtmlEncode(p.AttributeName)}: {System.Net.WebUtility.HtmlEncode(p.AttributeValue)}</li>"));
+                var attributesList = string.Join("", product.Atributes.Select(p =>
+                    $"<li>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.AttributeName))}: {RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.AttributeValue))}</li>"
+                ));
                 parametersHtml = $"<p><b>Parametry/Wymiary:</b></p><ul>{attributesList}</ul>";
             }
 
@@ -436,12 +451,12 @@ namespace JSAGROAllegroSync.Helpers
             };
 
             // Add image
-            if (imageIndex < images.Count)
+            if (imageIndex < images.Count - 1)
             {
                 sectionItems.Add(new SectionItem
                 {
                     Type = "IMAGE",
-                    Url = images[imageIndex++].AllegroUrl
+                    Url = images[imageIndex++]
                 });
             }
 
@@ -477,7 +492,7 @@ namespace JSAGROAllegroSync.Helpers
                             }
                             else
                             {
-                                leafNames.Add(System.Net.WebUtility.HtmlEncode(child.Name));
+                                leafNames.Add(RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(child.Name)));
                             }
                         }
 
@@ -500,12 +515,12 @@ namespace JSAGROAllegroSync.Helpers
                     string appsText = $"<ul>{string.Join("", listItems)}</ul>";
 
                     var appSectionItems = new List<SectionItem>();
-                    if (imageIndex < images.Count)
+                    if (imageIndex < images.Count - 1)
                     {
                         appSectionItems.Add(new SectionItem
                         {
                             Type = "IMAGE",
-                            Url = images[imageIndex++].AllegroUrl
+                            Url = images[imageIndex++]
                         });
                     }
 
@@ -519,7 +534,6 @@ namespace JSAGROAllegroSync.Helpers
                 }
             }
 
-            // Group product images by 2 per section
             while (imageIndex < images.Count)
             {
                 var sectionImageItems = new List<SectionItem>();
@@ -528,7 +542,7 @@ namespace JSAGROAllegroSync.Helpers
                 sectionImageItems.Add(new SectionItem
                 {
                     Type = "IMAGE",
-                    Url = images[imageIndex++].AllegroUrl
+                    Url = images[imageIndex++]
                 });
 
                 // Add second image if available
@@ -537,7 +551,7 @@ namespace JSAGROAllegroSync.Helpers
                     sectionImageItems.Add(new SectionItem
                     {
                         Type = "IMAGE",
-                        Url = images[imageIndex++].AllegroUrl
+                        Url = images[imageIndex++]
                     });
                 }
 
@@ -545,36 +559,6 @@ namespace JSAGROAllegroSync.Helpers
                 {
                     SectionItems = sectionImageItems
                 });
-            }
-
-            // Add Allegro logo last (and try to group it if possible)
-            var allegroLogoUrl = product.Images.Select(i => i.AllegroLogoUrl)?.FirstOrDefault();
-            if (!string.IsNullOrEmpty(allegroLogoUrl))
-            {
-                if (description.Sections.Any() && description.Sections.Last().SectionItems.Count == 1)
-                {
-                    // Add logo to the last section (so it has 2 items)
-                    description.Sections.Last().SectionItems.Add(new SectionItem
-                    {
-                        Type = "IMAGE",
-                        Url = allegroLogoUrl
-                    });
-                }
-                else
-                {
-                    // Otherwise, new section for logo
-                    description.Sections.Add(new Section
-                    {
-                        SectionItems = new List<SectionItem>
-                        {
-                            new SectionItem
-                            {
-                                Type = "IMAGE",
-                                Url = allegroLogoUrl
-                            }
-                        }
-                    });
-                }
             }
 
             return description;
@@ -640,6 +624,13 @@ namespace JSAGROAllegroSync.Helpers
             // Over 1000 case
             calculatedPrice += marginMoreThan1000PLN;
             return calculatedPrice;
+        }
+
+        private static string RemoveHiddenAscii(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return input;
+            // Remove ASCII control characters except newline (10) and carriage return (13)
+            return new string(input.Where(c => c >= 32 || c == 10 || c == 13).ToArray());
         }
     }
 }

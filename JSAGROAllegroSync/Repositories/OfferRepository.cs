@@ -1,11 +1,14 @@
 ﻿using JSAGROAllegroSync.Data;
 using JSAGROAllegroSync.DTOs.AllegroApi;
+using JSAGROAllegroSync.DTOs.Settings;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Repositories.Interfaces;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Data.Entity;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -17,6 +20,7 @@ namespace JSAGROAllegroSync.Repositories
     public class OfferRepository : IOfferRepository
     {
         private readonly MyDbContext _context;
+        private readonly string _deliveryName = Helpers.AppSettingsLoader.LoadAppSettings().AllegroDeliveryName;
 
         public OfferRepository(MyDbContext context)
         {
@@ -25,8 +29,28 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task UpsertOffers(List<Offer> offers, CancellationToken ct)
         {
-            var products = _context.Products.ToDictionary(p => p.CodeGaska);
-            var existingOffers = _context.AllegroOffers.ToDictionary(o => o.Id);
+            if (offers == null || !offers.Any())
+            {
+                Log.Warning("No offers to upsert.");
+                return;
+            }
+
+            Log.Information("Starting upsert of {Count} offers", offers.Count);
+            var stopwatchTotal = Stopwatch.StartNew();
+
+            // 1. Load all products for lookup
+            var productCodes = offers.Select(o => o.External.Id).Distinct().ToList();
+            var products = await _context.Products
+                .Where(p => productCodes.Contains(p.CodeGaska))
+                .ToDictionaryAsync(p => p.CodeGaska, ct);
+
+            // 2. Load existing offers for lookup
+            var offerIds = offers.Select(o => o.Id).ToList();
+            var existingOffers = await _context.AllegroOffers
+                .Where(o => offerIds.Contains(o.Id))
+                .ToDictionaryAsync(o => o.Id, ct);
+
+            int inserts = 0, updates = 0;
 
             foreach (var offer in offers)
             {
@@ -37,6 +61,11 @@ namespace JSAGROAllegroSync.Repositories
                 {
                     existing = new AllegroOffer { Id = offer.Id };
                     _context.AllegroOffers.Add(existing);
+                    inserts++;
+                }
+                else
+                {
+                    updates++;
                 }
 
                 existing.Name = offer.Name;
@@ -53,6 +82,10 @@ namespace JSAGROAllegroSync.Repositories
             }
 
             await _context.SaveChangesAsync(ct);
+
+            stopwatchTotal.Stop();
+            Log.Information("Upserted offers completed: {Inserts} inserted, {Updates} updated in {Elapsed} ms",
+                inserts, updates, stopwatchTotal.ElapsedMilliseconds);
         }
 
         public async Task<List<AllegroOffer>> GetAllOffers(CancellationToken ct)
@@ -63,9 +96,7 @@ namespace JSAGROAllegroSync.Repositories
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
         {
             var lastOffers = await _context.AllegroOffers
-                .Where(o => (o.Status == "ACTIVE" || o.Status == "ENDED")
-                            && o.DeliveryName == "JAG API"
-                            && o.ExternalId == "002860.40")
+                .Where(o => (o.Status == "ACTIVE" || o.Status == "ENDED") && o.DeliveryName == _deliveryName)
                 .GroupBy(o => o.ExternalId)
                 .Select(g => g.OrderByDescending(o => o.Id).FirstOrDefault())
                 .ToListAsync(ct);
@@ -81,6 +112,7 @@ namespace JSAGROAllegroSync.Repositories
                 .Include(o => o.Product.Images)
                 .Include(o => o.Product.Packages)
                 .Include(o => o.Product.CrossNumbers)
+                .Where(o => o.Product.Parameters.Any() && o.Product.Categories.Any())
                 .ToListAsync(ct);
 
             return result;

@@ -67,30 +67,62 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task SaveCategoryParametersAsync(IEnumerable<CategoryParameter> parameters, CancellationToken ct)
         {
-            foreach (var param in parameters)
+            if (parameters == null || !parameters.Any())
+                return;
+
+            const int batchSize = 500;
+            var paramList = parameters.ToList();
+
+            // Batch processing to avoid huge queries
+            var batches = paramList
+                .Select((p, index) => new { p, index })
+                .GroupBy(x => x.index / batchSize)
+                .Select(g => g.Select(x => x.p).ToList());
+
+            foreach (var batch in batches)
             {
-                var existing = await _context.CategoryParameters
+                var categoryIds = batch.Select(p => p.CategoryId).Distinct().ToList();
+                var paramIds = batch.Select(p => p.ParameterId).Distinct().ToList();
+
+                // Fetch existing parameters for this batch in one query
+                var existingParams = await _context.CategoryParameters
                     .Include(cp => cp.Values)
-                    .FirstOrDefaultAsync(cp => cp.ParameterId == param.ParameterId && cp.CategoryId == param.CategoryId, ct);
+                    .Where(cp => categoryIds.Contains(cp.CategoryId) && paramIds.Contains(cp.ParameterId))
+                    .ToListAsync(ct);
 
-                if (existing != null)
-                {
-                    existing.Name = param.Name;
-                    existing.Type = param.Type;
-                    existing.Required = param.Required;
-                    existing.Min = param.Min;
-                    existing.Max = param.Max;
+                var existingDict = existingParams.ToDictionary(
+                    p => (p.CategoryId, p.ParameterId)
+                );
 
-                    _context.CategoryParameterValues.RemoveRange(existing.Values);
-                    existing.Values = param.Values ?? new List<CategoryParameterValue>();
-                }
-                else
+                var toInsert = new List<CategoryParameter>();
+                var toRemoveValues = new List<CategoryParameterValue>();
+
+                foreach (var param in batch)
                 {
-                    _context.CategoryParameters.Add(param);
+                    if (existingDict.TryGetValue((param.CategoryId, param.ParameterId), out var existing))
+                    {
+                        existing.Name = param.Name;
+                        existing.Type = param.Type;
+                        existing.Required = param.Required;
+                        existing.Min = param.Min;
+                        existing.Max = param.Max;
+
+                        if (existing.Values != null && existing.Values.Any())
+                            _context.CategoryParameterValues.RemoveRange(existing.Values);
+
+                        existing.Values = param.Values ?? new List<CategoryParameterValue>();
+                    }
+                    else
+                    {
+                        toInsert.Add(param);
+                    }
                 }
+
+                if (toInsert.Any())
+                    _context.CategoryParameters.AddRange(toInsert);
+
+                await _context.SaveChangesAsync(ct);
             }
-
-            await _context.SaveChangesAsync(ct);
         }
 
         public async Task<List<int>> GetDefaultCategories(CancellationToken ct)

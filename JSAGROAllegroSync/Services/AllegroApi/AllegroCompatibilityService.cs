@@ -31,9 +31,13 @@ namespace JSAGROAllegroSync.Services.AllegroApi
 
                 foreach (var type in types)
                 {
-                    var groups = await _apiClient.GetAsync<CompatibleProductGroupsResponse>($"/sale/compatible-products/groups?type={type}&limit=200&offset=0", ct);
+                    var groups = await _apiClient.GetAsync<CompatibleProductGroupsResponse>(
+                        $"/sale/compatible-products/groups?type={type}&limit=200&offset=0", ct);
+
                     if (groups?.Groups == null || !groups.Groups.Any())
                         continue;
+
+                    var allProductEntities = new List<CompatibleProduct>();
 
                     foreach (var group in groups.Groups)
                     {
@@ -50,16 +54,20 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                                     .FirstOrDefault(),
                                 Type = type,
                                 GroupName = group.Text
-                            }).ToList();
+                            });
 
-                            await _productRepo.SaveCompatibleProductsAsync(productEntities, ct);
-                            Log.Information("Saved {Count} compatible machines for type {Type}", productEntities.Count, type);
+                            allProductEntities.AddRange(productEntities);
                         }
                         catch (Exception exGroup)
                         {
-                            Log.Error(exGroup, "Error processing compatible machines for type {Type}", type);
+                            Log.Error(exGroup, "Error processing compatible machines for type {Type}, group {GroupId}", type, group.Id);
                         }
                     }
+
+                    // Save all products in bulk (with batching in SaveCompatibleProductsAsync)
+                    await _productRepo.SaveCompatibleProductsAsync(allProductEntities, ct);
+
+                    Log.Information("Saved {Count} compatible machines for type {Type}", allProductEntities.Count, type);
                 }
             }
             catch (Exception ex)

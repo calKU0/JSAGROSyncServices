@@ -32,7 +32,7 @@ namespace JSAGROAllegroSync.Repositories.Interfaces
 
         Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct);
 
-        Task UpdateProductAllegroCategory(string productCode, int categoryId, CancellationToken ct);
+        Task UpdateProductAllegroCategory(string productCode, string categoryId, CancellationToken ct);
 
         Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct);
 
