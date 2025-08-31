@@ -32,5 +32,7 @@ namespace JSAGROAllegroSync.Repositories.Interfaces
         Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct);
 
         Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct);
+
+        Task UpdateParameter(int id, int parameterId, string value, CancellationToken ct);
     }
 }

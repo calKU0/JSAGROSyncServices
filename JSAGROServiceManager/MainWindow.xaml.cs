@@ -154,8 +154,8 @@ namespace JSAGROServiceManager
                             string line;
                             while ((line = sr.ReadLine()) != null)
                             {
-                                if (line.Contains("WRN", StringComparison.Ordinal)) warnings++;
-                                if (line.Contains("ERR", StringComparison.Ordinal)) errors++;
+                                if (line.Contains("WRN]", StringComparison.Ordinal)) warnings++;
+                                if (line.Contains("ERR]", StringComparison.Ordinal)) errors++;
                             }
                         }
 
@@ -207,8 +207,8 @@ namespace JSAGROServiceManager
                         while ((line = sr.ReadLine()) != null)
                         {
                             LogLevel level = LogLevel.Information;
-                            if (line.Contains("ERR", StringComparison.Ordinal)) level = LogLevel.Error;
-                            else if (line.Contains("WRN", StringComparison.Ordinal)) level = LogLevel.Warning;
+                            if (line.Contains("ERR]", StringComparison.Ordinal)) level = LogLevel.Error;
+                            else if (line.Contains("WRN]", StringComparison.Ordinal)) level = LogLevel.Warning;
 
                             currentLogLines.Add(new LogLine { Level = level, Message = line });
                         }

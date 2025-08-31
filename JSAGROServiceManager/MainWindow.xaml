@@ -341,7 +341,7 @@
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Ilość dni zachowania logów:" VerticalAlignment="Center" Margin="0,4,0,4" />
                                 <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtLogsExpirationDays" Margin="0,4,0,4" />
 
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Co ile odświeżać stany/ceny:" VerticalAlignment="Center" Margin="0,4,0,4" />
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Co ile minut odświeżać stany/ceny:" VerticalAlignment="Center" Margin="0,4,0,4" />
                                 <TextBox Grid.Row="2" Grid.Column="1" x:Name="TxtFetchIntervalMinutes" Margin="0,4,0,4" />
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Własna marża (%):" VerticalAlignment="Center" Margin="0,4,0,4" />

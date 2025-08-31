@@ -110,7 +110,7 @@ namespace JSAGROAllegroSync.Repositories
                 .Include(o => o.Product.Images)
                 .Include(o => o.Product.Packages)
                 .Include(o => o.Product.CrossNumbers)
-                .Where(o => o.Product.Parameters.Any() && o.Product.Categories.Any())
+                .Where(o => o.Product.Parameters.Any() && o.Product.Categories.Any() && o.Product.Images.Any(i => !string.IsNullOrEmpty(i.AllegroUrl)))
                 .ToListAsync(ct);
 
             return result;

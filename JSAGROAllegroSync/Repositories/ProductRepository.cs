@@ -1,5 +1,6 @@
 ﻿using JSAGROAllegroSync.Data;
 using JSAGROAllegroSync.DTOs;
+using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
 using JSAGROAllegroSync.Repositories.Interfaces;
@@ -246,32 +247,26 @@ namespace JSAGROAllegroSync.Repositories
                             && !p.Parameters.Any())
                 .ToListAsync(ct);
 
-            if (productsWithoutParameters.Any())
-                return productsWithoutParameters;
-
-            return await _context.Products
-                .Include(p => p.CrossNumbers)
-                .Include(p => p.Applications)
-                .Include(p => p.Atributes)
-                .Include(p => p.Parameters.Select(pp => pp.CategoryParameter.Values))
-                .Where(p => p.Categories.Any()
-                            && !p.Archived
-                            && p.DefaultAllegroCategory != 0)
-                .OrderByDescending(p => p.UpdatedDate)
-                .Take(500)
-                .ToListAsync(ct);
+            return productsWithoutParameters;
         }
 
         public async Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct)
         {
-            var product = await _context.Products.Where(p => p.Id == productId).FirstOrDefaultAsync(ct);
+            if (categoryId == 0)
+                return;
 
-            if (product != null && categoryId != 0 && product.DefaultAllegroCategory != categoryId)
-            {
-                _context.ProductParameters.RemoveRange(product.Parameters);
-                product.DefaultAllegroCategory = categoryId;
-                await _context.SaveChangesAsync(ct);
-            }
+            // Delete only parameters whose CategoryParameter.CategoryId != new category
+            await _context.Database.ExecuteSqlCommandAsync(@"
+                DELETE pp
+                FROM ProductParameters pp
+                INNER JOIN CategoryParameters cp ON pp.CategoryParameterId = cp.Id
+                WHERE pp.ProductId = @p0 AND cp.CategoryId <> @p1",
+                productId, categoryId);
+
+            // Update the product category directly in the database
+            await _context.Database.ExecuteSqlCommandAsync(
+                "UPDATE Products SET DefaultAllegroCategory = @p0 WHERE Id = @p1",
+                categoryId, productId);
         }
 
         public async Task UpdateProductAllegroCategory(string productCode, string categoryId, CancellationToken ct)
@@ -280,10 +275,13 @@ namespace JSAGROAllegroSync.Repositories
                 .Include(p => p.Parameters)
                 .Where(p => p.CodeGaska == productCode).FirstOrDefaultAsync(ct);
 
-            if (product != null && categoryId != "" && product.DefaultAllegroCategory != Convert.ToInt32(categoryId))
+            if (product != null && categoryId != "0" && product.DefaultAllegroCategory != Convert.ToInt32(categoryId))
             {
+                await _context.Database.ExecuteSqlCommandAsync(
+    "DELETE FROM ProductParameters WHERE ProductId = @p0", product.Id);
+
                 product.DefaultAllegroCategory = Convert.ToInt32(categoryId);
-                _context.ProductParameters.RemoveRange(product.Parameters);
+
                 await _context.SaveChangesAsync(ct);
             }
         }
@@ -320,7 +318,7 @@ namespace JSAGROAllegroSync.Repositories
             if (parameters == null || !parameters.Any())
                 return;
 
-            const int batchSize = 150;
+            const int batchSize = 50;
 
             // Split parameters into batches
             var parameterBatches = parameters
@@ -369,6 +367,27 @@ namespace JSAGROAllegroSync.Repositories
                 // 4. Save changes
                 await _context.SaveChangesAsync(ct);
             }
+        }
+
+        public async Task UpdateParameter(int productId, int parameterId, string value, CancellationToken ct)
+        {
+            // Get the categoryParameterId
+            var categoryId = await _context.Products
+                .Where(p => p.Id == productId)
+                .Select(p => p.DefaultAllegroCategory)
+                .FirstOrDefaultAsync(ct);
+
+            var categoryParameterId = await _context.CategoryParameters
+                .Where(cp => cp.ParameterId == parameterId && cp.CategoryId == categoryId)
+                .Select(cp => cp.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (categoryParameterId == 0) return;
+
+            // Update Value directly in the database
+            await _context.Database.ExecuteSqlCommandAsync(
+                "UPDATE ProductParameters SET Value = @p0 WHERE ProductId = @p1 AND CategoryParameterId = @p2",
+                value, productId, categoryParameterId);
         }
 
         public async Task SaveCompatibleProductsAsync(IEnumerable<CompatibleProduct> products, CancellationToken ct = default)

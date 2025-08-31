@@ -213,6 +213,10 @@
     <Compile Include="Migrations\202508281801383_CategoryIdTypeChange.Designer.cs">
       <DependentUpon>202508281801383_CategoryIdTypeChange.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202508311709143_CascadeProductParametersDelete.cs" />
+    <Compile Include="Migrations\202508311709143_CascadeProductParametersDelete.Designer.cs">
+      <DependentUpon>202508311709143_CascadeProductParametersDelete.cs</DependentUpon>
+    </Compile>
     <Compile Include="Models\AllegroCategory.cs" />
     <Compile Include="Models\AllegroOffer.cs" />
     <Compile Include="Models\CategoryParameter.cs" />
@@ -284,7 +288,8 @@
     <Compile Include="Services\AllegroApi\Interfaces\IAllegroOfferService.cs" />
     <Compile Include="Services\AllegroApi\Interfaces\IAllegroParametersService.cs" />
     <Compile Include="Services\AllegroApi\AllegroAuthService.cs" />
-    <Compile Include="Services\GaskaApiService.cs" />
+    <Compile Include="Services\GaskaApi\GaskaApiService.cs" />
+    <Compile Include="Services\GaskaApi\Interfaces\IGaskaApiService.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
@@ -363,12 +368,17 @@
     <EmbeddedResource Include="Migrations\202508281801383_CategoryIdTypeChange.resx">
       <DependentUpon>202508281801383_CategoryIdTypeChange.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508311709143_CascadeProductParametersDelete.resx">
+      <DependentUpon>202508311709143_CascadeProductParametersDelete.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Resources\Images\jsagro-logo.jpg" />
+    <None Include="Resources\Images\jsagro-logo.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

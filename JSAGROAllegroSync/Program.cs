@@ -4,11 +4,12 @@ namespace JSAGROAllegroSync
 {
     internal static class Program
     {
-        /// <summary>
-        /// Główny punkt wejścia dla aplikacji.
-        /// </summary>
         private static void Main()
         {
+            var configuration = new Migrations.Configuration();
+            var migrator = new System.Data.Entity.Migrations.DbMigrator(configuration);
+            migrator.Update();
+
             ServiceBase[] ServicesToRun;
             ServicesToRun = new ServiceBase[]
             {

@@ -6,6 +6,8 @@ using JSAGROAllegroSync.Repositories;
 using JSAGROAllegroSync.Services;
 using JSAGROAllegroSync.Services.AllegroApi;
 using JSAGROAllegroSync.Services.AllegroApi.Interfaces;
+using JSAGROAllegroSync.Services.GaskaApi.Interfaces;
+using JSAGROAllegroSync.Services.GaskaApiService;
 using Serilog;
 using System;
 using System.Net.Http;
@@ -17,7 +19,7 @@ namespace JSAGROAllegroSync
 {
     public partial class JSAGROAllegroService : ServiceBase
     {
-        private readonly GaskaApiService _gaskaApiService;
+        private readonly IGaskaApiService _gaskaApiService;
         private readonly IAllegroCategoryService _categoryService;
         private readonly IAllegroParametersService _parametersService;
         private readonly IAllegroImageService _imageService;
@@ -44,6 +46,7 @@ namespace JSAGROAllegroSync
 
             // Database
             var dbContext = new MyDbContext();
+            dbContext.Database.CommandTimeout = 180; // 3 minutes
             var tokenRepo = new DbTokenRepository(dbContext);
             var productRepo = new ProductRepository(dbContext);
             var categoryRepo = new CategoryRepository(dbContext);
@@ -56,7 +59,6 @@ namespace JSAGROAllegroSync
 
             // Services initialization
             _gaskaApiService = new GaskaApiService(productRepo, gaskaHttp, gaskaApiSettings, _appSettings.CategoriesId);
-
             _categoryService = new AllegroCategoryService(productRepo, categoryRepo, allegroApiClient);
             _parametersService = new AllegroParametersService(productRepo, categoryRepo);
             _imageService = new AllegroImageService(imageRepo, allegroApiClient);
@@ -75,7 +77,7 @@ namespace JSAGROAllegroSync
                 async _ => await TimerTickAsync(),
                 null,
                 TimeSpan.Zero,
-                TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes)
+                Timeout.InfiniteTimeSpan
             );
 
             Log.Information("Service started. First run immediately. Interval: {Interval}", TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes));
@@ -98,39 +100,40 @@ namespace JSAGROAllegroSync
                 await _gaskaApiService.SyncProducts();
                 Log.Information("Basic product sync completed.");
 
-                // 8. Sync Allegro offers
+                // 2. Sync Allegro offers
                 Log.Information("Starting syncing Allegro offers...");
                 await _offerService.SyncAllegroOffers();
                 Log.Information("Allegro offers sync completed.");
 
-                // 2. Sync product details once per day
-                if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 0 && DateTime.Now.Hour < 24)
+                // 3. Update product details once a day
+                if (_lastProductDetailsSyncDate.Date < DateTime.Today)
                 {
+                    // 3.1 Product details
                     Log.Information("Starting syncing product details...");
                     await _gaskaApiService.SyncProductDetails();
                     Log.Information("Detailed product sync completed.");
 
-                    //// 3. Allegro categories
+                    // 3.2 Allegro categories
                     Log.Information("Starting Allegro categories mapping...");
                     await _categoryService.UpdateAllegroCategories();
                     Log.Information("Allegro Categories mapping completed.");
 
-                    //// 4. Allegro parameters for categories
+                    // 3.3 Allegro parameters for categories
                     Log.Information("Starting Allegro parameters for category mapping...");
                     await _categoryService.FetchAndSaveCategoryParameters();
                     Log.Information("Allegro parameters for category mapping completed.");
 
-                    // 5. Product parameters
+                    // 3.4 Product parameters
                     Log.Information("Starting product parameters update...");
                     await _parametersService.UpdateParameters();
                     Log.Information("Product parameters update completed.");
 
-                    //7.Compatibility products
+                    // 3.5 Compatibility products
                     Log.Information("Starting fetching compatible products...");
                     await _compatibilityService.FetchAndSaveCompatibleProducts();
                     Log.Information("Compatible products fetched.");
 
-                    //6.Images
+                    // 3.6 Images
                     Log.Information("Starting importing images to allegro...");
                     await _imageService.ImportImages();
                     Log.Information("Images import completed.");
@@ -138,22 +141,26 @@ namespace JSAGROAllegroSync
                     _lastProductDetailsSyncDate = DateTime.Today;
                 }
 
-                // 9. Update Allegro offers
+                // 4.Update Allegro offers
                 Log.Information("Starting updating Allegro offers...");
                 await _offerService.UpdateOffers();
                 Log.Information("Allegro offers update completed.");
 
-                // 9. Create/Update offers
-                Log.Information("Starting offers upload/update...");
+                // 5. Create Allegro offers
+                Log.Information("Starting Allegro offers creation...");
                 await _offerService.CreateOffers();
-                Log.Information("Offer upload/update completed.");
-
-                DateTime nextRun = _lastRunTime.Add(TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes));
-                Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);
+                Log.Information("Allegro Offer creation completed.");
             }
             catch (Exception ex)
             {
                 Log.Error(ex, "Error during API synchronization.");
+            }
+            finally
+            {
+                DateTime nextRun = DateTime.Now.AddHours(2);
+                _timer.Change(TimeSpan.FromHours(2), Timeout.InfiniteTimeSpan);
+
+                Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);
             }
         }
     }

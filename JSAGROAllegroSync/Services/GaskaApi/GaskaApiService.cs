@@ -1,6 +1,7 @@
 ﻿using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.Models.Product;
 using JSAGROAllegroSync.Repositories.Interfaces;
+using JSAGROAllegroSync.Services.GaskaApi.Interfaces;
 using Newtonsoft.Json;
 using Serilog;
 using System;
@@ -10,9 +11,9 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace JSAGROAllegroSync.Services
+namespace JSAGROAllegroSync.Services.GaskaApiService
 {
-    public class GaskaApiService
+    public class GaskaApiService : IGaskaApiService
     {
         private readonly GaskaApiCredentials _apiSettings;
         private readonly IProductRepository _productRepo;

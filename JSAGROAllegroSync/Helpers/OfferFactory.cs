@@ -194,8 +194,6 @@ namespace JSAGROAllegroSync.Helpers
 
             if (productUnit == "szt")
                 return "UNIT";
-            else if (productUnit == "mb")
-                return "METER";
             else if (productUnit == "para")
                 return "PAIR";
             else if (productUnit == "kpl")
@@ -210,28 +208,48 @@ namespace JSAGROAllegroSync.Helpers
 
             // parameters that should support multiple values
             var multiValueParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "numery katalogowe zamienników", "marka",
-            };
+    {
+        "numery katalogowe zamienników", "marka",
+    };
 
-            foreach (var param in parameters.Where(p => p.IsForProduct == isForProduct && p.CategoryParameter.Name != "EAN (GTIN)" && p.CategoryParameter.Name != "Informacje o bezpieczeństwie"))
+            foreach (var param in parameters.Where(p =>
+                p.IsForProduct == isForProduct &&
+                p.CategoryParameter.Name != "EAN (GTIN)" &&
+                p.CategoryParameter.Name != "Informacje o bezpieczeństwie"))
             {
+                if (string.IsNullOrWhiteSpace(param.Value))
+                    continue;
+
+                // 1. Remove all control characters (ASCII < 0x20 or 0x7F–0x9F) except space
+                var cleaned = new string(param.Value
+                    .Where(ch => !char.IsControl(ch) || ch == ' ')
+                    .ToArray())
+                    .Trim();
+
                 List<string> values;
 
-                if (!string.IsNullOrEmpty(param.Value) && multiValueParams.Contains(param.CategoryParameter.Name))
+                if (multiValueParams.Contains(param.CategoryParameter.Name))
                 {
-                    values = param.Value
-                        .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    // 2. Split by comma OR whitespace
+                    values = cleaned
+                        .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
                         .Select(v => v.Trim())
+                        .Where(v => !string.IsNullOrWhiteSpace(v))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
+
+                    // 3. Apply max=10 for parameter id 215941
+                    if (param.CategoryParameter.Id == 215941)
+                    {
+                        values = values.Take(10).ToList();
+                    }
                 }
                 else
                 {
-                    values = new List<string> { param.Value };
+                    values = new List<string> { cleaned };
                 }
 
-                if (!string.IsNullOrEmpty(param.Value))
+                if (values.Count > 0)
                 {
                     result.Add(new Parameter
                     {
@@ -247,6 +265,10 @@ namespace JSAGROAllegroSync.Helpers
         public static CompatibilityList BuildCompatibilityList(int categoryId, IEnumerable<Application> applications, IEnumerable<AllegroCategory> categories, IEnumerable<CompatibleProduct> compatibleProducts)
         {
             if (applications == null || !applications.Any())
+                return null;
+
+            var categoryExists = categories.Any(c => c.Id == categoryId || c.CategoryId == categoryId.ToString());
+            if (!categoryExists)
                 return null;
 
             bool IsCategoryOrParent(int catId, string targetCategoryId)

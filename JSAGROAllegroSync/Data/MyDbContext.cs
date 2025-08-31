@@ -51,6 +51,18 @@ namespace JSAGROAllegroSync.Data
             modelBuilder.Entity<CategoryParameter>()
                 .HasIndex(cp => new { cp.ParameterId, cp.CategoryId })
                 .IsUnique();
+
+            modelBuilder.Entity<ProductParameter>()
+                .HasRequired(pp => pp.Product)
+                .WithMany(p => p.Parameters)
+                .HasForeignKey(pp => pp.ProductId)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<ProductParameter>()
+                .HasRequired(pp => pp.CategoryParameter)
+                .WithMany()
+                .HasForeignKey(pp => pp.CategoryParameterId)
+                .WillCascadeOnDelete(false);
         }
     }
 }

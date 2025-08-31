@@ -11,6 +11,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -50,6 +51,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                 var shippingRates = await _apiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
                 var shippingDict = shippingRates?.ShippingRates?.ToDictionary(s => s.Id, s => s.Name) ?? new Dictionary<string, string>();
                 var latestOffers = allOffers
+                    .Where(o => o?.External?.Id != null)
                     .GroupBy(o => o.External.Id)
                     .Select(g => g.OrderByDescending(o => o.Id).FirstOrDefault())
                     .ToList();
@@ -208,7 +210,33 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                 {
                     foreach (var err in errorResponse.Errors)
                     {
-                        Log.Error($"Offer {action} error for {product.Name}: Code={err.Code}, Message={err.Message} UserMessage={err.UserMessage ?? "N/A"}, Path={err.Path ?? "N/A"}, Details={err.Details ?? "N/A"}");
+                        // Special handling for category mismatch
+                        if (err.Code == "CATEGORY_MISMATCH" && !string.IsNullOrEmpty(err.UserMessage))
+                        {
+                            var correctCategoryId = ExtractCorrectCategoryId(err.UserMessage);
+                            if (!string.IsNullOrEmpty(correctCategoryId))
+                            {
+                                await _productRepo.UpdateProductAllegroCategory(product.Id, Convert.ToInt32(correctCategoryId), CancellationToken.None);
+                                Log.Information("Updated category for {Name} ({Code}) to {CategoryId}", product.Name, product.CodeGaska, correctCategoryId);
+                            }
+                        }
+                        else if (err.Code == "PARAMETER_MISMATCH" && !string.IsNullOrEmpty(err.UserMessage))
+                        {
+                            var correctValue = ExtractParameterValueFromMessage(err.UserMessage);
+                            var parameterId = ExtractParameterIdFromMessage(err.Message);
+
+                            if (!string.IsNullOrEmpty(parameterId) && !string.IsNullOrEmpty(correctValue))
+                            {
+                                await _productRepo.UpdateParameter(product.Id, Convert.ToInt32(parameterId), correctValue, CancellationToken.None);
+                                Log.Information("Updated parameter {ParameterId} for {Name} ({Code}) to '{CorrectValue}'",
+                                    parameterId, product.Name, product.CodeGaska, correctValue);
+                            }
+                        }
+                        else
+                        {
+                            Log.Error("Offer {Action} error for {Name}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}",
+                                action, product.Name, err.Code, err.Message, err.UserMessage ?? "N/A", err.Path ?? "N/A", err.Details ?? "N/A");
+                        }
                     }
                 }
                 else
@@ -220,6 +248,30 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             {
                 Log.Error(exParse, $"Failed to parse Allegro error ({response.StatusCode}) while {action} offer for {product.Name}. Body={body}");
             }
+        }
+
+        private string ExtractCorrectCategoryId(string message)
+        {
+            var matches = Regex.Matches(message, @"\((\d+)\)");
+            if (matches.Count > 1)
+            {
+                // Allegro returns: (providedId) ... (correctId)
+                return matches[matches.Count - 1].Groups[1].Value;
+            }
+            return matches.Count == 1 ? matches[0].Groups[1].Value : null;
+        }
+
+        private string ExtractParameterIdFromMessage(string message)
+        {
+            var match = Regex.Match(message, @"id:\s*(\d+)");
+            return match.Success ? match.Groups[1].Value : null;
+        }
+
+        private string ExtractParameterValueFromMessage(string message)
+        {
+            // Example: "change the value to `JAG`"
+            var match = Regex.Match(message, @"change the value to\s+`([^`]+)`", RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups[1].Value : null;
         }
     }
 }
