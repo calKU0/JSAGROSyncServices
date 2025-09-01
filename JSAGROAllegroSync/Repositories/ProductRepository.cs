@@ -259,8 +259,8 @@ namespace JSAGROAllegroSync.Repositories
             await _context.Database.ExecuteSqlCommandAsync(@"
                 DELETE pp
                 FROM ProductParameters pp
-                INNER JOIN CategoryParameters cp ON pp.CategoryParameterId = cp.Id
-                WHERE pp.ProductId = @p0 AND cp.CategoryId <> @p1",
+                INNER JOIN Products p ON pp.ProductId = p.Id
+                WHERE pp.ProductId = @p0 AND p.DefaultAllegroCategory <> @p1",
                 productId, categoryId);
 
             // Update the product category directly in the database
@@ -301,13 +301,13 @@ namespace JSAGROAllegroSync.Repositories
                             && p.DefaultAllegroCategory != 0
                             && p.PriceGross > 1.00m
                             && p.InStock > 0
-                            && p.Images.Any(i => i.AllegroUrl != null)
+                            && p.Images.Any(i => !string.IsNullOrEmpty(i.AllegroUrl))
                             && !p.AllegroOffers.Any())
                 .ToListAsync(ct);
 
             foreach (var product in products)
             {
-                product.Images = product.Images.Where(i => i.AllegroUrl != null).ToList();
+                product.Images = product.Images.Where(i => !string.IsNullOrEmpty(i.AllegroUrl)).ToList();
             }
 
             return products;

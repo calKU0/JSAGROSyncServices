@@ -217,7 +217,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                             if (!string.IsNullOrEmpty(correctCategoryId))
                             {
                                 await _productRepo.UpdateProductAllegroCategory(product.Id, Convert.ToInt32(correctCategoryId), CancellationToken.None);
-                                Log.Information("Updated category for {Name} ({Code}) to {CategoryId}", product.Name, product.CodeGaska, correctCategoryId);
+                                //Log.Information("Updated category for {Name} ({Code}) to {CategoryId}", product.Name, product.CodeGaska, correctCategoryId);
                             }
                         }
                         else if (err.Code == "PARAMETER_MISMATCH" && !string.IsNullOrEmpty(err.UserMessage))
@@ -228,8 +228,8 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                             if (!string.IsNullOrEmpty(parameterId) && !string.IsNullOrEmpty(correctValue))
                             {
                                 await _productRepo.UpdateParameter(product.Id, Convert.ToInt32(parameterId), correctValue, CancellationToken.None);
-                                Log.Information("Updated parameter {ParameterId} for {Name} ({Code}) to '{CorrectValue}'",
-                                    parameterId, product.Name, product.CodeGaska, correctValue);
+                                //Log.Information("Updated parameter {ParameterId} for {Name} ({Code}) to '{CorrectValue}'",
+                                //    parameterId, product.Name, product.CodeGaska, correctValue);
                             }
                         }
                         else
