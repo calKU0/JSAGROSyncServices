@@ -23,11 +23,11 @@ The project also includes a WPF-based configurator, enabling administrators to m
 
 ### Configurator - Log View
 
-![Configurator Log](./screenshots/log_view.png)
+![Configurator Log](./Screenshots/log_view.png)
 
 ### Configurator - Settings
 
-![Configurator Settings](./screenshots/settings_view.png)
+![Configurator Settings](./Screenshots/settings_view.png)
 
 ## Technologies Used
 
