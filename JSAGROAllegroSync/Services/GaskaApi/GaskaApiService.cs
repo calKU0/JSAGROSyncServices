@@ -64,6 +64,8 @@ namespace JSAGROAllegroSync.Services.GaskaApiService
 
                         try
                         {
+                            fetchedProductIds.UnionWith(apiResponse.Products.Select(p => p.Id));
+
                             await _productRepo.UpsertProducts(apiResponse.Products, fetchedProductIds, ct);
                             Log.Information($"Successfully fetched and updated {apiResponse.Products.Count} products for category {categoryId}.");
                         }
@@ -93,15 +95,15 @@ namespace JSAGROAllegroSync.Services.GaskaApiService
                 return;
             }
 
-            //try
-            //{
-            //    var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds, ct);
-            //    Log.Information($"Archived {archivedCount} products.");
-            //}
-            //catch (Exception ex)
-            //{
-            //    Log.Error(ex, "An error occurred while checking for products to archive.");
-            //}
+            try
+            {
+                var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds, ct);
+                Log.Information($"Archived {archivedCount} products.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "An error occurred while checking for products to archive.");
+            }
         }
 
         public async Task SyncProductDetails(CancellationToken ct = default)

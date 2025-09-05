@@ -7,8 +7,10 @@ namespace JSAGROAllegroServiceConfiguration.Models
     {
         public string Name { get; set; }
         public string Path { get; set; }
+        public DateTime Date { get; set; }
 
         private int warningsCount;
+
         public int WarningsCount
         {
             get => warningsCount;
@@ -23,6 +25,7 @@ namespace JSAGROAllegroServiceConfiguration.Models
         }
 
         private int errorsCount;
+
         public int ErrorsCount
         {
             get => errorsCount;
@@ -37,8 +40,8 @@ namespace JSAGROAllegroServiceConfiguration.Models
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
+
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
-
 }

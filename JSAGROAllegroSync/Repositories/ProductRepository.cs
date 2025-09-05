@@ -4,6 +4,7 @@ using JSAGROAllegroSync.DTOs.AllegroApi;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
 using JSAGROAllegroSync.Repositories.Interfaces;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -71,22 +72,37 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task<int> ArchiveProductsNotIn(HashSet<int> fetchedProductIds, CancellationToken ct)
         {
-            string ids = string.Join(",", fetchedProductIds);
-            string sql = $@"
+            if (fetchedProductIds == null || fetchedProductIds.Count == 0)
+            {
+                Log.Warning("No fetched products provided, skipping archiving to avoid nuking DB.");
+                return 0;
+            }
+
+            // Clear staging table
+            await _context.Database.ExecuteSqlCommandAsync("TRUNCATE TABLE ProductSyncTemp;", ct);
+
+            // Insert fetched IDs in batches
+            const int batchSize = 1000;
+            var ids = fetchedProductIds.ToList();
+
+            for (int i = 0; i < ids.Count; i += batchSize)
+            {
+                var batch = ids.Skip(i).Take(batchSize).ToList();
+                var values = string.Join(",", batch.Select(id => $"({id})"));
+                var sqlInsert = $"INSERT INTO ProductSyncTemp (ProductId) VALUES {values};";
+                await _context.Database.ExecuteSqlCommandAsync(sqlInsert, ct);
+            }
+
+            // Archive missing products
+            var sqlArchive = @"
                 UPDATE Products
                 SET Archived = 1
-                WHERE Archived = 0 AND Id NOT IN ({ids})";
+                WHERE Archived = 0
+                  AND Id NOT IN (SELECT ProductId FROM ProductSyncTemp);";
 
-            var prevTimeout = _context.Database.CommandTimeout;
-            try
-            {
-                _context.Database.CommandTimeout = 240;
-                return await _context.Database.ExecuteSqlCommandAsync(sql, ct);
-            }
-            finally
-            {
-                _context.Database.CommandTimeout = prevTimeout;
-            }
+            var archivedCount = await _context.Database.ExecuteSqlCommandAsync(sqlArchive, ct);
+
+            return archivedCount;
         }
 
         public async Task UpsertProducts(List<ApiProducts> apiProducts, HashSet<int> fetchedProductIds, CancellationToken ct)
@@ -278,7 +294,7 @@ namespace JSAGROAllegroSync.Repositories
             if (product != null && categoryId != "0" && product.DefaultAllegroCategory != Convert.ToInt32(categoryId))
             {
                 await _context.Database.ExecuteSqlCommandAsync(
-    "DELETE FROM ProductParameters WHERE ProductId = @p0", product.Id);
+                    "DELETE FROM ProductParameters WHERE ProductId = @p0", product.Id);
 
                 product.DefaultAllegroCategory = Convert.ToInt32(categoryId);
 
@@ -304,7 +320,8 @@ namespace JSAGROAllegroSync.Repositories
                             && p.PriceGross > 1.00m
                             && p.InStock > 0
                             && p.Images.Any(i => !string.IsNullOrEmpty(i.AllegroUrl) && i.AllegroExpirationDate >= cutoff)
-                            && !p.AllegroOffers.Any())
+                            && !p.AllegroOffers.Any()
+                            && p.Parameters.Any())
                 .ToListAsync(ct);
 
             foreach (var product in products)
@@ -316,7 +333,6 @@ namespace JSAGROAllegroSync.Repositories
 
             return products;
         }
-
 
         public async Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct)
         {

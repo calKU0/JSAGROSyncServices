@@ -5,6 +5,7 @@ using JSAGROAllegroSync.Repositories.Interfaces;
 using JSAGROAllegroSync.Services.AllegroApi.Interfaces;
 using Serilog;
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Net.Http;
@@ -30,6 +31,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
         {
             try
             {
+                var updates = new List<(int ImageId, string Url, string LogoUrl, DateTime ExpiresAt)>();
                 var images = await _imageRepo.GetImagesForImport(ct);
 
                 foreach (var image in images)
@@ -51,30 +53,25 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                         var imageBytes = await DownloadImageAsync(image.Url, image.Product.CodeGaska, ct);
                         if (imageBytes == null) continue;
 
-                        // Skip small images
-                        if (!IsLargeEnough(imageBytes, image.Product))
-                            continue;
+                        imageBytes = EnsureMinSize(imageBytes, image.Product);
+                        if (imageBytes == null) continue;
 
                         // Upload to Allegro
                         var result = await _apiClient.PostAsync<AllegroImageResponse>("/sale/images", imageBytes, ct, "image/jpeg");
                         if (result == null || !DateTime.TryParse(result.ExpiresAt, out var expiresAt))
-                        {
-                            Log.Warning("Couldn't parse Allegro expiration date for product {Name} ({Code})", image.Product.Name, image.Product.CodeGaska);
                             continue;
-                        }
 
                         // Save to DB
-                        var success = await _imageRepo.UpdateProductAllegroImage(image.Id, result.Location, logoUrl, expiresAt, ct);
-                        if (success)
-                            Log.Information("Image uploaded for product {Name} ({Code})", image.Product.Name, image.Product.CodeGaska);
-                        else
-                            Log.Error("Couldn't save uploaded image data in database for product {Name} ({Code})", image.Product.Name, image.Product.CodeGaska);
+                        updates.Add((image.Id, result.Location, logoUrl, expiresAt));
+                        Log.Information("Image uploaded for product {Name} ({Code})", image.Product.Name, image.Product.CodeGaska);
                     }
                     catch (Exception exImage)
                     {
                         Log.Error(exImage, "Exception while uploading image for product {Name} ({Code})", image.Product.Name, image.Product.CodeGaska);
                     }
                 }
+
+                await _imageRepo.UpdateProductAllegroImages(updates, ct);
             }
             catch (Exception ex)
             {
@@ -102,23 +99,49 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             }
         }
 
-        private bool IsLargeEnough(byte[] imageBytes, Product product)
+        private byte[] EnsureMinSize(byte[] imageBytes, Product product, int minWidth = 400, int minHeight = 400)
         {
             try
             {
-                var ms = new MemoryStream(imageBytes);
-                var bitmap = new Bitmap(ms);
-                if (bitmap.Width < 400 && bitmap.Height < 400)
+                using (var ms = new MemoryStream(imageBytes))
+                using (var bitmap = new Bitmap(ms))
                 {
-                    Log.Information("Skipping image upload for product {Name} ({CodeGaska}) because it is too small: {Width}x{Height}px", product.Name, product.CodeGaska, bitmap.Width, bitmap.Height);
-                    return false;
+                    if (bitmap.Width >= minWidth && bitmap.Height >= minHeight)
+                    {
+                        return imageBytes; // already large enough
+                    }
+
+                    // Calculate scale factor to meet minimum size
+                    double scaleX = (double)minWidth / bitmap.Width;
+                    double scaleY = (double)minHeight / bitmap.Height;
+                    double scale = Math.Max(scaleX, scaleY); // scale proportionally
+
+                    int newWidth = (int)(bitmap.Width * scale);
+                    int newHeight = (int)(bitmap.Height * scale);
+
+                    using (var newBitmap = new Bitmap(newWidth, newHeight))
+                    using (var g = Graphics.FromImage(newBitmap))
+                    {
+                        g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+
+                        g.DrawImage(bitmap, 0, 0, newWidth, newHeight);
+
+                        using (var outStream = new MemoryStream())
+                        {
+                            newBitmap.Save(outStream, System.Drawing.Imaging.ImageFormat.Jpeg);
+                            Log.Information("Resized image for product {Name} ({Code}) to {Width}x{Height}px", product.Name, product.CodeGaska, newWidth, newHeight);
+
+                            return outStream.ToArray();
+                        }
+                    }
                 }
-                return true;
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to check image size for product {Name} ({CodeGaska})", product.Name, product.CodeGaska);
-                return false;
+                Log.Error(ex, "Failed to resize image for product {Name} ({Code})", product.Name, product.CodeGaska);
+                return null;
             }
         }
     }

@@ -1,4 +1,5 @@
 ﻿using Serilog;
+using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -14,6 +15,8 @@ namespace JSAGROAllegroSync.Services.AllegroApi
         private readonly AllegroAuthService _auth;
         private readonly HttpClient _http;
         private readonly JsonSerializerOptions _options;
+        private const int MaxRetries = 3;
+        private const int DelayOnTooManyRequestsMs = 30_000;
 
         public AllegroApiClient(AllegroAuthService auth, HttpClient http)
         {
@@ -31,8 +34,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
         public async Task<T> GetAsync<T>(string url, CancellationToken ct)
         {
             var request = await CreateRequest(HttpMethod.Get, url, ct);
-            var response = await _http.SendAsync(request, ct);
-            return await Deserialize<T>(response);
+            return await DeserializeWithRetry<T>(await _http.SendAsync(request, ct), () => _http.SendAsync(request, ct));
         }
 
         public async Task<T> PostAsync<T>(string url, object body, CancellationToken ct, string contentType = "application/vnd.allegro.public.v1+json")
@@ -53,8 +55,7 @@ namespace JSAGROAllegroSync.Services.AllegroApi
                 }
             }
 
-            var response = await _http.SendAsync(request, ct);
-            return await Deserialize<T>(response);
+            return await DeserializeWithRetry<T>(await _http.SendAsync(request, ct), () => _http.SendAsync(request, ct));
         }
 
         public async Task<HttpResponseMessage> SendWithResponseAsync(string url, HttpMethod method, object body = null, CancellationToken ct = default)
@@ -79,16 +80,32 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             return request;
         }
 
-        private async Task<T> Deserialize<T>(HttpResponseMessage response)
+        private async Task<T> DeserializeWithRetry<T>(HttpResponseMessage response, Func<Task<HttpResponseMessage>> resend)
         {
-            var body = await response.Content.ReadAsStringAsync();
-            if (!response.IsSuccessStatusCode)
+            int retryCount = 0;
+
+            while (true)
             {
+                var body = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return JsonSerializer.Deserialize<T>(body, _options);
+                }
+
+                if ((int)response.StatusCode == 429 && retryCount < MaxRetries)
+                {
+                    Log.Warning("Rate limit exceeded. Waiting 30 seconds before retry {RetryCount}/{MaxRetries}...", retryCount + 1, MaxRetries);
+                    await Task.Delay(DelayOnTooManyRequestsMs);
+
+                    retryCount++;
+                    response = await resend();
+                    continue;
+                }
+
                 Log.Error("Allegro API error {Status}: {Body}", response.StatusCode, body);
                 return default;
             }
-
-            return JsonSerializer.Deserialize<T>(body, _options);
         }
     }
 }

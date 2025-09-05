@@ -208,14 +208,11 @@ namespace JSAGROAllegroSync.Helpers
 
             // parameters that should support multiple values
             var multiValueParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "numery katalogowe zamienników", "marka",
-    };
+            {
+                "numery katalogowe zamienników", "marka",
+            };
 
-            foreach (var param in parameters.Where(p =>
-                p.IsForProduct == isForProduct &&
-                p.CategoryParameter.Name != "EAN (GTIN)" &&
-                p.CategoryParameter.Name != "Informacje o bezpieczeństwie"))
+            foreach (var param in parameters.Where(p => p.IsForProduct == isForProduct && p.CategoryParameter.Name != "EAN (GTIN)" && p.CategoryParameter.Name != "Informacje o bezpieczeństwie"))
             {
                 if (string.IsNullOrWhiteSpace(param.Value))
                     continue;
@@ -238,10 +235,10 @@ namespace JSAGROAllegroSync.Helpers
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
-                    // 3. Apply max=10 for parameter id 215941
-                    if (param.CategoryParameter.Id == 215941)
+                    // 3. Apply max=9 for parameter id 215941
+                    if (param.CategoryParameter.Name == "Numery katalogowe zamienników")
                     {
-                        values = values.Take(10).ToList();
+                        values = values.Take(15).ToList();
                     }
                 }
                 else
@@ -269,6 +266,9 @@ namespace JSAGROAllegroSync.Helpers
 
             var categoryExists = categories.Any(c => c.Id == categoryId || c.CategoryId == categoryId.ToString());
             if (!categoryExists)
+                return null;
+
+            if (categoryId == 252208) // Filters
                 return null;
 
             bool IsCategoryOrParent(int catId, string targetCategoryId)

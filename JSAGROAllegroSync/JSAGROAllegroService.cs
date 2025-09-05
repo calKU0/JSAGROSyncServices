@@ -105,7 +105,7 @@ namespace JSAGROAllegroSync
                     Log.Information("Allegro offers sync completed.");
 
                     // 3. Update product details once a day
-                    if (_lastProductDetailsSyncDate.Date < DateTime.Today)
+                    if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 0 && DateTime.Now.Hour <= 6)
                     {
                         // 3.1 Product details
                         Log.Information("Starting syncing product details...");

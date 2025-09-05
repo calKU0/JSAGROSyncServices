@@ -17,24 +17,24 @@ namespace JSAGROServiceManager
     public partial class MainWindow : Window
     {
         private ObservableCollection<LogFileItem> logFiles = new ObservableCollection<LogFileItem>();
-        //private ObservableCollection<LogLine> currentLogLines = new ObservableCollection<LogLine>();
         private DispatcherTimer refreshTimer;
         private ServiceController _serviceController;
+        private FileSystemWatcher _logWatcher;
 
         private readonly string _externalConfigPath = ConfigurationManager.AppSettings["ExternalConfigPath"].ToString();
         private readonly string _logFolderPath = ConfigurationManager.AppSettings["LogFolderPath"].ToString();
         private readonly string _serviceName = ConfigurationManager.AppSettings["ServiceName"].ToString();
 
-        private const int InitialTailLines = 2000;   // ile linii pokazać na start (od końca)
-        private const int PageLines = 1000;          // ile linii doładować przy przewijaniu w górę
+        private const int InitialTailLines = 2000;
+        private const int PageLines = 1000;
 
         private readonly BulkObservableCollection<LogLine> _currentLogLines = new();
         private string? _currentPath;
-        private long _loadedStartOffset = 0; // bajt w pliku od którego zaczyna się załadowany zakres
+        private long _loadedStartOffset = 0;
         private bool _isLoadingMore = false;
         private bool _reachedFileStart = false;
         private long _lastReadOffset = 0;
-
+        private object _lastSelectedLog;
 
         public MainWindow()
         {
@@ -45,10 +45,22 @@ namespace JSAGROServiceManager
         {
             _serviceController = new ServiceController(_serviceName);
             IcLogLines.AddHandler(
-        ScrollViewer.ScrollChangedEvent,
-        new ScrollChangedEventHandler(IcLogLines_ScrollChanged),
-        handledEventsToo: true);
+                ScrollViewer.ScrollChangedEvent,
+                new ScrollChangedEventHandler(IcLogLines_ScrollChanged),
+                handledEventsToo: true);
             RefreshServiceStatus();
+            InitLogWatcher();
+        }
+
+        private void InitLogWatcher()
+        {
+            _logWatcher = new FileSystemWatcher(_logFolderPath, "*.txt")
+            {
+                EnableRaisingEvents = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
+            };
+            _logWatcher.Created += (s, e) => Dispatcher.Invoke(LoadLogFiles);
+            _logWatcher.Deleted += (s, e) => Dispatcher.Invoke(LoadLogFiles);
         }
 
         private void BtnShowLogs_Click(object sender, RoutedEventArgs e)
@@ -60,6 +72,11 @@ namespace JSAGROServiceManager
             LvLogFiles.ItemsSource = logFiles;
             IcLogLines.ItemsSource = _currentLogLines;
 
+            if (refreshTimer != null)
+            {
+                refreshTimer.Stop();
+                refreshTimer.Tick -= RefreshTimer_Tick;
+            }
             refreshTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(5)
@@ -125,8 +142,6 @@ namespace JSAGROServiceManager
             }
         }
 
-
-
         private void LoadConfig()
         {
             try
@@ -190,49 +205,61 @@ namespace JSAGROServiceManager
 
             try
             {
-                foreach (var filePath in Directory.GetFiles(_logFolderPath, "*.txt"))
-                {
-                    int warnings = 0;
-                    int errors = 0;
-
-                    try
+                var files = Directory.GetFiles(_logFolderPath, "*.txt")
+                    .Select(filePath =>
                     {
-                        using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                        using (var sr = new StreamReader(fs))
+                        int warnings = 0;
+                        int errors = 0;
+
+                        try
                         {
-                            string line;
-                            while ((line = sr.ReadLine()) != null)
+                            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                            using (var sr = new StreamReader(fs))
                             {
-                                if (line.Contains("WRN]", StringComparison.Ordinal)) warnings++;
-                                if (line.Contains("ERR]", StringComparison.Ordinal)) errors++;
+                                string line;
+                                while ((line = sr.ReadLine()) != null)
+                                {
+                                    if (line.Contains("WRN]", StringComparison.Ordinal)) warnings++;
+                                    if (line.Contains("ERR]", StringComparison.Ordinal)) errors++;
+                                }
                             }
+
+                            string fileName = Path.GetFileNameWithoutExtension(filePath);
+                            string datePart = fileName.Replace("log-", "");
+
+                            string formattedDate = fileName;
+                            DateTime? parsedDate = null;
+                            if (DateTime.TryParseExact(datePart, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out DateTime dt))
+                            {
+                                formattedDate = dt.ToString("dd.MM.yyyy");
+                                parsedDate = dt;
+                            }
+
+                            return new LogFileItem
+                            {
+                                Name = formattedDate,
+                                Path = filePath,
+                                WarningsCount = warnings,
+                                ErrorsCount = errors,
+                                Date = parsedDate ?? DateTime.MinValue // add Date property in LogFileItem
+                            };
                         }
-
-                        string fileName = Path.GetFileNameWithoutExtension(filePath);
-                        string datePart = fileName.Replace("log-", "");
-
-                        string formattedDate = fileName;
-                        if (DateTime.TryParseExact(datePart, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out DateTime parsedDate))
+                        catch
                         {
-                            formattedDate = parsedDate.ToString("dd.MM.yyyy");
+                            return null;
                         }
+                    })
+                    .Where(f => f != null)
+                    .OrderByDescending(f => f.Date) // latest first
+                    .ToList();
 
-                        logFiles.Add(new LogFileItem
-                        {
-                            Name = formattedDate,
-                            Path = filePath,
-                            WarningsCount = warnings,
-                            ErrorsCount = errors
-                        });
-                    }
-                    catch (IOException ioEx)
-                    {
-                        MessageBox.Show($"Błąd odczytu pliku logu {filePath}: {ioEx.Message}");
-                    }
-                    catch (UnauthorizedAccessException unauthEx)
-                    {
-                        MessageBox.Show($"Brak dostępu do pliku logu {filePath}: {unauthEx.Message}");
-                    }
+                foreach (var f in files)
+                    logFiles.Add(f);
+
+                // Auto-select latest file
+                if (logFiles.Count > 0)
+                {
+                    LvLogFiles.SelectedItem = logFiles[0];
                 }
             }
             catch (Exception ex)
@@ -240,6 +267,7 @@ namespace JSAGROServiceManager
                 MessageBox.Show($"Nie udało się załadować listy plików logów: {ex.Message}");
             }
         }
+
         private void IcLogLines_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
             // np. doładowywanie przy dojściu do góry
@@ -312,8 +340,6 @@ namespace JSAGROServiceManager
             }
         }
 
-
-
         private LogLine ParseLogLine(string line)
         {
             var level = LogLevel.Information;
@@ -321,16 +347,22 @@ namespace JSAGROServiceManager
             else if (line.Contains("WRN]", StringComparison.Ordinal)) level = LogLevel.Warning;
             return new LogLine { Level = level, Message = line };
         }
-    
 
-
-private void LvLogFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void LvLogFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (LvLogFiles.SelectedItem != null)
+            if (LvLogFiles.SelectedItem == null)
             {
-                TxtSelectedFileName.Text = ((LogFileItem)LvLogFiles.SelectedItem).Name;
-                LoadSelectedFileContent();
+                if (_lastSelectedLog != null)
+                {
+                    LvLogFiles.SelectedItem = _lastSelectedLog;
+                }
+                return;
             }
+
+            _lastSelectedLog = LvLogFiles.SelectedItem;
+
+            TxtSelectedFileName.Text = ((LogFileItem)LvLogFiles.SelectedItem).Name;
+            LoadSelectedFileContent();
         }
 
         private void BtnReloadConfig_Click(object sender, RoutedEventArgs e)
