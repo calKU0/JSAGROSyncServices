@@ -1,10 +1,44 @@
-﻿namespace JSAGROAllegroServiceConfiguration.Models
+﻿using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
+namespace JSAGROAllegroServiceConfiguration.Models
 {
-    public class LogFileItem
+    public class LogFileItem : INotifyPropertyChanged
     {
         public string Name { get; set; }
         public string Path { get; set; }
-        public int WarningsCount { get; set; }
-        public int ErrorsCount { get; set; }
+
+        private int warningsCount;
+        public int WarningsCount
+        {
+            get => warningsCount;
+            set
+            {
+                if (warningsCount != value)
+                {
+                    warningsCount = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private int errorsCount;
+        public int ErrorsCount
+        {
+            get => errorsCount;
+            set
+            {
+                if (errorsCount != value)
+                {
+                    errorsCount = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
+
 }

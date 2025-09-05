@@ -1,4 +1,5 @@
 ﻿using JSAGROAllegroSync.Data;
+using JSAGROAllegroSync.DTOs;
 using JSAGROAllegroSync.DTOs.Settings;
 using JSAGROAllegroSync.Helpers;
 using JSAGROAllegroSync.Logging;
@@ -19,12 +20,11 @@ namespace JSAGROAllegroSync
 {
     public partial class JSAGROAllegroService : ServiceBase
     {
-        private readonly IGaskaApiService _gaskaApiService;
-        private readonly IAllegroCategoryService _categoryService;
-        private readonly IAllegroParametersService _parametersService;
-        private readonly IAllegroImageService _imageService;
-        private readonly IAllegroCompatibilityService _compatibilityService;
-        private readonly IAllegroOfferService _offerService;
+        private readonly HttpClient _allegroHttp;
+        private readonly HttpClient _gaskaHttp;
+        private readonly HttpClient _allegroAuthHttp;
+        private readonly AllegroApiCredentials _allegroApiSettings;
+        private readonly GaskaApiCredentials _gaskaApiSettings;
         private readonly AppSettings _appSettings;
 
         private Timer _timer;
@@ -34,36 +34,15 @@ namespace JSAGROAllegroSync
         public JSAGROAllegroService()
         {
             // Load settings
-            var gaskaApiSettings = AppSettingsLoader.LoadGaskaCredentials();
-            var allegroApiSettings = AppSettingsLoader.LoadAllegroCredentials();
+            _gaskaApiSettings = AppSettingsLoader.LoadGaskaCredentials();
+            _allegroApiSettings = AppSettingsLoader.LoadAllegroCredentials();
             _appSettings = AppSettingsLoader.LoadAppSettings();
 
             // HttpClients
-            var allegroHttp = new HttpClient { BaseAddress = new Uri(allegroApiSettings.BaseUrl) };
-            var gaskaHttp = new HttpClient { BaseAddress = new Uri(gaskaApiSettings.BaseUrl) };
-            var allegroAuthHttp = new HttpClient { BaseAddress = new Uri(allegroApiSettings.AuthBaseUrl) };
-            ApiHelper.AddDefaultHeaders(gaskaApiSettings, gaskaHttp);
-
-            // Database
-            var dbContext = new MyDbContext();
-            dbContext.Database.CommandTimeout = 180; // 3 minutes
-            var tokenRepo = new DbTokenRepository(dbContext);
-            var productRepo = new ProductRepository(dbContext);
-            var categoryRepo = new CategoryRepository(dbContext);
-            var imageRepo = new ImageRepository(dbContext);
-            var offerRepo = new OfferRepository(dbContext);
-
-            // Allegro auth + api client
-            var allegroAuthService = new AllegroAuthService(allegroApiSettings, tokenRepo, allegroAuthHttp);
-            var allegroApiClient = new AllegroApiClient(allegroAuthService, allegroHttp);
-
-            // Services initialization
-            _gaskaApiService = new GaskaApiService(productRepo, gaskaHttp, gaskaApiSettings, _appSettings.CategoriesId);
-            _categoryService = new AllegroCategoryService(productRepo, categoryRepo, allegroApiClient);
-            _parametersService = new AllegroParametersService(productRepo, categoryRepo);
-            _imageService = new AllegroImageService(imageRepo, allegroApiClient);
-            _compatibilityService = new AllegroCompatibilityService(productRepo, allegroApiClient);
-            _offerService = new AllegroOfferService(productRepo, offerRepo, categoryRepo, allegroApiClient);
+            _allegroHttp = new HttpClient { BaseAddress = new Uri(_allegroApiSettings.BaseUrl) };
+            _gaskaHttp = new HttpClient { BaseAddress = new Uri(_gaskaApiSettings.BaseUrl) };
+            _allegroAuthHttp = new HttpClient { BaseAddress = new Uri(_allegroApiSettings.AuthBaseUrl) };
+            ApiHelper.AddDefaultHeaders(_gaskaApiSettings, _gaskaHttp);
 
             InitializeComponent();
         }
@@ -91,76 +70,97 @@ namespace JSAGROAllegroSync
 
         private async Task TimerTickAsync()
         {
-            try
+            using (var dbContext = new MyDbContext())
             {
-                _lastRunTime = DateTime.Now;
+                dbContext.Database.CommandTimeout = 480;
 
-                // 1. Sync base products
-                Log.Information("Starting syncing basic products info...");
-                await _gaskaApiService.SyncProducts();
-                Log.Information("Basic product sync completed.");
+                var productRepo = new ProductRepository(dbContext);
+                var categoryRepo = new CategoryRepository(dbContext);
+                var imageRepo = new ImageRepository(dbContext);
+                var offerRepo = new OfferRepository(dbContext);
+                var tokenRepo = new DbTokenRepository(dbContext);
 
-                // 2. Sync Allegro offers
-                Log.Information("Starting syncing Allegro offers...");
-                await _offerService.SyncAllegroOffers();
-                Log.Information("Allegro offers sync completed.");
+                var allegroAuthService = new AllegroAuthService(_allegroApiSettings, tokenRepo, _allegroAuthHttp);
+                var allegroApiClient = new AllegroApiClient(allegroAuthService, _allegroHttp);
 
-                // 3. Update product details once a day
-                if (_lastProductDetailsSyncDate.Date < DateTime.Today)
+                var gaskaApiService = new GaskaApiService(productRepo, _gaskaHttp, _gaskaApiSettings, _appSettings.CategoriesId);
+                var categoryService = new AllegroCategoryService(productRepo, categoryRepo, allegroApiClient);
+                var parametersService = new AllegroParametersService(productRepo, categoryRepo);
+                var imageService = new AllegroImageService(imageRepo, allegroApiClient);
+                var compatibilityService = new AllegroCompatibilityService(productRepo, allegroApiClient);
+                var offerService = new AllegroOfferService(productRepo, offerRepo, categoryRepo, allegroApiClient);
+
+                try
                 {
-                    // 3.1 Product details
-                    Log.Information("Starting syncing product details...");
-                    await _gaskaApiService.SyncProductDetails();
-                    Log.Information("Detailed product sync completed.");
+                    _lastRunTime = DateTime.Now;
 
-                    // 3.2 Allegro categories
-                    Log.Information("Starting Allegro categories mapping...");
-                    await _categoryService.UpdateAllegroCategories();
-                    Log.Information("Allegro Categories mapping completed.");
+                    // 1. Sync base products
+                    Log.Information("Starting syncing basic products info...");
+                    await gaskaApiService.SyncProducts();
+                    Log.Information("Basic product sync completed.");
 
-                    // 3.3 Allegro parameters for categories
-                    Log.Information("Starting Allegro parameters for category mapping...");
-                    await _categoryService.FetchAndSaveCategoryParameters();
-                    Log.Information("Allegro parameters for category mapping completed.");
+                    // 2. Sync Allegro offers
+                    Log.Information("Starting syncing Allegro offers...");
+                    await offerService.SyncAllegroOffers();
+                    Log.Information("Allegro offers sync completed.");
 
-                    // 3.4 Product parameters
-                    Log.Information("Starting product parameters update...");
-                    await _parametersService.UpdateParameters();
-                    Log.Information("Product parameters update completed.");
+                    // 3. Update product details once a day
+                    if (_lastProductDetailsSyncDate.Date < DateTime.Today)
+                    {
+                        // 3.1 Product details
+                        Log.Information("Starting syncing product details...");
+                        await gaskaApiService.SyncProductDetails();
+                        Log.Information("Detailed product sync completed.");
 
-                    // 3.5 Compatibility products
-                    Log.Information("Starting fetching compatible products...");
-                    await _compatibilityService.FetchAndSaveCompatibleProducts();
-                    Log.Information("Compatible products fetched.");
+                        // 3.2 Allegro categories
+                        Log.Information("Starting Allegro categories mapping...");
+                        await categoryService.UpdateAllegroCategories();
+                        Log.Information("Allegro Categories mapping completed.");
 
-                    // 3.6 Images
-                    Log.Information("Starting importing images to allegro...");
-                    await _imageService.ImportImages();
-                    Log.Information("Images import completed.");
+                        // 3.3 Allegro parameters for categories
+                        Log.Information("Starting Allegro parameters for category mapping...");
+                        await categoryService.FetchAndSaveCategoryParameters();
+                        Log.Information("Allegro parameters for category mapping completed.");
 
-                    _lastProductDetailsSyncDate = DateTime.Today;
+                        // 3.4 Product parameters
+                        Log.Information("Starting product parameters update...");
+                        await parametersService.UpdateParameters();
+                        Log.Information("Product parameters update completed.");
+
+                        // 3.5 Compatibility products
+                        Log.Information("Starting fetching compatible products...");
+                        await compatibilityService.FetchAndSaveCompatibleProducts();
+                        Log.Information("Compatible products fetched.");
+
+                        // 3.6 Images
+                        Log.Information("Starting importing images to allegro...");
+                        await imageService.ImportImages();
+                        Log.Information("Images import completed.");
+
+                        _lastProductDetailsSyncDate = DateTime.Today;
+                    }
+
+                    // 4.Update Allegro offers
+                    Log.Information("Starting updating Allegro offers...");
+                    await offerService.UpdateOffers();
+                    Log.Information("Allegro offers update completed.");
+
+                    // 5. Create Allegro offers
+                    Log.Information("Starting Allegro offers creation...");
+                    await offerService.CreateOffers();
+                    Log.Information("Allegro Offer creation completed.");
                 }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error during API synchronization.");
+                }
+                finally
+                {
+                    DateTime nextRun = DateTime.Now.AddHours(2);
+                    _timer.Change(TimeSpan.FromHours(2), Timeout.InfiniteTimeSpan);
 
-                // 4.Update Allegro offers
-                Log.Information("Starting updating Allegro offers...");
-                await _offerService.UpdateOffers();
-                Log.Information("Allegro offers update completed.");
-
-                // 5. Create Allegro offers
-                Log.Information("Starting Allegro offers creation...");
-                await _offerService.CreateOffers();
-                Log.Information("Allegro Offer creation completed.");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error during API synchronization.");
-            }
-            finally
-            {
-                DateTime nextRun = DateTime.Now.AddHours(2);
-                _timer.Change(TimeSpan.FromHours(2), Timeout.InfiniteTimeSpan);
-
-                Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);
+                    Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);
+                }
             }
         }
     }

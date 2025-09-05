@@ -9,19 +9,32 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Collections.Specialized;
+using JSAGROServiceManager.Helpers;
 
 namespace JSAGROServiceManager
 {
     public partial class MainWindow : Window
     {
         private ObservableCollection<LogFileItem> logFiles = new ObservableCollection<LogFileItem>();
-        private ObservableCollection<LogLine> currentLogLines = new ObservableCollection<LogLine>();
+        //private ObservableCollection<LogLine> currentLogLines = new ObservableCollection<LogLine>();
         private DispatcherTimer refreshTimer;
         private ServiceController _serviceController;
 
         private readonly string _externalConfigPath = ConfigurationManager.AppSettings["ExternalConfigPath"].ToString();
         private readonly string _logFolderPath = ConfigurationManager.AppSettings["LogFolderPath"].ToString();
         private readonly string _serviceName = ConfigurationManager.AppSettings["ServiceName"].ToString();
+
+        private const int InitialTailLines = 2000;   // ile linii pokazać na start (od końca)
+        private const int PageLines = 1000;          // ile linii doładować przy przewijaniu w górę
+
+        private readonly BulkObservableCollection<LogLine> _currentLogLines = new();
+        private string? _currentPath;
+        private long _loadedStartOffset = 0; // bajt w pliku od którego zaczyna się załadowany zakres
+        private bool _isLoadingMore = false;
+        private bool _reachedFileStart = false;
+        private long _lastReadOffset = 0;
+
 
         public MainWindow()
         {
@@ -31,6 +44,10 @@ namespace JSAGROServiceManager
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             _serviceController = new ServiceController(_serviceName);
+            IcLogLines.AddHandler(
+        ScrollViewer.ScrollChangedEvent,
+        new ScrollChangedEventHandler(IcLogLines_ScrollChanged),
+        handledEventsToo: true);
             RefreshServiceStatus();
         }
 
@@ -41,11 +58,12 @@ namespace JSAGROServiceManager
             ConfigViewContainer.Visibility = Visibility.Collapsed;
 
             LvLogFiles.ItemsSource = logFiles;
-            IcLogLines.ItemsSource = currentLogLines;
+            IcLogLines.ItemsSource = _currentLogLines;
 
-            // Auto-refresh timer setup
-            refreshTimer = new DispatcherTimer();
-            refreshTimer.Interval = TimeSpan.FromSeconds(5);
+            refreshTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(5)
+            };
             refreshTimer.Tick += RefreshTimer_Tick;
             refreshTimer.Start();
 
@@ -60,23 +78,54 @@ namespace JSAGROServiceManager
             ConfigViewContainer.Visibility = Visibility.Visible;
         }
 
-        private void RefreshTimer_Tick(object sender, EventArgs e)
+        private async void RefreshTimer_Tick(object sender, EventArgs e)
         {
             RefreshServiceStatus();
-            if (LogsViewContainer.Visibility == Visibility.Visible && LvLogFiles.SelectedItem != null)
+
+            if (LogsViewContainer.Visibility != Visibility.Visible ||
+                LvLogFiles.SelectedItem is not LogFileItem item ||
+                string.IsNullOrEmpty(_currentPath)) return;
+
+            var listBox = IcLogLines;
+            if (listBox.Items.Count == 0) return;
+
+            // Check if user is at bottom
+            var sv = FindVisualChilds.FindVisualChild<ScrollViewer>(listBox);
+            bool isAtBottom = sv != null &&
+                              Math.Abs(sv.VerticalOffset - sv.ScrollableHeight) < 2;
+
+            try
             {
-                var scrollOffset = SvLogContent.VerticalOffset;
-                var maxOffset = SvLogContent.ScrollableHeight;
-                bool isAtBottom = Math.Abs(maxOffset - scrollOffset) < 1;
-
-                LoadSelectedFileContent();
-
-                if (isAtBottom)
+                var newLines = await Task.Run(() => LogFileReader.ReadNewLines(_currentPath!, ref _lastReadOffset));
+                if (newLines.Count > 0)
                 {
-                    SvLogContent.ScrollToEnd();
+                    // update in-memory log lines
+                    _currentLogLines.AddRange(newLines.Select(ParseLogLine));
+
+                    // update warning/error counters
+                    int newWarnings = newLines.Count(l => l.Contains("WRN]", StringComparison.Ordinal));
+                    int newErrors = newLines.Count(l => l.Contains("ERR]", StringComparison.Ordinal));
+
+                    item.WarningsCount += newWarnings;
+                    item.ErrorsCount += newErrors;
+
+                    // scroll to bottom if user was at bottom
+                    if (isAtBottom && sv != null)
+                    {
+                        await Dispatcher.BeginInvoke(() =>
+                        {
+                            listBox.ScrollIntoView(listBox.Items[^1]);
+                        }, DispatcherPriority.Background);
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Błąd odczytu logu {item.Name}: {ex.Message}");
+            }
         }
+
+
 
         private void LoadConfig()
         {
@@ -191,41 +240,91 @@ namespace JSAGROServiceManager
                 MessageBox.Show($"Nie udało się załadować listy plików logów: {ex.Message}");
             }
         }
-
-        private void LoadSelectedFileContent()
+        private void IcLogLines_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
-            currentLogLines.Clear();
+            // np. doładowywanie przy dojściu do góry
+            if (e.VerticalOffset <= 0)
+                _ = LoadMoreAsync();
+        }
 
-            if (LvLogFiles.SelectedItem is LogFileItem item && File.Exists(item.Path))
+        private async void LoadSelectedFileContent()
+        {
+            _currentLogLines.Clear();
+            if (LvLogFiles.SelectedItem is not LogFileItem item || !File.Exists(item.Path))
+                return;
+
+            _currentPath = item.Path;
+            try
             {
-                try
-                {
-                    using (var fs = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                    using (var sr = new StreamReader(fs))
-                    {
-                        string line;
-                        while ((line = sr.ReadLine()) != null)
-                        {
-                            LogLevel level = LogLevel.Information;
-                            if (line.Contains("ERR]", StringComparison.Ordinal)) level = LogLevel.Error;
-                            else if (line.Contains("WRN]", StringComparison.Ordinal)) level = LogLevel.Warning;
+                _lastReadOffset = new FileInfo(item.Path).Length;
 
-                            currentLogLines.Add(new LogLine { Level = level, Message = line });
-                        }
+                var (lines, startOffset, reachedStart) =
+                    await Task.Run(() => LogFileReader.ReadLastLines(item.Path, InitialTailLines));
+
+                _loadedStartOffset = startOffset;
+                _reachedFileStart = reachedStart;
+
+                _currentLogLines.AddRange(lines.Select(ParseLogLine));
+
+                await Dispatcher.BeginInvoke(() =>
+                {
+                    if (IcLogLines.Items.Count > 0)
+                    {
+                        IcLogLines.UpdateLayout();
+                        IcLogLines.ScrollIntoView(IcLogLines.Items[^1]); // bottom
                     }
-                }
-                catch (IOException ioEx)
-                {
-                    MessageBox.Show($"Błąd odczytu logu {item.Name}: {ioEx.Message}");
-                }
-                catch (UnauthorizedAccessException unauthEx)
-                {
-                    MessageBox.Show($"Brak dostępu do logu {item.Name}: {unauthEx.Message}");
-                }
+                }, DispatcherPriority.Background);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Błąd odczytu logu {item.Name}: {ex.Message}");
             }
         }
 
-        private void LvLogFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async Task LoadMoreAsync()
+        {
+            if (_isLoadingMore || _reachedFileStart || string.IsNullOrEmpty(_currentPath)) return;
+            _isLoadingMore = true;
+
+            try
+            {
+                var anchor = IcLogLines.Items.Count > 0 ? IcLogLines.Items[0] : null;
+
+                var (older, newStart, reachedStart) =
+                    await Task.Run(() => LogFileReader.ReadPreviousLines(_currentPath!, _loadedStartOffset, PageLines));
+
+                if (older.Count > 0)
+                {
+                    _currentLogLines.InsertRange(0, older.Select(ParseLogLine));
+                    _loadedStartOffset = newStart;
+                    _reachedFileStart = reachedStart;
+
+                    if (anchor != null)
+                    {
+                        IcLogLines.UpdateLayout();
+                        IcLogLines.ScrollIntoView(anchor); // keep position
+                    }
+                }
+            }
+            finally
+            {
+                _isLoadingMore = false;
+            }
+        }
+
+
+
+        private LogLine ParseLogLine(string line)
+        {
+            var level = LogLevel.Information;
+            if (line.Contains("ERR]", StringComparison.Ordinal)) level = LogLevel.Error;
+            else if (line.Contains("WRN]", StringComparison.Ordinal)) level = LogLevel.Warning;
+            return new LogLine { Level = level, Message = line };
+        }
+    
+
+
+private void LvLogFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (LvLogFiles.SelectedItem != null)
             {

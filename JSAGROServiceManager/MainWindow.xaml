@@ -195,39 +195,44 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
+
                                 <StackPanel Orientation="Horizontal" Grid.Row="0" VerticalAlignment="Center">
                                     <TextBlock Text="Zawartość pliku:" FontWeight="Bold" Margin="0,0,8,0" />
                                     <TextBlock x:Name="TxtSelectedFileName" Text="(brak)" VerticalAlignment="Center" />
                                 </StackPanel>
+                                
+                                <ListBox Grid.Row="1"
+                                     x:Name="IcLogLines"
+                                     ItemsSource="{Binding}"
+                                     VirtualizingStackPanel.IsVirtualizing="True"
+                                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                     ScrollViewer.CanContentScroll="True"
+                                     ScrollViewer.VerticalScrollBarVisibility="Visible"
+                                     BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="2">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="Black" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Level}" Value="Information">
+                                                                <Setter Property="Foreground" Value="Green" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Level}" Value="Warning">
+                                                                <Setter Property="Foreground" Value="Orange" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Level}" Value="Error">
+                                                                <Setter Property="Foreground" Value="Red" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
 
-                                <!-- Scrollable log content -->
-                                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" x:Name="SvLogContent">
-                                    <ItemsControl x:Name="IcLogLines">
-                                        <!-- Each item will be a TextBlock with foreground depending on log level -->
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="2">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground" Value="Black" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Level}" Value="Information">
-                                                                    <Setter Property="Foreground" Value="Green" />
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Level}" Value="Warning">
-                                                                    <Setter Property="Foreground" Value="Orange" />
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding Level}" Value="Error">
-                                                                    <Setter Property="Foreground" Value="Red" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </ScrollViewer>
                             </Grid>
                         </Border>
                     </Grid>

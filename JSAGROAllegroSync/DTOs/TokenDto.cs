@@ -8,6 +8,6 @@ namespace JSAGROAllegroSync.DTOs
         public string RefreshToken { get; set; }
         public DateTime ExpiryDateUtc { get; set; }
 
-        public bool IsExpired() => DateTime.UtcNow >= ExpiryDateUtc;
+        public bool IsExpired() => DateTime.UtcNow >= ExpiryDateUtc.AddHours(-2);
     }
 }

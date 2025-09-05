@@ -288,30 +288,35 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task<List<Product>> GetProductsToUpload(CancellationToken ct)
         {
+            var cutoff = DateTime.UtcNow.AddMinutes(-30);
+
             var products = await _context.Products
                 .Include(p => p.CrossNumbers)
                 .Include(p => p.Applications)
                 .Include(p => p.Atributes)
-                .Include(p => p.Images)
                 .Include(p => p.Parameters)
                 .Include(p => p.Packages)
                 .Include(p => p.AllegroOffers)
+                .Include(p => p.Images)
                 .Where(p => p.Categories.Any()
                             && !p.Archived
                             && p.DefaultAllegroCategory != 0
                             && p.PriceGross > 1.00m
                             && p.InStock > 0
-                            && p.Images.Any(i => !string.IsNullOrEmpty(i.AllegroUrl))
+                            && p.Images.Any(i => !string.IsNullOrEmpty(i.AllegroUrl) && i.AllegroExpirationDate >= cutoff)
                             && !p.AllegroOffers.Any())
                 .ToListAsync(ct);
 
             foreach (var product in products)
             {
-                product.Images = product.Images.Where(i => !string.IsNullOrEmpty(i.AllegroUrl)).ToList();
+                product.Images = product.Images
+                    .Where(i => !string.IsNullOrEmpty(i.AllegroUrl) && i.AllegroExpirationDate >= cutoff)
+                    .ToList();
             }
 
             return products;
         }
+
 
         public async Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct)
         {

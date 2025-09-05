@@ -50,8 +50,8 @@ namespace JSAGROAllegroSync.Services
                 }
                 catch (HttpRequestException ex)
                 {
-                    Log.Warning(ex, "Refresh token failed, falling back to device flow");
-                    await _tokenRepo.ClearAsync();
+                    Log.Warning(ex, "Refresh token failed");
+                    //await _tokenRepo.ClearAsync();
                 }
             }
 
@@ -65,7 +65,7 @@ namespace JSAGROAllegroSync.Services
 
         private async Task<TokenDto> RefreshWithRefreshTokenAsync(string refreshToken, CancellationToken ct)
         {
-            using (var req = new HttpRequestMessage(HttpMethod.Post, "auth/oauth/token"))
+            using (var req = new HttpRequestMessage(HttpMethod.Post, "/auth/oauth/token"))
             {
                 req.Headers.Authorization = new AuthenticationHeaderValue("Basic", BuildBasic(_settings.ClientId, _settings.ClientSecret));
                 req.Content = new FormUrlEncodedContent(new[]
@@ -97,11 +97,6 @@ namespace JSAGROAllegroSync.Services
         private async Task<DeviceCodeResponseDto> StartDeviceFlowAsync(CancellationToken ct)
         {
             var uri = $"/auth/oauth/device?client_id={Uri.EscapeDataString(_settings.ClientId)}";
-
-            if (!string.IsNullOrWhiteSpace(_settings.Scope))
-            {
-                uri += $"&scope={Uri.EscapeDataString(_settings.Scope)}";
-            }
 
             using (var req = new HttpRequestMessage(HttpMethod.Post, uri))
             {
