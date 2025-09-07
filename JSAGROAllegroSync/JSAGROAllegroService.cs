@@ -137,6 +137,11 @@ namespace JSAGROAllegroSync
                         await imageService.ImportImages();
                         Log.Information("Images import completed.");
 
+                        // 3.7. Create Allegro offers
+                        Log.Information("Starting Allegro offers creation...");
+                        await offerService.CreateOffers();
+                        Log.Information("Allegro Offer creation completed.");
+
                         _lastProductDetailsSyncDate = DateTime.Today;
                     }
 
@@ -144,11 +149,6 @@ namespace JSAGROAllegroSync
                     Log.Information("Starting updating Allegro offers...");
                     await offerService.UpdateOffers();
                     Log.Information("Allegro offers update completed.");
-
-                    // 5. Create Allegro offers
-                    Log.Information("Starting Allegro offers creation...");
-                    await offerService.CreateOffers();
-                    Log.Information("Allegro Offer creation completed.");
                 }
                 catch (Exception ex)
                 {

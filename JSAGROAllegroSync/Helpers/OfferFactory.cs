@@ -2,6 +2,7 @@
 using JSAGROAllegroSync.DTOs.Settings;
 using JSAGROAllegroSync.Models;
 using JSAGROAllegroSync.Models.Product;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -83,6 +84,7 @@ namespace JSAGROAllegroSync.Helpers
             int productQuantity = offer.Product.Packages.Any(p => p.PackRequired == 1) ? Convert.ToInt32(offer.Product.Packages.Where(p => p.PackRequired == 1).Select(p => p.PackQty).FirstOrDefault()) : 1;
             return new ProductOfferRequest
             {
+                //Name = offer.Product.Name,
                 Stock = new Stock
                 {
                     Available = Convert.ToInt32(Math.Floor(offer.Product.InStock)),
@@ -266,9 +268,6 @@ namespace JSAGROAllegroSync.Helpers
 
             var categoryExists = categories.Any(c => c.Id == categoryId || c.CategoryId == categoryId.ToString());
             if (!categoryExists)
-                return null;
-
-            if (categoryId == 252208) // Filters
                 return null;
 
             bool IsCategoryOrParent(int catId, string targetCategoryId)

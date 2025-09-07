@@ -93,25 +93,35 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
         {
-            var lastOffers = await _context.AllegroOffers
-                .Where(o => (o.Status == "ACTIVE" || o.Status == "ENDED") && o.DeliveryName == _deliveryName)
+            const int batchSize = 500;
+            var result = new List<AllegroOffer>();
+
+            // 1. Get only latest offer IDs
+            var latestOfferIds = await _context.AllegroOffers
+                .Where(o => (o.Status == "ACTIVE" || o.Status == "ENDED")
+                         && o.DeliveryName == _deliveryName)
                 .GroupBy(o => o.ExternalId)
-                .Select(g => g.OrderByDescending(o => o.Id).FirstOrDefault())
+                .Select(g => g.Max(o => o.Id))
                 .ToListAsync(ct);
 
-            var offerIds = lastOffers.Select(o => o.Id).ToList();
+            // 2. Process offers in batches
+            for (int i = 0; i < latestOfferIds.Count; i += batchSize)
+            {
+                var batchIds = latestOfferIds.Skip(i).Take(batchSize).ToList();
 
-            var result = await _context.AllegroOffers
-                .Where(o => offerIds.Contains(o.Id))
-                .Include(o => o.Product)
-                .Include(o => o.Product.Applications)
-                .Include(o => o.Product.Atributes)
-                .Include(o => o.Product.Parameters)
-                .Include(o => o.Product.Images)
-                .Include(o => o.Product.Packages)
-                .Include(o => o.Product.CrossNumbers)
-                .Where(o => o.Product.Parameters.Any() && o.Product.Categories.Any() && o.Product.Images.Any(i => !string.IsNullOrEmpty(i.AllegroUrl)))
-                .ToListAsync(ct);
+                var batch = await _context.AllegroOffers
+                    .Where(o => batchIds.Contains(o.Id))
+                    .Include(o => o.Product)
+                    .Include(o => o.Product.Parameters)
+                    .Include(o => o.Product.Images)
+                    .Include(o => o.Product.Categories)
+                    .Where(o => o.Product.Parameters.Any()
+                             && o.Product.Categories.Any()
+                             && o.Product.Images.Any(im => !string.IsNullOrEmpty(im.AllegroUrl)))
+                    .ToListAsync(ct);
+
+                result.AddRange(batch);
+            }
 
             return result;
         }

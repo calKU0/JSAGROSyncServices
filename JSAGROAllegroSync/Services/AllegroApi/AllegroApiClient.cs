@@ -33,29 +33,33 @@ namespace JSAGROAllegroSync.Services.AllegroApi
 
         public async Task<T> GetAsync<T>(string url, CancellationToken ct)
         {
-            var request = await CreateRequest(HttpMethod.Get, url, ct);
-            return await DeserializeWithRetry<T>(await _http.SendAsync(request, ct), () => _http.SendAsync(request, ct));
+            return await DeserializeWithRetry<T>(
+                () => CreateRequest(HttpMethod.Get, url, ct).ContinueWith(t => _http.SendAsync(t.Result, ct)).Unwrap()
+            );
         }
 
         public async Task<T> PostAsync<T>(string url, object body, CancellationToken ct, string contentType = "application/vnd.allegro.public.v1+json")
         {
-            var request = await CreateRequest(HttpMethod.Post, url, ct);
-
-            if (body != null)
+            return await DeserializeWithRetry<T>(async () =>
             {
-                if (body is byte[] bytes)
-                {
-                    request.Content = new ByteArrayContent(bytes);
-                    request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
-                }
-                else
-                {
-                    var json = JsonSerializer.Serialize(body, _options);
-                    request.Content = new StringContent(json, Encoding.UTF8, contentType);
-                }
-            }
+                var request = await CreateRequest(HttpMethod.Post, url, ct);
 
-            return await DeserializeWithRetry<T>(await _http.SendAsync(request, ct), () => _http.SendAsync(request, ct));
+                if (body != null)
+                {
+                    if (body is byte[] bytes)
+                    {
+                        request.Content = new ByteArrayContent(bytes);
+                        request.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+                    }
+                    else
+                    {
+                        var json = JsonSerializer.Serialize(body, _options);
+                        request.Content = new StringContent(json, Encoding.UTF8, contentType);
+                    }
+                }
+
+                return await _http.SendAsync(request, ct);
+            });
         }
 
         public async Task<HttpResponseMessage> SendWithResponseAsync(string url, HttpMethod method, object body = null, CancellationToken ct = default)
@@ -80,12 +84,13 @@ namespace JSAGROAllegroSync.Services.AllegroApi
             return request;
         }
 
-        private async Task<T> DeserializeWithRetry<T>(HttpResponseMessage response, Func<Task<HttpResponseMessage>> resend)
+        private async Task<T> DeserializeWithRetry<T>(Func<Task<HttpResponseMessage>> send)
         {
             int retryCount = 0;
 
             while (true)
             {
+                var response = await send();
                 var body = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
@@ -95,11 +100,11 @@ namespace JSAGROAllegroSync.Services.AllegroApi
 
                 if ((int)response.StatusCode == 429 && retryCount < MaxRetries)
                 {
-                    Log.Warning("Rate limit exceeded. Waiting 30 seconds before retry {RetryCount}/{MaxRetries}...", retryCount + 1, MaxRetries);
+                    Log.Warning("Rate limit exceeded. Waiting 30 seconds before retry {RetryCount}/{MaxRetries}...",
+                        retryCount + 1, MaxRetries);
                     await Task.Delay(DelayOnTooManyRequestsMs);
 
                     retryCount++;
-                    response = await resend();
                     continue;
                 }
 

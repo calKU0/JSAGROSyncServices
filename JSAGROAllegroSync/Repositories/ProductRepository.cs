@@ -123,7 +123,21 @@ namespace JSAGROAllegroSync.Repositories
                     _context.Products.Add(product);
                 }
 
-                product.Name = FixName(apiProduct.Name, apiProduct.CodeGaska, apiProduct.CodeCustomer);
+                List<string> rootBrands;
+                if (product.Applications != null)
+                {
+                    rootBrands = product.Applications
+                        .Where(a => a.ParentID == 0)
+                        .Select(a => a.Name)
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .ToList();
+                }
+                else
+                {
+                    rootBrands = new List<string>();
+                }
+
+                product.Name = FixName(apiProduct.Name, apiProduct.CodeGaska, apiProduct.CodeCustomer, rootBrands);
                 product.CodeGaska = apiProduct.CodeGaska;
                 product.CodeCustomer = apiProduct.CodeCustomer;
                 product.Description = apiProduct.Description;
@@ -159,7 +173,6 @@ namespace JSAGROAllegroSync.Repositories
             _context.ProductCategories.RemoveRange(product.Categories);
 
             // Update fields
-            product.Name = FixName(updatedProduct.Name, updatedProduct.CodeGaska, updatedProduct.CodeCustomer);
             product.CodeGaska = updatedProduct.CodeGaska;
             product.CodeCustomer = updatedProduct.CodeCustomer;
             product.SupplierName = updatedProduct.SupplierName;
@@ -239,6 +252,22 @@ namespace JSAGROAllegroSync.Repositories
                 Name = c.Name
             }).ToList();
 
+            List<string> rootBrands;
+            if (product.Applications != null)
+            {
+                rootBrands = updatedProduct.Applications
+                    .Where(a => a.ParentID == 0)
+                    .Select(a => a.Name)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .ToList();
+            }
+            else
+            {
+                rootBrands = new List<string>();
+            }
+
+            product.Name = FixName(updatedProduct.Name, updatedProduct.CodeGaska, updatedProduct.CodeCustomer, rootBrands);
+
             await _context.SaveChangesAsync(ct);
         }
 
@@ -305,33 +334,52 @@ namespace JSAGROAllegroSync.Repositories
         public async Task<List<Product>> GetProductsToUpload(CancellationToken ct)
         {
             var cutoff = DateTime.UtcNow.AddMinutes(-30);
+            const int pageSize = 500;
+            var result = new List<Product>();
 
-            var products = await _context.Products
-                .Include(p => p.CrossNumbers)
-                .Include(p => p.Applications)
-                .Include(p => p.Atributes)
-                .Include(p => p.Parameters)
-                .Include(p => p.Packages)
-                .Include(p => p.AllegroOffers)
-                .Include(p => p.Images)
-                .Where(p => p.Categories.Any()
-                            && !p.Archived
-                            && p.DefaultAllegroCategory != 0
-                            && p.PriceGross > 1.00m
-                            && p.InStock > 0
-                            && p.Images.Any(i => !string.IsNullOrEmpty(i.AllegroUrl) && i.AllegroExpirationDate >= cutoff)
-                            && !p.AllegroOffers.Any()
-                            && p.Parameters.Any())
-                .ToListAsync(ct);
+            int page = 0;
+            List<Product> batch;
 
-            foreach (var product in products)
+            do
             {
-                product.Images = product.Images
-                    .Where(i => !string.IsNullOrEmpty(i.AllegroUrl) && i.AllegroExpirationDate >= cutoff)
-                    .ToList();
-            }
+                var productsPage = await _context.Products
+                    .Where(p => p.Categories.Any()
+                                && !p.Archived
+                                && p.DefaultAllegroCategory != 0
+                                && p.PriceGross > 1.00m
+                                && p.InStock > 0
+                                && !p.AllegroOffers.Any()
+                                && p.Images.Any(i => !string.IsNullOrEmpty(i.AllegroUrl) && i.AllegroExpirationDate >= cutoff)
+                                // Ensure all required parameters exist
+                                && _context.CategoryParameters
+                                    .Where(cp => cp.CategoryId == p.DefaultAllegroCategory && cp.RequiredForProduct)
+                                    .All(cp => p.Parameters.Any(pp => pp.CategoryParameterId == cp.Id))
+                    )
+                    .OrderBy(p => p.Id)
+                    .Skip(page * pageSize)
+                    .Take(pageSize)
+                    .Select(p => new
+                    {
+                        Product = p,
+                        Images = p.Images
+                            .Where(i => !string.IsNullOrEmpty(i.AllegroUrl) && i.AllegroExpirationDate >= cutoff)
+                            .GroupBy(i => i.AllegroUrl)
+                            .Select(g => g.FirstOrDefault())
+                            .ToList()
+                    })
+                    .ToListAsync(ct);
 
-            return products;
+                batch = productsPage.Select(x =>
+                {
+                    x.Product.Images = x.Images;
+                    return x.Product;
+                }).ToList();
+
+                result.AddRange(batch);
+                page++;
+            } while (batch.Any());
+
+            return result;
         }
 
         public async Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct)
@@ -473,7 +521,7 @@ namespace JSAGROAllegroSync.Repositories
             Console.WriteLine($"Total save time: {stopwatchTotal.ElapsedMilliseconds} ms");
         }
 
-        private string FixName(string name, string code, string supplierName)
+        private string FixName(string name, string code, string supplierName, List<string> rootBrands = null)
         {
             if (!string.IsNullOrWhiteSpace(name))
             {
@@ -494,29 +542,66 @@ namespace JSAGROAllegroSync.Repositories
                 // Collapse multiple spaces
                 name = Regex.Replace(name, @"\s+", " ").Trim();
 
-                // 2. Only move leading product code from original name if it wasn't a JAG variant
-                if (!jagRemoved && !string.IsNullOrWhiteSpace(code))
-                {
-                    var match = Regex.Match(name, @"^(?<code>[0-9A-Za-z./x-]+)\s+(?<rest>.+)$");
+                string rest = null;
+                string extractedCode = null;
 
-                    if (match.Success)
+                var words = name.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+                // Extract code: first word containing digits anywhere
+                var codeMatch = Regex.Match(name, @"\b[0-9A-Za-z]*\d[0-9A-Za-z./-]*\b");
+                if (codeMatch.Success)
+                {
+                    extractedCode = codeMatch.Value;
+
+                    // Remove extracted code from name but preserve word order
+                    var restWords = name.Split(' ').Where(w => !string.Equals(w, extractedCode, StringComparison.OrdinalIgnoreCase)).ToList();
+                    rest = string.Join(" ", restWords);
+                }
+                else
+                {
+                    // fallback if no code detected
+                    if (words.Length > 1)
                     {
-                        name = $"{match.Groups["rest"].Value} {match.Groups["code"].Value}";
+                        extractedCode = "";
+                        rest = string.Join(" ", words);
+                    }
+                    else
+                    {
+                        extractedCode = "";
+                        rest = name;
                     }
                 }
 
-                // 3. Append CodeGaska
-                bool codeGaskaAppended = false;
-                var words = name.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                if ((jagRemoved || words.Length < 3) && !string.IsNullOrWhiteSpace(code))
+                // 3. Append CodeGaska if JAG removed or short name
+                bool codeGaskaAppended = (jagRemoved || rest.Split(' ').Length < 3) && !string.IsNullOrWhiteSpace(code);
+
+                // 4. Insert root brands at the end of descriptor, before code
+                var descriptorWords = rest.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+
+                if (rootBrands != null && rootBrands.Count > 0)
                 {
-                    name = $"{name} {code}".Trim();
-                    codeGaskaAppended = true;
-                    words = name.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var brand in rootBrands.Where(b => !string.IsNullOrWhiteSpace(b)))
+                    {
+                        if (!descriptorWords.Any(w => string.Equals(w, brand, StringComparison.OrdinalIgnoreCase)))
+                            descriptorWords.Add(brand);
+                    }
                 }
 
+                // 5. Rebuild final name: descriptor + root brands + extracted code + CodeGaska
+                var nameParts = new List<string>();
+                if (descriptorWords.Any())
+                    nameParts.Add(string.Join(" ", descriptorWords));
+                if (!string.IsNullOrWhiteSpace(extractedCode))
+                    nameParts.Add(extractedCode);
+                if (codeGaskaAppended)
+                    nameParts.Add(code);
+
+                name = string.Join(" ", nameParts).Trim();
+
+                var newWords = name.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToArray();
+
                 // 4. If CodeGaska is in the name AND <3 words → add SupplierName or 'a'
-                if (codeGaskaAppended && words.Length < 3)
+                if (codeGaskaAppended && newWords.Length < 3)
                 {
                     if (!string.IsNullOrWhiteSpace(supplierName))
                     {
