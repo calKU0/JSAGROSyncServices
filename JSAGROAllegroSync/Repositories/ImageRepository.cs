@@ -22,6 +22,7 @@ namespace JSAGROAllegroSync.Repositories
         public async Task<List<ProductImage>> GetImagesForImport(CancellationToken ct)
         {
             return await _context.ProductImages
+                .AsNoTracking()
                 .Include(pi => pi.Product)
                 .Include(pi => pi.Product.AllegroOffers)
                 .Where(pi => pi.Product.Categories.Any()

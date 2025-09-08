@@ -282,9 +282,9 @@ namespace JSAGROAllegroSync.Repositories
         {
             // Step 1: products without parameters
             var productsWithoutParameters = await _context.Products
+                .AsNoTracking()
                 .Include(p => p.CrossNumbers)
                 .Include(p => p.Applications)
-                .Include(p => p.Atributes)
                 .Include(p => p.Parameters.Select(pp => pp.CategoryParameter.Values))
                 .Where(p => p.Categories.Any()
                             && !p.Archived
@@ -333,7 +333,7 @@ namespace JSAGROAllegroSync.Repositories
 
         public async Task<List<Product>> GetProductsToUpload(CancellationToken ct)
         {
-            var cutoff = DateTime.UtcNow.AddMinutes(-30);
+            var cutoff = DateTime.UtcNow.AddMinutes(-60);
             const int pageSize = 500;
             var result = new List<Product>();
 
@@ -343,6 +343,7 @@ namespace JSAGROAllegroSync.Repositories
             do
             {
                 var productsPage = await _context.Products
+                    .AsNoTracking()
                     .Where(p => p.Categories.Any()
                                 && !p.Archived
                                 && p.DefaultAllegroCategory != 0
@@ -371,7 +372,12 @@ namespace JSAGROAllegroSync.Repositories
 
                 batch = productsPage.Select(x =>
                 {
-                    x.Product.Images = x.Images;
+                    x.Product.Images = x.Product.Images
+                        .Where(i => !string.IsNullOrEmpty(i.AllegroUrl) && i.AllegroExpirationDate >= cutoff)
+                        .GroupBy(i => i.AllegroUrl)
+                        .Select(g => g.First())
+                        .ToList();
+
                     return x.Product;
                 }).ToList();
 

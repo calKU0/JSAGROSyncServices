@@ -117,33 +117,33 @@ namespace JSAGROAllegroSync
                         await categoryService.UpdateAllegroCategories();
                         Log.Information("Allegro Categories mapping completed.");
 
-                        // 3.3 Allegro parameters for categories
-                        Log.Information("Starting Allegro parameters for category mapping...");
-                        await categoryService.FetchAndSaveCategoryParameters();
-                        Log.Information("Allegro parameters for category mapping completed.");
-
-                        // 3.4 Product parameters
-                        Log.Information("Starting product parameters update...");
-                        await parametersService.UpdateParameters();
-                        Log.Information("Product parameters update completed.");
-
                         // 3.5 Compatibility products
                         Log.Information("Starting fetching compatible products...");
                         await compatibilityService.FetchAndSaveCompatibleProducts();
                         Log.Information("Compatible products fetched.");
 
-                        // 3.6 Images
-                        Log.Information("Starting importing images to allegro...");
-                        await imageService.ImportImages();
-                        Log.Information("Images import completed.");
-
-                        // 3.7. Create Allegro offers
-                        Log.Information("Starting Allegro offers creation...");
-                        await offerService.CreateOffers();
-                        Log.Information("Allegro Offer creation completed.");
-
                         _lastProductDetailsSyncDate = DateTime.Today;
                     }
+
+                    // 3.3 Allegro parameters for categories
+                    Log.Information("Starting Allegro parameters for category mapping...");
+                    await categoryService.FetchAndSaveCategoryParameters();
+                    Log.Information("Allegro parameters for category mapping completed.");
+
+                    // 3.4 Product parameters
+                    Log.Information("Starting product parameters update...");
+                    await parametersService.UpdateParameters();
+                    Log.Information("Product parameters update completed.");
+
+                    // 3.6 Images
+                    Log.Information("Starting importing images to allegro...");
+                    await imageService.ImportImages();
+                    Log.Information("Images import completed.");
+
+                    // 3.7. Create Allegro offers
+                    Log.Information("Starting Allegro offers creation...");
+                    await offerService.CreateOffers();
+                    Log.Information("Allegro Offer creation completed.");
 
                     // 4.Update Allegro offers
                     Log.Information("Starting updating Allegro offers...");

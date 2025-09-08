@@ -39,6 +39,7 @@ namespace JSAGROAllegroSync.Repositories
             // 1. Load all products for lookup
             var productCodes = offers.Select(o => o.External.Id).Distinct().ToList();
             var products = await _context.Products
+                .AsNoTracking()
                 .Where(p => productCodes.Contains(p.CodeGaska))
                 .ToDictionaryAsync(p => p.CodeGaska, ct);
 
@@ -98,6 +99,7 @@ namespace JSAGROAllegroSync.Repositories
 
             // 1. Get only latest offer IDs
             var latestOfferIds = await _context.AllegroOffers
+                .AsNoTracking()
                 .Where(o => (o.Status == "ACTIVE" || o.Status == "ENDED")
                          && o.DeliveryName == _deliveryName)
                 .GroupBy(o => o.ExternalId)
@@ -111,6 +113,7 @@ namespace JSAGROAllegroSync.Repositories
 
                 var batch = await _context.AllegroOffers
                     .Where(o => batchIds.Contains(o.Id))
+                    .AsNoTracking()
                     .Include(o => o.Product)
                     .Include(o => o.Product.Parameters)
                     .Include(o => o.Product.Images)
