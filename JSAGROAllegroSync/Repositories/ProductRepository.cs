@@ -36,36 +36,10 @@ namespace JSAGROAllegroSync.Repositories
         public async Task<List<Product>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
         {
             var productsToUpdate = await _context.Products
-                .Include(p => p.Packages)
-                .Include(p => p.CrossNumbers)
-                .Include(p => p.Components)
-                .Include(p => p.RecommendedParts)
-                .Include(p => p.Applications)
-                .Include(p => p.Atributes)
-                .Include(p => p.Images)
-                .Include(p => p.Files)
-                .Include(p => p.Categories)
+                .AsNoTracking()
                 .Where(p => !p.Categories.Any() && !p.Archived)
                 .Take(limit)
                 .ToListAsync(ct);
-
-            if (!productsToUpdate.Any())
-            {
-                productsToUpdate = await _context.Products
-                    .Where(p => !p.Archived)
-                    .Include(p => p.Packages)
-                    .Include(p => p.CrossNumbers)
-                    .Include(p => p.Components)
-                    .Include(p => p.RecommendedParts)
-                    .Include(p => p.Applications)
-                    .Include(p => p.Atributes)
-                    .Include(p => p.Images)
-                    .Include(p => p.Files)
-                    .Include(p => p.Categories)
-                    .OrderBy(p => p.UpdatedDate)
-                    .Take(limit)
-                    .ToListAsync(ct);
-            }
 
             return productsToUpdate;
         }
@@ -159,9 +133,21 @@ namespace JSAGROAllegroSync.Repositories
             await _context.SaveChangesAsync(ct);
         }
 
-        public async Task UpdateProductDetails(Product product, ApiProduct updatedProduct, CancellationToken ct)
+        public async Task UpdateProductDetails(int productId, ApiProduct updatedProduct, CancellationToken ct)
         {
             // Clear existing collections
+            var product = _context.Products
+                .Include(p => p.Packages)
+                .Include(p => p.CrossNumbers)
+                .Include(p => p.Components)
+                .Include(p => p.RecommendedParts)
+                .Include(p => p.Applications)
+                .Include(p => p.Atributes)
+                .Include(p => p.Images)
+                .Include(p => p.Files)
+                .Include(p => p.Categories)
+                .FirstOrDefault(x => x.Id == productId);
+
             _context.Packages.RemoveRange(product.Packages);
             _context.CrossNumbers.RemoveRange(product.CrossNumbers);
             _context.Components.RemoveRange(product.Components);

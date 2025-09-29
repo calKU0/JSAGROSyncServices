@@ -138,7 +138,7 @@ namespace JSAGROAllegroSync.Services.GaskaApiService
 
                     if (apiResponse?.Product == null) continue;
 
-                    await _productRepo.UpdateProductDetails(product, apiResponse.Product, ct);
+                    await _productRepo.UpdateProductDetails(product.Id, apiResponse.Product, ct);
                     Log.Information($"Successfully fetched and updated details of product {product.Name} ({product.CodeGaska})");
                 }
                 catch (Exception ex)

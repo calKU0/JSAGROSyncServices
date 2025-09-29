@@ -19,7 +19,7 @@ namespace JSAGROAllegroSync.Repositories.Interfaces
 
         Task UpsertProducts(List<ApiProducts> apiProducts, HashSet<int> fetchedProductIds, CancellationToken ct);
 
-        Task UpdateProductDetails(Product product, ApiProduct updatedProduct, CancellationToken ct);
+        Task UpdateProductDetails(int productId, ApiProduct updatedProduct, CancellationToken ct);
 
         Task<List<Product>> GetProductsWithoutDefaultCategory(CancellationToken ct);
 
