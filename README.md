@@ -1,23 +1,45 @@
-# JSAGROAllegroSync
+# JSAGROSyncServices
 
-> 💼 **Commercial Project** — Part of a private or client-facing initiative.
+> 💼 **Commercial Project** — part of a private or client-facing initiative.
 
 ## Overview
 
-JSAGROAllegroSync is a Windows Service that automates the management of product listings on Allegro. It fetches products from a supplier database via API, updates the local database, enriches products with category suggestions, parameters, and images, and synchronizes listings with an Allegro account.
+**JSAGROSyncServices** is a set of Windows Services designed for the JSAGRO client, automating product and offer synchronization across multiple platforms.  
+Each service is independent and handles a specific data source or target system, ensuring reliable data transfer and robust logging.
 
-The project also includes a WPF-based configurator, enabling administrators to monitor logs, review daily warnings and errors, and manage service settings effortlessly.
+## Services
 
-## Key Features
+### JSAGROSyncServices.GaskaToAllegro
 
-- **Automated Product Management:** Fetch products from supplier API and update the local database.
-- **Category and Parameter Enrichment:** Retrieve suggested Allegro categories, category parameters, and applicable product values.
-- **Image Management:** Upload product images to Allegro automatically.
-- **Offer Synchronization:** Update existing Allegro offers or create new offers based on database products.
-- **WPF Configurator:**
-  - Real-time log monitoring with daily summary of warnings and errors.
-  - Edit all service configuration parameters from a user-friendly interface.
-- **Robust Logging:** Track all service actions and database updates.
+- Fetches products from the **Gaska API** (JSON format)
+- Enriches products with Allegro categories, parameters, and images
+- Creates new offers or updates existing ones in **Allegro**
+- Handles error reporting and daily summary logs
+
+### JSAGROSyncServices.AllegroToErli
+
+- Fetches product listings from **Allegro**
+- Maps Allegro data to the Erli schema
+- Synchronizes products into **Erli**
+- Maintains logs of all synchronization actions and errors
+
+## Features
+
+### GaskaToAllegro
+
+- Automated product fetching and enrichment
+- Allegro offer creation and updates
+- Image management and upload
+- Real-time and daily summary logging
+- Configurable API and service settings
+
+### AllegroToErli
+
+- Allegro product retrieval and transformation
+- Reliable data mapping to Erli
+- Incremental synchronization with database logging
+- Error tracking and notification
+- Configurable service parameters
 
 ## Screenshots
 
@@ -31,9 +53,11 @@ The project also includes a WPF-based configurator, enabling administrators to m
 
 ## Technologies Used
 
-- **Frameworks:** .NET Framework, WPF
+- **Frameworks:** .NET Framework
 - **Languages:** C#
-- **Technologies:** REST API, SQL Server, Allegro API
+- **Data Sources & Targets:** REST APIs (Gaska, Allegro, Erli)
+- **Database:** SQL Server
+- **Logging:** Serilog
 
 ## Installation & Setup
 
@@ -48,7 +72,7 @@ The project also includes a WPF-based configurator, enabling administrators to m
 
 ## License
 
-This project is proprietary and confidential. See the [LICENSE](LICENSE) file for more information.
+This project is licensed under the [MIT License](LICENSE).
 
 ---
 
