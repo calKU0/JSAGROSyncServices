@@ -1,0 +1,30 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace AllegroErliSync.Models
+{
+    public class Offer
+    {
+        public string Id { get; set; }
+        public int? ProductId { get; set; }
+        public string ExternalId { get; set; }
+        public string Name { get; set; }
+        public int CategoryId { get; set; }
+        public decimal Price { get; set; }
+        public int Stock { get; set; }
+        public int WatchersCount { get; set; }
+        public int VisitsCount { get; set; }
+        public string Status { get; set; }
+        public string DeliveryName { get; set; }
+        public DateTime StartingAt { get; set; }
+        public bool ExistsInErli { get; set; }
+        public string Images { get; set; }
+        public decimal Weight { get; set; }
+
+        public List<OfferDescription> Descriptions { get; set; } = new List<OfferDescription>();
+        public List<OfferAttribute> Attributes { get; set; } = new List<OfferAttribute>();
+    }
+}

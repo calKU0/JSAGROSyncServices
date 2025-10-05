@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="..\packages\EntityFramework.6.5.1\build\EntityFramework.props" Condition="Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.props')" />
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{27E33AE0-712F-48FB-B3A4-65DF2BC627D7}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>GaskaAllegroSync</RootNamespace>
+    <AssemblyName>GaskaAllegroSync</AssemblyName>
+    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="EntityFramework, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
+      <HintPath>..\packages\EntityFramework.6.5.1\lib\net45\EntityFramework.dll</HintPath>
+    </Reference>
+    <Reference Include="EntityFramework.SqlServer, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
+      <HintPath>..\packages\EntityFramework.6.5.1\lib\net45\EntityFramework.SqlServer.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\Microsoft.Bcl.AsyncInterfaces.9.0.8\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\packages\Newtonsoft.Json.13.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="Serilog, Version=4.3.0.0, Culture=neutral, PublicKeyToken=24c2f752a8e58a10, processorArchitecture=MSIL">
+      <HintPath>..\packages\Serilog.4.3.0\lib\net471\Serilog.dll</HintPath>
+    </Reference>
+    <Reference Include="Serilog.Sinks.File, Version=7.0.0.0, Culture=neutral, PublicKeyToken=24c2f752a8e58a10, processorArchitecture=MSIL">
+      <HintPath>..\packages\Serilog.Sinks.File.7.0.0\lib\net471\Serilog.Sinks.File.dll</HintPath>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Buffers, Version=4.0.5.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Buffers.4.6.1\lib\net462\System.Buffers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Configuration.ConfigurationManager, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Configuration.ConfigurationManager.9.0.8\lib\net462\System.Configuration.ConfigurationManager.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Configuration.Install" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Diagnostics.DiagnosticSource, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Diagnostics.DiagnosticSource.9.0.8\lib\net462\System.Diagnostics.DiagnosticSource.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.IO.Pipelines, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.IO.Pipelines.9.0.8\lib\net462\System.IO.Pipelines.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Management" />
+    <Reference Include="System.Memory, Version=4.0.5.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Memory.4.6.3\lib\net462\System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Numerics" />
+    <Reference Include="System.Numerics.Vectors, Version=4.1.6.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Numerics.Vectors.4.6.1\lib\net462\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.3.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Runtime.CompilerServices.Unsafe.6.1.2\lib\net462\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.Encodings.Web, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Encodings.Web.9.0.8\lib\net462\System.Text.Encodings.Web.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Text.Json, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Text.Json.9.0.8\lib\net462\System.Text.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Channels, Version=9.0.0.8, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Threading.Channels.9.0.8\lib\net462\System.Threading.Channels.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.4.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.Threading.Tasks.Extensions.4.6.3\lib\net462\System.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
+    <Reference Include="System.ValueTuple, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>..\packages\System.ValueTuple.4.5.0\lib\net47\System.ValueTuple.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="DTOs\AllegroApi\AllegroErrorResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\AllegroImageResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\AllegroOfferDetails.cs" />
+    <Compile Include="DTOs\AllegroApi\CategoriesResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\CategoryParametersResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\CompatibleProductGroupsResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\CompatibleProductsResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\OffersResponse.cs" />
+    <Compile Include="DTOs\AllegroApi\ProductOfferRequest.cs" />
+    <Compile Include="DTOs\AllegroApi\ShippingRatesReponse.cs" />
+    <Compile Include="DTOs\AllegroApi\SupportedCategoriesReponse.cs" />
+    <Compile Include="DTOs\Settings\AppSettings.cs" />
+    <Compile Include="Helpers\AsyncHelpers.cs" />
+    <Compile Include="Helpers\ConjugationHelper.cs" />
+    <Compile Include="Helpers\OfferFactory.cs" />
+    <Compile Include="Migrations\202508201113326_AddProductUnit.cs" />
+    <Compile Include="Migrations\202508201113326_AddProductUnit.Designer.cs">
+      <DependentUpon>202508201113326_AddProductUnit.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508201352391_AddProductAllegroCategory.cs" />
+    <Compile Include="Migrations\202508201352391_AddProductAllegroCategory.Designer.cs">
+      <DependentUpon>202508201352391_AddProductAllegroCategory.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508220643103_CategoryParameters.cs" />
+    <Compile Include="Migrations\202508220643103_CategoryParameters.Designer.cs">
+      <DependentUpon>202508220643103_CategoryParameters.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508220846073_CategoryParameters-fix.cs" />
+    <Compile Include="Migrations\202508220846073_CategoryParameters-fix.Designer.cs">
+      <DependentUpon>202508220846073_CategoryParameters-fix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508221210224_ProductParameters.cs" />
+    <Compile Include="Migrations\202508221210224_ProductParameters.Designer.cs">
+      <DependentUpon>202508221210224_ProductParameters.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508221224301_ProductParameters-fix.cs" />
+    <Compile Include="Migrations\202508221224301_ProductParameters-fix.Designer.cs">
+      <DependentUpon>202508221224301_ProductParameters-fix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508221802402_ParametersLink-Fix.cs" />
+    <Compile Include="Migrations\202508221802402_ParametersLink-Fix.Designer.cs">
+      <DependentUpon>202508221802402_ParametersLink-Fix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508231251205_ProductAllegoImages.cs" />
+    <Compile Include="Migrations\202508231251205_ProductAllegoImages.Designer.cs">
+      <DependentUpon>202508231251205_ProductAllegoImages.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508231340467_ParametersFields.cs" />
+    <Compile Include="Migrations\202508231340467_ParametersFields.Designer.cs">
+      <DependentUpon>202508231340467_ParametersFields.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508231810288_CompatibilityList.cs" />
+    <Compile Include="Migrations\202508231810288_CompatibilityList.Designer.cs">
+      <DependentUpon>202508231810288_CompatibilityList.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508231817277_CompatibilityFieldsFix.cs" />
+    <Compile Include="Migrations\202508231817277_CompatibilityFieldsFix.Designer.cs">
+      <DependentUpon>202508231817277_CompatibilityFieldsFix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508240748362_AllegroCategories.cs" />
+    <Compile Include="Migrations\202508240748362_AllegroCategories.Designer.cs">
+      <DependentUpon>202508240748362_AllegroCategories.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508240825295_AllegroCategoriesFix.cs" />
+    <Compile Include="Migrations\202508240825295_AllegroCategoriesFix.Designer.cs">
+      <DependentUpon>202508240825295_AllegroCategoriesFix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508241131173_Datetime2ColumnChange.cs" />
+    <Compile Include="Migrations\202508241131173_Datetime2ColumnChange.Designer.cs">
+      <DependentUpon>202508241131173_Datetime2ColumnChange.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508241148432_AllegroExpirationDateFix.cs" />
+    <Compile Include="Migrations\202508241148432_AllegroExpirationDateFix.Designer.cs">
+      <DependentUpon>202508241148432_AllegroExpirationDateFix.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508251825424_DeliveryTypeProduct.cs" />
+    <Compile Include="Migrations\202508251825424_DeliveryTypeProduct.Designer.cs">
+      <DependentUpon>202508251825424_DeliveryTypeProduct.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508252118410_AllegroOffer.cs" />
+    <Compile Include="Migrations\202508252118410_AllegroOffer.Designer.cs">
+      <DependentUpon>202508252118410_AllegroOffer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508252150327_CodeGaskaUnique.cs" />
+    <Compile Include="Migrations\202508252150327_CodeGaskaUnique.Designer.cs">
+      <DependentUpon>202508252150327_CodeGaskaUnique.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508252202011_ProductOfferRealation.cs" />
+    <Compile Include="Migrations\202508252202011_ProductOfferRealation.Designer.cs">
+      <DependentUpon>202508252202011_ProductOfferRealation.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508261926390_OffertStartingAt.cs" />
+    <Compile Include="Migrations\202508261926390_OffertStartingAt.Designer.cs">
+      <DependentUpon>202508261926390_OffertStartingAt.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508271155454_OfferDatetime2Convert.cs" />
+    <Compile Include="Migrations\202508271155454_OfferDatetime2Convert.Designer.cs">
+      <DependentUpon>202508271155454_OfferDatetime2Convert.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508281712399_AllegroLogoUrl.cs" />
+    <Compile Include="Migrations\202508281712399_AllegroLogoUrl.Designer.cs">
+      <DependentUpon>202508281712399_AllegroLogoUrl.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508281801383_CategoryIdTypeChange.cs" />
+    <Compile Include="Migrations\202508281801383_CategoryIdTypeChange.Designer.cs">
+      <DependentUpon>202508281801383_CategoryIdTypeChange.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202508311709143_CascadeProductParametersDelete.cs" />
+    <Compile Include="Migrations\202508311709143_CascadeProductParametersDelete.Designer.cs">
+      <DependentUpon>202508311709143_CascadeProductParametersDelete.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202510031003328_AddOffersDetails.cs" />
+    <Compile Include="Migrations\202510031003328_AddOffersDetails.Designer.cs">
+      <DependentUpon>202510031003328_AddOffersDetails.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202510031038172_AddErliBool.cs" />
+    <Compile Include="Migrations\202510031038172_AddErliBool.Designer.cs">
+      <DependentUpon>202510031038172_AddErliBool.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202510031234035_AddMoreFields.cs" />
+    <Compile Include="Migrations\202510031234035_AddMoreFields.Designer.cs">
+      <DependentUpon>202510031234035_AddMoreFields.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Models\AllegroCategory.cs" />
+    <Compile Include="Models\AllegroOffer.cs" />
+    <Compile Include="Models\AllegroOfferAttribute.cs" />
+    <Compile Include="Models\AllegroOfferDescription.cs" />
+    <Compile Include="Models\CategoryParameter.cs" />
+    <Compile Include="Models\CategoryParameterValue.cs" />
+    <Compile Include="Models\CompatibileProduct.cs" />
+    <Compile Include="Models\Product\ProductParameter.cs" />
+    <Compile Include="Repositories\CategoryRepository.cs" />
+    <Compile Include="Repositories\DbTokenRepository.cs" />
+    <Compile Include="Repositories\ImageRepository.cs" />
+    <Compile Include="Repositories\Interfaces\ICategoryRepository.cs" />
+    <Compile Include="Repositories\Interfaces\IImageRepository.cs" />
+    <Compile Include="Repositories\Interfaces\IOfferRepository.cs" />
+    <Compile Include="Repositories\Interfaces\IProductRepository.cs" />
+    <Compile Include="Data\MyDbContext.cs" />
+    <Compile Include="Repositories\OfferRepository.cs" />
+    <Compile Include="Repositories\ProductRepository.cs" />
+    <Compile Include="DTOs\AllegroApi\MatchingCategoriesResponse.cs" />
+    <Compile Include="DTOs\GaskaApi\ProductResponse.cs" />
+    <Compile Include="DTOs\GaskaApi\ProductsResponse.cs" />
+    <Compile Include="DTOs\Settings\AllegroApiCredentials.cs" />
+    <Compile Include="DTOs\AllegroApi\DeviceCodeResponseDto.cs" />
+    <Compile Include="DTOs\Settings\GaskaApiCredentials.cs" />
+    <Compile Include="DTOs\TokenDto.cs" />
+    <Compile Include="DTOs\AllegroApi\TokenResponseDto.cs" />
+    <Compile Include="Helpers\ApiHelper.cs" />
+    <Compile Include="Helpers\AppSettingsLoader.cs" />
+    <Compile Include="Helpers\CategoriesHelper.cs" />
+    <Compile Include="Repositories\Interfaces\ITokenRepository.cs" />
+    <Compile Include="GaskaAllegroSyncService.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="GaskaAllegroSyncService.Designer.cs">
+      <DependentUpon>GaskaAllegroSyncService.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Logging\LogConfig.cs" />
+    <Compile Include="Migrations\202508200653359_InitialCreate.cs" />
+    <Compile Include="Migrations\202508200653359_InitialCreate.Designer.cs">
+      <DependentUpon>202508200653359_InitialCreate.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\Configuration.cs" />
+    <Compile Include="Models\AllegroTokenEntity.cs" />
+    <Compile Include="Models\Product\Application.cs" />
+    <Compile Include="Models\Product\Component.cs" />
+    <Compile Include="Models\Product\CrossNumber.cs" />
+    <Compile Include="Models\Product\Package.cs" />
+    <Compile Include="Models\Product\Product.cs" />
+    <Compile Include="Models\Product\ProductCategory.cs" />
+    <Compile Include="Models\Product\ProductFile.cs" />
+    <Compile Include="Models\Product\ProductImage.cs" />
+    <Compile Include="Models\Product\ProductAttribute.cs" />
+    <Compile Include="Models\Product\RecommendedPart.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="ProjectInstaller.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="ProjectInstaller.Designer.cs">
+      <DependentUpon>ProjectInstaller.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\AllegroApi\AllegroApiClient.cs" />
+    <Compile Include="Services\AllegroApi\AllegroCategoryService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroCompatibilityService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroImageService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroOfferService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroParametersService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroCategoryService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroCompatibilityService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroImageService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroOfferService.cs" />
+    <Compile Include="Services\AllegroApi\Interfaces\IAllegroParametersService.cs" />
+    <Compile Include="Services\AllegroApi\AllegroAuthService.cs" />
+    <Compile Include="Services\GaskaApi\GaskaApiService.cs" />
+    <Compile Include="Services\GaskaApi\Interfaces\IGaskaApiService.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\202508200653359_InitialCreate.resx">
+      <DependentUpon>202508200653359_InitialCreate.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508201113326_AddProductUnit.resx">
+      <DependentUpon>202508201113326_AddProductUnit.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508201352391_AddProductAllegroCategory.resx">
+      <DependentUpon>202508201352391_AddProductAllegroCategory.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508220643103_CategoryParameters.resx">
+      <DependentUpon>202508220643103_CategoryParameters.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508220846073_CategoryParameters-fix.resx">
+      <DependentUpon>202508220846073_CategoryParameters-fix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508221210224_ProductParameters.resx">
+      <DependentUpon>202508221210224_ProductParameters.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508221224301_ProductParameters-fix.resx">
+      <DependentUpon>202508221224301_ProductParameters-fix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508221802402_ParametersLink-Fix.resx">
+      <DependentUpon>202508221802402_ParametersLink-Fix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508231251205_ProductAllegoImages.resx">
+      <DependentUpon>202508231251205_ProductAllegoImages.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508231340467_ParametersFields.resx">
+      <DependentUpon>202508231340467_ParametersFields.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508231810288_CompatibilityList.resx">
+      <DependentUpon>202508231810288_CompatibilityList.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508231817277_CompatibilityFieldsFix.resx">
+      <DependentUpon>202508231817277_CompatibilityFieldsFix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508240748362_AllegroCategories.resx">
+      <DependentUpon>202508240748362_AllegroCategories.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508240825295_AllegroCategoriesFix.resx">
+      <DependentUpon>202508240825295_AllegroCategoriesFix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508241131173_Datetime2ColumnChange.resx">
+      <DependentUpon>202508241131173_Datetime2ColumnChange.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508241148432_AllegroExpirationDateFix.resx">
+      <DependentUpon>202508241148432_AllegroExpirationDateFix.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508251825424_DeliveryTypeProduct.resx">
+      <DependentUpon>202508251825424_DeliveryTypeProduct.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508252118410_AllegroOffer.resx">
+      <DependentUpon>202508252118410_AllegroOffer.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508252150327_CodeGaskaUnique.resx">
+      <DependentUpon>202508252150327_CodeGaskaUnique.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508252202011_ProductOfferRealation.resx">
+      <DependentUpon>202508252202011_ProductOfferRealation.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508261926390_OffertStartingAt.resx">
+      <DependentUpon>202508261926390_OffertStartingAt.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508271155454_OfferDatetime2Convert.resx">
+      <DependentUpon>202508271155454_OfferDatetime2Convert.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508281712399_AllegroLogoUrl.resx">
+      <DependentUpon>202508281712399_AllegroLogoUrl.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508281801383_CategoryIdTypeChange.resx">
+      <DependentUpon>202508281801383_CategoryIdTypeChange.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202508311709143_CascadeProductParametersDelete.resx">
+      <DependentUpon>202508311709143_CascadeProductParametersDelete.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202510031003328_AddOffersDetails.resx">
+      <DependentUpon>202510031003328_AddOffersDetails.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202510031038172_AddErliBool.resx">
+      <DependentUpon>202510031038172_AddErliBool.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202510031234035_AddMoreFields.resx">
+      <DependentUpon>202510031234035_AddMoreFields.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ProjectInstaller.resx">
+      <DependentUpon>ProjectInstaller.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Images\jsagro-logo.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>Ten projekt zawiera odwołania do pakietów NuGet, których nie ma na tym komputerze. Użyj przywracania pakietów NuGet, aby je pobrać. Aby uzyskać więcej informacji, zobacz http://go.microsoft.com/fwlink/?LinkID=322105. Brakujący plik: {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.props')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\EntityFramework.6.5.1\build\EntityFramework.props'))" />
+    <Error Condition="!Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\EntityFramework.6.5.1\build\EntityFramework.targets'))" />
+    <Error Condition="!Exists('..\packages\Serilog.4.3.0\build\Serilog.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Serilog.4.3.0\build\Serilog.targets'))" />
+  </Target>
+  <Import Project="..\packages\EntityFramework.6.5.1\build\EntityFramework.targets" Condition="Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.targets')" />
+  <Import Project="..\packages\Serilog.4.3.0\build\Serilog.targets" Condition="Exists('..\packages\Serilog.4.3.0\build\Serilog.targets')" />
+</Project>
