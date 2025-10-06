@@ -20,11 +20,8 @@ namespace ServiceManager
         private DispatcherTimer refreshTimer;
         private ServiceController _serviceController;
         private FileSystemWatcher _logWatcher;
-
-        private readonly string _externalConfigPath = ConfigurationManager.AppSettings["ExternalConfigPath"].ToString();
-        private readonly string _logFolderPath = ConfigurationManager.AppSettings["LogFolderPath"].ToString();
-        private readonly string _serviceName = ConfigurationManager.AppSettings["ServiceName"].ToString();
-
+        public ObservableCollection<ServiceItem> AvailableServices { get; } = new ObservableCollection<ServiceItem>();
+        private ServiceItem? _selectedService;
         private const int InitialTailLines = 2000;
         private const int PageLines = 1000;
 
@@ -39,28 +36,119 @@ namespace ServiceManager
         public MainWindow()
         {
             InitializeComponent();
+            IcAvailableServices.ItemsSource = AvailableServices;
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            _serviceController = new ServiceController(_serviceName);
-            IcLogLines.AddHandler(
-                ScrollViewer.ScrollChangedEvent,
-                new ScrollChangedEventHandler(IcLogLines_ScrollChanged),
-                handledEventsToo: true);
-            RefreshServiceStatus();
-            InitLogWatcher();
+            LoadAvailableServices();
+
+            if (AvailableServices.Count == 1)
+            {
+                SelectService(AvailableServices[0]);
+                ServiceSelectionOverlay.Visibility = Visibility.Collapsed;
+                MainContentAreaNav.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ServiceSelectionOverlay.Visibility = Visibility.Visible;
+                MainContentAreaNav.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void InitLogWatcher()
         {
-            _logWatcher = new FileSystemWatcher(_logFolderPath, "*.txt")
+            // Dispose previous watcher if it exists
+            if (_logWatcher != null)
+            {
+                _logWatcher.EnableRaisingEvents = false;
+                _logWatcher.Created -= (s, e) => Dispatcher.Invoke(LoadLogFiles);
+                _logWatcher.Deleted -= (s, e) => Dispatcher.Invoke(LoadLogFiles);
+                _logWatcher.Dispose();
+                _logWatcher = null;
+            }
+
+            if (string.IsNullOrEmpty(_selectedService?.LogFolderPath) || !Directory.Exists(_selectedService.LogFolderPath))
+                return;
+
+            _logWatcher = new FileSystemWatcher(_selectedService.LogFolderPath, "*.txt")
             {
                 EnableRaisingEvents = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
             };
             _logWatcher.Created += (s, e) => Dispatcher.Invoke(LoadLogFiles);
             _logWatcher.Deleted += (s, e) => Dispatcher.Invoke(LoadLogFiles);
+        }
+
+        private void LoadAvailableServices()
+        {
+            AvailableServices.Clear();
+
+            var keys = ConfigurationManager.AppSettings.AllKeys
+                .Where(k => k.StartsWith("Service_"))
+                .Select(k => k.Split('_')[1]) // "Allegro", "Erli"
+                .Distinct();
+
+            foreach (var key in keys)
+            {
+                var service = new ServiceItem
+                {
+                    Id = key,
+                    Name = ConfigurationManager.AppSettings[$"Service_{key}_Name"] ?? key,
+                    LogoPath = ConfigurationManager.AppSettings[$"Service_{key}_LogoPath"] ?? "",
+                    ServiceName = ConfigurationManager.AppSettings[$"Service_{key}_ServiceName"] ?? "",
+                    LogFolderPath = ConfigurationManager.AppSettings[$"Service_{key}_LogFolder"] ?? "",
+                    ExternalConfigPath = ConfigurationManager.AppSettings[$"Service_{key}_ConfigPath"] ?? ""
+                };
+                AvailableServices.Add(service);
+            }
+
+            CbServiceSelector.ItemsSource = AvailableServices;
+        }
+
+        private void SelectService(ServiceItem service)
+        {
+            if (service == null) return;
+
+            _selectedService = service;
+            _serviceController = new ServiceController(service.ServiceName);
+
+            InitLogWatcher();
+            RefreshServiceStatus();
+            LoadLogFiles();
+            LoadConfig();
+            ServiceNameTextBox.Text = service.Name;
+        }
+
+        private void ServiceButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is ServiceItem service)
+            {
+                SelectService(service);
+                CbServiceSelector.SelectedValue = service.Id;
+                ServiceSelectionOverlay.Visibility = Visibility.Collapsed;
+                CbServiceSelector.Visibility = Visibility.Visible;
+                MainContentAreaNav.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void CbServiceSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (CbServiceSelector.SelectedItem is ServiceItem selected)
+            {
+                SelectService(selected);
+
+                // Make sure UI panels update correctly
+                ServiceSelectionOverlay.Visibility = Visibility.Collapsed;
+                CbServiceSelector.Visibility = Visibility.Visible;
+                MainContentAreaNav.Visibility = Visibility.Visible;
+
+                MainContentArea.Visibility = Visibility.Collapsed;
+                LogsViewContainer.Visibility = Visibility.Collapsed;
+                ConfigViewContainer.Visibility = Visibility.Collapsed;
+                BtnShowLogs.IsChecked = false;
+                BtnShowConfig.IsChecked = false;
+            }
         }
 
         private void BtnShowLogs_Click(object sender, RoutedEventArgs e)
@@ -144,53 +232,87 @@ namespace ServiceManager
 
         private void LoadConfig()
         {
+            if (_selectedService == null) return;
+
             try
             {
-                var map = new ExeConfigurationFileMap { ExeConfigFilename = _externalConfigPath };
-                Configuration externalConfig = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
+                var map = new ExeConfigurationFileMap { ExeConfigFilename = _selectedService.ExternalConfigPath };
+                var config = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
 
-                // Gaska API
-                TxtGaskaApiBaseUrl.Text = externalConfig.AppSettings.Settings["GaskaApiBaseUrl"]?.Value ?? "";
-                TxtGaskaApiAcronym.Text = externalConfig.AppSettings.Settings["GaskaApiAcronym"]?.Value ?? "";
-                TxtGaskaApiPerson.Text = externalConfig.AppSettings.Settings["GaskaApiPerson"]?.Value ?? "";
-                TxtGaskaApiPassword.Text = externalConfig.AppSettings.Settings["GaskaApiPassword"]?.Value ?? "";
-                TxtGaskaApiKey.Text = externalConfig.AppSettings.Settings["GaskaApiKey"]?.Value ?? "";
-                TxtGaskaApiProductsPerPage.Text = externalConfig.AppSettings.Settings["GaskaApiProductsPerPage"]?.Value ?? "";
-                TxtGaskaApiProductsInterval.Text = externalConfig.AppSettings.Settings["GaskaApiProductsInterval"]?.Value ?? "";
-                TxtGaskaApiProductPerDay.Text = externalConfig.AppSettings.Settings["GaskaApiProductPerDay"]?.Value ?? "";
-                TxtGaskaApiProductInterval.Text = externalConfig.AppSettings.Settings["GaskaApiProductInterval"]?.Value ?? "";
+                ConfigStackPanel.Children.Clear();
 
-                // Allegro API
-                TxtAllegroApiBaseUrl.Text = externalConfig.AppSettings.Settings["AllegroApiBaseUrl"]?.Value ?? "";
-                TxtAllegroAuthBaseUrl.Text = externalConfig.AppSettings.Settings["AllegroAuthBaseUrl"]?.Value ?? "";
-                TxtAllegroClientName.Text = externalConfig.AppSettings.Settings["AllegroClientName"]?.Value ?? "";
-                TxtAllegroClientId.Text = externalConfig.AppSettings.Settings["AllegroClientId"]?.Value ?? "";
-                TxtAllegroClientSecret.Text = externalConfig.AppSettings.Settings["AllegroClientSecret"]?.Value ?? "";
-                TxtAllegroScope.Text = externalConfig.AppSettings.Settings["AllegroScope"]?.Value ?? "";
+                var groupedFields = ConfigFieldDefinitions.AllFields.GroupBy(f => f.Group);
 
-                // Other settings
-                TxtGaskaCategoriesId.Text = externalConfig.AppSettings.Settings["GaskaCategoriesId"]?.Value ?? "";
-                TxtLogsExpirationDays.Text = externalConfig.AppSettings.Settings["LogsExpirationDays"]?.Value ?? "";
-                TxtFetchIntervalMinutes.Text = externalConfig.AppSettings.Settings["FetchIntervalMinutes"]?.Value ?? "";
-                TxtOwnMarginPercent.Text = externalConfig.AppSettings.Settings["OwnMarginPercent"]?.Value ?? "";
-                TxtAllegroMarginUnder5PLN.Text = externalConfig.AppSettings.Settings["AllegroMarginUnder5PLN"]?.Value ?? "";
-                TxtAllegroMarginBetween5and1000PLNPercent.Text = externalConfig.AppSettings.Settings["AllegroMarginBetween5and1000PLNPercent"]?.Value ?? "";
-                TxtAllegroMarginMoreThan1000PLN.Text = externalConfig.AppSettings.Settings["AllegroMarginMoreThan1000PLN"]?.Value ?? "";
-                TxtAddPLNToBulkyProducts.Text = externalConfig.AppSettings.Settings["AddPLNToBulkyProducts"]?.Value ?? "";
-                TxtAddPLNToCustomProducts.Text = externalConfig.AppSettings.Settings["AddPLNToCustomProducts"]?.Value ?? "";
-                TxtAllegroDeliveryName.Text = externalConfig.AppSettings.Settings["AllegroDeliveryName"]?.Value ?? "";
-                TxtAllegroHandlingTime.Text = externalConfig.AppSettings.Settings["AllegroHandlingTime"]?.Value ?? "";
-                TxtAllegroHandlingTimeCustomProducts.Text = externalConfig.AppSettings.Settings["AllegroHandlingTimeCustomProducts"]?.Value ?? "";
-                TxtAllegroSafetyMeasures.Text = (externalConfig.AppSettings.Settings["AllegroSafetyMeasures"]?.Value ?? "").Replace("\\r\\n", Environment.NewLine);
-                TxtAllegroWarranty.Text = externalConfig.AppSettings.Settings["AllegroWarranty"]?.Value ?? "";
-                TxtAllegroReturnPolicy.Text = externalConfig.AppSettings.Settings["AllegroReturnPolicy"]?.Value ?? "";
-                TxtAllegroImpliedWarranty.Text = externalConfig.AppSettings.Settings["AllegroImpliedWarranty"]?.Value ?? "";
-                TxtAllegroResponsiblePerson.Text = externalConfig.AppSettings.Settings["AllegroResponsiblePerson"]?.Value ?? "";
-                TxtAllegroResponsibleProducer.Text = externalConfig.AppSettings.Settings["AllegroResponsibleProducer"]?.Value ?? "";
-            }
-            catch (ConfigurationErrorsException confEx)
-            {
-                MessageBox.Show($"Błąd w pliku konfiguracyjnym: {confEx.Message}");
+                foreach (var group in groupedFields)
+                {
+                    // Keep only fields that exist in config
+                    var existingFields = group.Where(f => config.AppSettings.Settings.AllKeys.Contains(f.Key)).ToList();
+
+                    if (!existingFields.Any())
+                        continue; // skip empty groups
+
+                    var groupBox = new GroupBox { Header = group.Key, Margin = new Thickness(0, 6, 0, 6) };
+                    var groupPanel = new StackPanel { Margin = new Thickness(6) };
+
+                    foreach (var field in existingFields)
+                    {
+                        string value = config.AppSettings.Settings[field.Key]?.Value ?? "";
+
+                        var label = new TextBlock
+                        {
+                            Text = field.Label,
+                            Margin = new Thickness(0, 4, 0, 4),
+                            VerticalAlignment = VerticalAlignment.Center,
+                            ToolTip = string.IsNullOrEmpty(field.Description) ? null : field.Description
+                        };
+
+                        var textbox = new TextBox
+                        {
+                            Text = value,
+                            Margin = new Thickness(0, 4, 0, 4),
+                            IsEnabled = field.IsEnabled,
+                            Tag = field.Key,
+                            AcceptsReturn = field.Key == "AllegroSafetyMeasures",
+                            Height = field.Key == "AllegroSafetyMeasures" ? 120 : Double.NaN,
+                            TextWrapping = TextWrapping.Wrap
+                        };
+
+                        var grid = new Grid();
+                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
+                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                        Grid.SetColumn(label, 0);
+                        Grid.SetColumn(textbox, 1);
+
+                        grid.Children.Add(label);
+                        grid.Children.Add(textbox);
+
+                        groupPanel.Children.Add(grid);
+                    }
+
+                    groupBox.Content = groupPanel;
+                    ConfigStackPanel.Children.Add(groupBox);
+                }
+
+                var saveButton = new Button
+                {
+                    Content = "Zapisz",
+                    Margin = new Thickness(6, 12, 6, 24),
+                    Padding = new Thickness(12, 6, 12, 6),
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Brushes.White,
+                    Background = new SolidColorBrush(Color.FromRgb(0x4A, 0x90, 0xE2)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(0x35, 0x7A, 0xBD)),
+                    BorderThickness = new Thickness(1),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Width = 120
+                };
+
+                saveButton.Click += BtnSaveConfig_Click;
+
+                ConfigStackPanel.Children.Add(saveButton);
+
+                ConfigViewContainer.Visibility = Visibility.Visible;
             }
             catch (Exception ex)
             {
@@ -198,14 +320,52 @@ namespace ServiceManager
             }
         }
 
-        private void LoadLogFiles()
+        private void BtnReloadConfig_Click(object sender, RoutedEventArgs e)
         {
-            logFiles.Clear();
-            if (!Directory.Exists(_logFolderPath)) return;
+            LoadConfig();
+        }
+
+        private void BtnSaveConfig_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedService == null) return;
 
             try
             {
-                var files = Directory.GetFiles(_logFolderPath, "*.txt")
+                var map = new ExeConfigurationFileMap { ExeConfigFilename = _selectedService.ExternalConfigPath };
+                var config = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
+
+                foreach (var grid in ConfigStackPanel.Children.OfType<GroupBox>()
+                             .SelectMany(gb => ((StackPanel)gb.Content).Children.OfType<Grid>()))
+                {
+                    var tb = grid.Children.OfType<TextBox>().FirstOrDefault();
+                    if (tb != null && tb.Tag is string key)
+                    {
+                        string value = tb.Text;
+                        if (config.AppSettings.Settings[key] != null)
+                            config.AppSettings.Settings[key].Value = value;
+                        else
+                            config.AppSettings.Settings.Add(key, value);
+                    }
+                }
+
+                config.Save(ConfigurationSaveMode.Modified);
+                ConfigurationManager.RefreshSection("appSettings");
+                MessageBox.Show("Konfiguracja zapisana.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Nie udało się zapisać konfiguracji: {ex.Message}", "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void LoadLogFiles()
+        {
+            logFiles.Clear();
+            if (!Directory.Exists(_selectedService.LogFolderPath)) return;
+
+            try
+            {
+                var files = Directory.GetFiles(_selectedService.LogFolderPath, "*.txt")
                     .Select(filePath =>
                     {
                         int warnings = 0;
@@ -363,111 +523,6 @@ namespace ServiceManager
 
             TxtSelectedFileName.Text = ((LogFileItem)LvLogFiles.SelectedItem).Name;
             LoadSelectedFileContent();
-        }
-
-        private void BtnReloadConfig_Click(object sender, RoutedEventArgs e)
-        {
-            LoadConfig();
-        }
-
-        private void BtnSaveConfig_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // --- Walidacja ---
-                var errors = new List<string>();
-
-                // decimal
-                if (!decimal.TryParse(TxtAllegroMarginMoreThan1000PLN.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
-                    errors.Add("'Marża allegro powyżej 1000 PLN (w PLN)' musi być liczbą dziesiętną.");
-
-                if (!decimal.TryParse(TxtAddPLNToBulkyProducts.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
-                    errors.Add("'Dodatek PLN do towarów gabarytowych (żółty samochodzik)' musi być liczbą dziesiętną.");
-
-                if (!decimal.TryParse(TxtAddPLNToCustomProducts.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
-                    errors.Add("'Dodatek PLN do towarów niestandardowych (czerwony samochodzik)' musi być liczbą dziesiętną.");
-
-                if (!decimal.TryParse(TxtAllegroMarginBetween5and1000PLNPercent.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
-                    errors.Add("'Marża allegro 5-1000 PLN (w %)' musi być liczbą dziesiętną.");
-
-                if (!decimal.TryParse(TxtAllegroMarginUnder5PLN.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
-                    errors.Add("'Marża allegro poniżej 5 PLN (w PLN)' musi być liczbą dziesiętną.");
-
-                if (!decimal.TryParse(TxtOwnMarginPercent.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
-                    errors.Add("'Własna marża (%)' musi być liczbą dziesiętną.");
-
-                // int
-                if (!int.TryParse(TxtFetchIntervalMinutes.Text, out _))
-                    errors.Add("'Co ile odświeżać stany/ceny' musi być liczbą całkowitą.");
-                if (!int.TryParse(TxtLogsExpirationDays.Text, out _))
-                    errors.Add("'Ilość dni zachowania logów' musi być liczbą całkowitą.");
-
-                if (errors.Any())
-                {
-                    MessageBox.Show(
-                        "Błędy walidacji:\n" + string.Join("\n", errors),
-                        "Walidacja",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning
-                    );
-                    return;
-                }
-
-                var map = new ExeConfigurationFileMap { ExeConfigFilename = _externalConfigPath };
-                Configuration externalConfig = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
-
-                // --- Gaska API ---
-                externalConfig.AppSettings.Settings["GaskaApiBaseUrl"].Value = TxtGaskaApiBaseUrl.Text;
-                externalConfig.AppSettings.Settings["GaskaApiAcronym"].Value = TxtGaskaApiAcronym.Text;
-                externalConfig.AppSettings.Settings["GaskaApiPerson"].Value = TxtGaskaApiPerson.Text;
-                externalConfig.AppSettings.Settings["GaskaApiPassword"].Value = TxtGaskaApiPassword.Text;
-                externalConfig.AppSettings.Settings["GaskaApiKey"].Value = TxtGaskaApiKey.Text;
-                externalConfig.AppSettings.Settings["GaskaApiProductsPerPage"].Value = TxtGaskaApiProductsPerPage.Text;
-                externalConfig.AppSettings.Settings["GaskaApiProductsInterval"].Value = TxtGaskaApiProductsInterval.Text;
-                externalConfig.AppSettings.Settings["GaskaApiProductPerDay"].Value = TxtGaskaApiProductPerDay.Text;
-                externalConfig.AppSettings.Settings["GaskaApiProductInterval"].Value = TxtGaskaApiProductInterval.Text;
-
-                // --- Allegro API ---
-                externalConfig.AppSettings.Settings["AllegroApiBaseUrl"].Value = TxtAllegroApiBaseUrl.Text;
-                externalConfig.AppSettings.Settings["AllegroAuthBaseUrl"].Value = TxtAllegroAuthBaseUrl.Text;
-                externalConfig.AppSettings.Settings["AllegroClientName"].Value = TxtAllegroClientName.Text;
-                externalConfig.AppSettings.Settings["AllegroClientId"].Value = TxtAllegroClientId.Text;
-                externalConfig.AppSettings.Settings["AllegroClientSecret"].Value = TxtAllegroClientSecret.Text;
-                externalConfig.AppSettings.Settings["AllegroScope"].Value = TxtAllegroScope.Text;
-
-                // --- Other settings ---
-                externalConfig.AppSettings.Settings["GaskaCategoriesId"].Value = TxtGaskaCategoriesId.Text;
-                externalConfig.AppSettings.Settings["LogsExpirationDays"].Value = TxtLogsExpirationDays.Text;
-                externalConfig.AppSettings.Settings["FetchIntervalMinutes"].Value = TxtFetchIntervalMinutes.Text;
-                externalConfig.AppSettings.Settings["OwnMarginPercent"].Value = TxtOwnMarginPercent.Text;
-                externalConfig.AppSettings.Settings["AllegroMarginUnder5PLN"].Value = TxtAllegroMarginUnder5PLN.Text;
-                externalConfig.AppSettings.Settings["AllegroMarginBetween5and1000PLNPercent"].Value = TxtAllegroMarginBetween5and1000PLNPercent.Text;
-                externalConfig.AppSettings.Settings["AllegroMarginMoreThan1000PLN"].Value = TxtAllegroMarginMoreThan1000PLN.Text;
-                externalConfig.AppSettings.Settings["AddPLNToBulkyProducts"].Value = TxtAddPLNToBulkyProducts.Text;
-                externalConfig.AppSettings.Settings["AddPLNToCustomProducts"].Value = TxtAddPLNToCustomProducts.Text;
-                externalConfig.AppSettings.Settings["AllegroDeliveryName"].Value = TxtAllegroDeliveryName.Text;
-                externalConfig.AppSettings.Settings["AllegroHandlingTime"].Value = TxtAllegroHandlingTime.Text;
-                externalConfig.AppSettings.Settings["AllegroHandlingTimeCustomProducts"].Value = TxtAllegroHandlingTimeCustomProducts.Text;
-                externalConfig.AppSettings.Settings["AllegroSafetyMeasures"].Value = TxtAllegroSafetyMeasures.Text.Replace(Environment.NewLine, "\\r\\n");
-                externalConfig.AppSettings.Settings["AllegroWarranty"].Value = TxtAllegroWarranty.Text;
-                externalConfig.AppSettings.Settings["AllegroReturnPolicy"].Value = TxtAllegroReturnPolicy.Text;
-                externalConfig.AppSettings.Settings["AllegroImpliedWarranty"].Value = TxtAllegroImpliedWarranty.Text;
-                externalConfig.AppSettings.Settings["AllegroResponsiblePerson"].Value = TxtAllegroResponsiblePerson.Text;
-                externalConfig.AppSettings.Settings["AllegroResponsibleProducer"].Value = TxtAllegroResponsibleProducer.Text;
-
-                externalConfig.Save(ConfigurationSaveMode.Modified);
-
-                ConfigurationManager.RefreshSection("appSettings");
-                MessageBox.Show("Konfiguracja zapisana.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (ConfigurationErrorsException confEx)
-            {
-                MessageBox.Show($"Błąd w pliku konfiguracyjnym: {confEx.Message}", "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Nie udało się zapisać konfiguracji: {ex.Message}", "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
         }
 
         private void RefreshServiceStatus()

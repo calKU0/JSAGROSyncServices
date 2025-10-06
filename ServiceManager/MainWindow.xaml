@@ -91,117 +91,156 @@
     </Window.Resources>
 
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
+        <!-- Service selection overlay -->
+        <Grid x:Name="ServiceSelectionOverlay" Background="#CCFFFFFF" Visibility="Visible" ZIndex="10">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="Wybierz serwis do obserwacji" FontSize="24" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center" />
+                <ItemsControl x:Name="IcAvailableServices"
+                              ItemsSource="{Binding AvailableServices}"
+                              HorizontalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Click="ServiceButton_Click"
+                                    Margin="10"
+                                    Padding="6"
+                                    Width="240" Height="240"
+                                    Tag="{Binding Id}">
+                                <StackPanel>
+                                    <Image Source="{Binding LogoPath}" Width="180" Height="180" HorizontalAlignment="Center" />
+                                    <TextBlock Text="{Binding Name}" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Grid>
 
-        <!-- Left navigation panel -->
-        <Border Grid.Column="0" Background="#E0E4EA" BorderBrush="#B0B6C0" BorderThickness="0,0,1,0" Padding="8">
-            <DockPanel>
+        <Grid x:Name="MainContentAreaNav" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-                <!-- Top header + nav buttons -->
-                <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Text="GaskaAllegroSync" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="6,6,6,0" />
-                    <TextBlock Text="Panel" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
+            <!-- Left navigation panel -->
+            <Border Grid.Column="0" Background="#E0E4EA" BorderBrush="#B0B6C0" BorderThickness="0,0,1,0" Padding="8">
+                <DockPanel>
 
-                    <!-- Nav buttons -->
-                    <StackPanel Margin="6,20,6,6">
-                        <RadioButton x:Name="BtnShowLogs" Style="{StaticResource NavRadioButtonStyle}" GroupName="NavGroup" Click="BtnShowLogs_Click">
-                            Podgląd logów
-                        </RadioButton>
-                        <RadioButton x:Name="BtnShowConfig" Style="{StaticResource NavRadioButtonStyle}" GroupName="NavGroup" Click="BtnShowConfig_Click">
-                            Konfiguracja serwisu
-                        </RadioButton>
-                    </StackPanel>
-                </StackPanel>
+                    <!-- Top header + nav buttons -->
+                    <StackPanel DockPanel.Dock="Top">
+                        <ComboBox x:Name="CbServiceSelector"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Top"
+                          Margin="10,0,10,0"
+                          Visibility="Collapsed"
+                          DisplayMemberPath="Name"
+                          SelectedValuePath="Id"
+                          SelectionChanged="CbServiceSelector_SelectionChanged" />
+                        <TextBlock x:Name="ServiceNameTextBox" Text="..." FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="6,6,6,0" />
+                        <TextBlock Text="Panel" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
 
-                <!-- Bottom controls -->
-                <StackPanel DockPanel.Dock="Bottom" Margin="6" Orientation="Vertical" VerticalAlignment="Bottom">
-
-                    <!-- Service control buttons in one row -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                        <Button x:Name="BtnStartService" Width="50" Height="40" Margin="4" Click="BtnStartService_Click">
-                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE768;" FontSize="16" HorizontalAlignment="Center" />
-                                <!-- Play icon -->
-                                <TextBlock Text="Start" FontSize="10" HorizontalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="BtnStopService" Width="50" Height="40" Margin="4" Click="BtnStopService_Click">
-                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE71A;" FontSize="16" HorizontalAlignment="Center" />
-                                <!-- Stop icon -->
-                                <TextBlock Text="Stop" FontSize="10" HorizontalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button x:Name="BtnRestartService" Width="50" Height="40" Margin="4" Click="BtnRestartService_Click">
-                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
-                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE72C;" FontSize="16" HorizontalAlignment="Center" />
-                                <!-- Refresh icon -->
-                                <TextBlock Text="Restart" FontSize="10" HorizontalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-
-                    <!-- Service status -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Ellipse x:Name="ServiceStatusDot" Width="12" Height="12" Fill="Red" Margin="0,0,6,0" />
-                        <TextBlock x:Name="ServiceStatusText" Text="Offline" VerticalAlignment="Center" />
-                    </StackPanel>
-                </StackPanel>
-            </DockPanel>
-        </Border>
-
-        <!-- Main content area -->
-        <Grid Grid.Column="1" x:Name="MainContentArea" Visibility="Collapsed">
-            <!-- Views placed here and shown/hidden from code-behind -->
-            <Grid x:Name="LogsViewContainer">
-                <!-- Top toolbar -->
-                <DockPanel LastChildFill="True" Margin="8">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
-                        <TextBlock Text="Auto-odświeżanie co 5s" VerticalAlignment="Center" Margin="6,0,0,0" />
+                        <!-- Nav buttons -->
+                        <StackPanel Margin="6,20,6,6">
+                            <RadioButton x:Name="BtnShowLogs" Style="{StaticResource NavRadioButtonStyle}" GroupName="NavGroup" Click="BtnShowLogs_Click">
+                                Podgląd logów
+                            </RadioButton>
+                            <RadioButton x:Name="BtnShowConfig" Style="{StaticResource NavRadioButtonStyle}" GroupName="NavGroup" Click="BtnShowConfig_Click">
+                                Konfiguracja serwisu
+                            </RadioButton>
+                        </StackPanel>
                     </StackPanel>
 
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="220" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <!-- Bottom controls -->
+                    <StackPanel DockPanel.Dock="Bottom" Margin="6" Orientation="Vertical" VerticalAlignment="Bottom">
 
-                        <!-- Files list -->
-                        <Border Grid.Column="0" BorderBrush="#D1D5DB" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,8,0" Background="White" SnapsToDevicePixels="True">
-                            <StackPanel>
-                                <TextBlock Text="Pliki logów" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
-                                <ListView x:Name="LvLogFiles" SelectionChanged="LvLogFiles_SelectionChanged"
+                        <!-- Service control buttons in one row -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                            <Button x:Name="BtnStartService" Width="50" Height="40" Margin="4" Click="BtnStartService_Click">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE768;" FontSize="16" HorizontalAlignment="Center" />
+                                    <!-- Play icon -->
+                                    <TextBlock Text="Start" FontSize="10" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="BtnStopService" Width="50" Height="40" Margin="4" Click="BtnStopService_Click">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE71A;" FontSize="16" HorizontalAlignment="Center" />
+                                    <!-- Stop icon -->
+                                    <TextBlock Text="Stop" FontSize="10" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="BtnRestartService" Width="50" Height="40" Margin="4" Click="BtnRestartService_Click">
+                                <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
+                                    <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE72C;" FontSize="16" HorizontalAlignment="Center" />
+                                    <!-- Refresh icon -->
+                                    <TextBlock Text="Restart" FontSize="10" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <!-- Service status -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Ellipse x:Name="ServiceStatusDot" Width="12" Height="12" Fill="Red" Margin="0,0,6,0" />
+                            <TextBlock x:Name="ServiceStatusText" Text="Offline" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- Main content area -->
+            <Grid Grid.Column="1" x:Name="MainContentArea" Visibility="Collapsed">
+                <!-- Views placed here and shown/hidden from code-behind -->
+                <Grid x:Name="LogsViewContainer">
+                    <!-- Top toolbar -->
+                    <DockPanel LastChildFill="True" Margin="8">
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
+                            <TextBlock Text="Auto-odświeżanie co 5s" VerticalAlignment="Center" Margin="6,0,0,0" />
+                        </StackPanel>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Files list -->
+                            <Border Grid.Column="0" BorderBrush="#D1D5DB" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,8,0" Background="White" SnapsToDevicePixels="True">
+                                <StackPanel>
+                                    <TextBlock Text="Pliki logów" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+                                    <ListView x:Name="LvLogFiles" SelectionChanged="LvLogFiles_SelectionChanged"
                                       Background="White" BorderThickness="0"
                                       AlternationCount="2"
                                       ItemContainerStyle="{StaticResource ListViewItemStyle}">
-                                    <ListView.View>
-                                        <GridView>
-                                            <GridViewColumn Header="Data" Width="Auto" DisplayMemberBinding="{Binding Name}" />
-                                            <GridViewColumn Header="Ostrzeżenia" Width="Auto" DisplayMemberBinding="{Binding WarningsCount}" />
-                                            <GridViewColumn Header="Błędy" Width="53" DisplayMemberBinding="{Binding ErrorsCount}" />
-                                        </GridView>
-                                    </ListView.View>
-                                </ListView>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- File content -->
-                        <Border Grid.Column="1" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="8">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
-
-                                <StackPanel Orientation="Horizontal" Grid.Row="0" VerticalAlignment="Center">
-                                    <TextBlock Text="Zawartość pliku:" FontWeight="Bold" Margin="0,0,8,0" />
-                                    <TextBlock x:Name="TxtSelectedFileName" Text="(brak)" VerticalAlignment="Center" />
+                                        <ListView.View>
+                                            <GridView>
+                                                <GridViewColumn Header="Data" Width="Auto" DisplayMemberBinding="{Binding Name}" />
+                                                <GridViewColumn Header="Ostrzeżenia" Width="Auto" DisplayMemberBinding="{Binding WarningsCount}" />
+                                                <GridViewColumn Header="Błędy" Width="53" DisplayMemberBinding="{Binding ErrorsCount}" />
+                                            </GridView>
+                                        </ListView.View>
+                                    </ListView>
                                 </StackPanel>
-                                
-                                <ListBox Grid.Row="1"
+                            </Border>
+
+                            <!-- File content -->
+                            <Border Grid.Column="1" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="8">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Orientation="Horizontal" Grid.Row="0" VerticalAlignment="Center">
+                                        <TextBlock Text="Zawartość pliku:" FontWeight="Bold" Margin="0,0,8,0" />
+                                        <TextBlock x:Name="TxtSelectedFileName" Text="(brak)" VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <ListBox Grid.Row="1"
                                      x:Name="IcLogLines"
                                      ItemsSource="{Binding}"
                                      VirtualizingStackPanel.IsVirtualizing="True"
@@ -209,254 +248,41 @@
                                      ScrollViewer.CanContentScroll="True"
                                      ScrollViewer.VerticalScrollBarVisibility="Visible"
                                      BorderThickness="0">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="2">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Foreground" Value="Black" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Level}" Value="Information">
-                                                                <Setter Property="Foreground" Value="Green" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Level}" Value="Warning">
-                                                                <Setter Property="Foreground" Value="Orange" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Level}" Value="Error">
-                                                                <Setter Property="Foreground" Value="Red" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="2">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="Black" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Level}" Value="Information">
+                                                                    <Setter Property="Foreground" Value="Green" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Level}" Value="Warning">
+                                                                    <Setter Property="Foreground" Value="Orange" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Level}" Value="Error">
+                                                                    <Setter Property="Foreground" Value="Red" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </DockPanel>
+                </Grid>
 
-                            </Grid>
-                        </Border>
-                    </Grid>
-                </DockPanel>
-            </Grid>
-
-            <!-- Configuration view - hidden by default -->
-            <Grid x:Name="ConfigViewContainer" Visibility="Collapsed" Margin="8">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Text="Konfiguracja serwisu" Style="{StaticResource SectionTitle}" />
-
-                        <!-- API Credentials group -->
-                        <GroupBox Header="Gąska - API" Margin="0,6,0,6">
-                            <Grid Margin="6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="GaskaApiBaseUrl:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtGaskaApiBaseUrl" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="GaskaApiAcronym:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtGaskaApiAcronym" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="GaskaApiPerson:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="TxtGaskaApiPerson" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="GaskaApiPassword:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="3" Grid.Column="1" x:Name="TxtGaskaApiPassword" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="GaskaApiKey:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="4" Grid.Column="1" x:Name="TxtGaskaApiKey" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="5" Grid.Column="0" Text="GaskaApiProductsPerPage:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="5" Grid.Column="1" x:Name="TxtGaskaApiProductsPerPage" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="6" Grid.Column="0" Text="GaskaApiProductsInterval:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="6" Grid.Column="1" x:Name="TxtGaskaApiProductsInterval" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="7" Grid.Column="0" Text="GaskaApiProductPerDay:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="7" Grid.Column="1" x:Name="TxtGaskaApiProductPerDay" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="8" Grid.Column="0" Text="GaskaApiProductInterval:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="8" Grid.Column="1" x:Name="TxtGaskaApiProductInterval" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <!-- Provide more spacing -->
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                            </Grid>
-                        </GroupBox>
-
-                        <!-- Allegro group -->
-                        <GroupBox Header="Allegro - API" Margin="0,6,0,6">
-                            <Grid Margin="6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="200" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="AllegroApiBaseUrl:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtAllegroApiBaseUrl" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="AllegroAuthBaseUrl:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtAllegroAuthBaseUrl" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="AllegroClientName:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="TxtAllegroClientName" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="AllegroClientId:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="3" Grid.Column="1" x:Name="TxtAllegroClientId" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="AllegroClientSecret:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="4" Grid.Column="1" x:Name="TxtAllegroClientSecret" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="5" Grid.Column="0" Text="AllegroScope:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="5" Grid.Column="1" x:Name="TxtAllegroScope" IsEnabled="False" Margin="0,4,0,4" />
-
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                            </Grid>
-                        </GroupBox>
-
-                        <!-- Other settings group -->
-                        <GroupBox Header="Inne ustawienia" Margin="0,6,0,6">
-                            <Grid Margin="6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="380" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="ID synchronizowanych kategorii (rodzielone przecinkiem):" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtGaskaCategoriesId" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Ilość dni zachowania logów:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtLogsExpirationDays" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Co ile minut odświeżać stany/ceny:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="2" Grid.Column="1" x:Name="TxtFetchIntervalMinutes" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Własna marża (%):" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="3" Grid.Column="1" x:Name="TxtOwnMarginPercent" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Marża allegro poniżej 5 PLN (w PLN):" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="4" Grid.Column="1" x:Name="TxtAllegroMarginUnder5PLN" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Marża allegro 5-1000 PLN (w %):" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="5" Grid.Column="1" x:Name="TxtAllegroMarginBetween5and1000PLNPercent" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Marża allegro powyżej 1000 PLN (w PLN):" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="6" Grid.Column="1" x:Name="TxtAllegroMarginMoreThan1000PLN" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="7" Grid.Column="0" Text="Dodatek PLN do towarów gabarytowych (żółty samochodzik):" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="7" Grid.Column="1" x:Name="TxtAddPLNToBulkyProducts" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="8" Grid.Column="0" Text="Dodatek PLN do towarów niestandardowych (czerwony samochodzik):" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="8" Grid.Column="1" x:Name="TxtAddPLNToCustomProducts" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="9" Grid.Column="0" Text="Nazwa cennika dostawy na allegro:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="9" Grid.Column="1" x:Name="TxtAllegroDeliveryName" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="10" Grid.Column="0" Text="Czas realizacji:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="10" Grid.Column="1" x:Name="TxtAllegroHandlingTime" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="11" Grid.Column="0" Text="Czas realizacji produktów niestandardowych:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="11" Grid.Column="1" x:Name="TxtAllegroHandlingTimeCustomProducts" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="12" Grid.Column="0" Text="Tekst bezpieczeństwa:" VerticalAlignment="Top" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="12" Grid.Column="1" x:Name="TxtAllegroSafetyMeasures" AcceptsReturn="True" Height="120" TextWrapping="Wrap" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="13" Grid.Column="0" Text="Nazwa polityki gwarancji:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="13" Grid.Column="1" x:Name="TxtAllegroWarranty" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="14" Grid.Column="0" Text="Nazwa polityki zwrotów:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="14" Grid.Column="1" x:Name="TxtAllegroReturnPolicy" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="15" Grid.Column="0" Text="Nazwa polityki reaklamacji:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="15" Grid.Column="1" x:Name="TxtAllegroImpliedWarranty" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="16" Grid.Column="0" Text="Odpowiedzialna osoba:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="16" Grid.Column="1" x:Name="TxtAllegroResponsiblePerson" Margin="0,4,0,4" />
-
-                                <TextBlock Grid.Row="17" Grid.Column="0" Text="Odpowiedzialny producent:" VerticalAlignment="Center" Margin="0,4,0,4" />
-                                <TextBox Grid.Row="17" Grid.Column="1" x:Name="TxtAllegroResponsibleProducer" Margin="0,4,0,4" />
-
-                                <Grid.RowDefinitions>
-                                    <!-- rows to match indices above -->
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                            </Grid>
-                        </GroupBox>
-
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,24">
-                            <Button x:Name="BtnSaveConfig" Content="Zapisz" Click="BtnSaveConfig_Click" Margin="6" Padding="12,6" FontWeight="SemiBold" Foreground="White">
-                                <Button.Background>
-                                    <SolidColorBrush Color="#4A90E2" />
-                                </Button.Background>
-                                <Button.BorderBrush>
-                                    <SolidColorBrush Color="#357ABD" />
-                                </Button.BorderBrush>
-                                <Button.BorderThickness>1</Button.BorderThickness>
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="border"
-                                                Background="{TemplateBinding Background}"
-                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                CornerRadius="6">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <!-- Hover -->
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="#6BA7E7" />
-                                            </Trigger>
-                                            <!-- Pressed -->
-                                            <Trigger Property="IsPressed" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="#357ABD" />
-                                            </Trigger>
-                                            <!-- Disabled -->
-                                            <Trigger Property="IsEnabled" Value="False">
-                                                <Setter TargetName="border" Property="Background" Value="#CCCCCC" />
-                                                <Setter Property="Foreground" Value="#888888" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Button.Template>
-                            </Button>
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
+                <!-- Configuration view - hidden by default -->
+                <Grid x:Name="ConfigViewContainer" Visibility="Collapsed" Margin="8">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ConfigStackPanel" />
+                    </ScrollViewer>
+                </Grid>
             </Grid>
         </Grid>
     </Grid>
