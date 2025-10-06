@@ -13,5 +13,6 @@ namespace GaskaAllegroSync.Models
         public virtual AllegroOffer Offer { get; set; }
         public string Type { get; set; }
         public string Content { get; set; }
+        public int SectionId { get; set; }
     }
 }

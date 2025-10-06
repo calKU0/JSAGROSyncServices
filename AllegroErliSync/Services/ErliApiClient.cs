@@ -1,11 +1,9 @@
 ﻿using AllegroErliSync.Helpers;
 using AllegroErliSync.Settings;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using Serilog;
 using System;
-using System.Collections.Generic;
-using System.Configuration;
-using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -13,38 +11,29 @@ using System.Threading.Tasks;
 
 namespace AllegroErliSync.Services
 {
-    using Newtonsoft.Json;
-    using Newtonsoft.Json.Serialization;
-
-    // ...
-
     public class ErliClient
     {
         private readonly HttpClient _httpClient;
-        private readonly ErliApiCredentials _erliApiCredentials;
         private readonly JsonSerializerSettings _jsonSettings;
 
         public ErliClient()
         {
-            _erliApiCredentials = AppSettingsLoader.LoadErliCredentials();
+            var credentials = AppSettingsLoader.LoadErliCredentials();
 
-            if (string.IsNullOrWhiteSpace(_erliApiCredentials.BaseUrl))
+            if (string.IsNullOrWhiteSpace(credentials.BaseUrl))
                 throw new Exception("ErliBaseUrl is not configured.");
-            if (string.IsNullOrWhiteSpace(_erliApiCredentials.ApiKey))
+            if (string.IsNullOrWhiteSpace(credentials.ApiKey))
                 throw new Exception("ErliApiKey is not configured.");
 
             _httpClient = new HttpClient
             {
-                BaseAddress = new Uri(_erliApiCredentials.BaseUrl)
+                BaseAddress = new Uri(credentials.BaseUrl)
             };
 
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", _erliApiCredentials.ApiKey);
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credentials.ApiKey);
 
-            _httpClient.DefaultRequestHeaders.Accept.Add(
-                new MediaTypeWithQualityHeaderValue("application/json"));
+            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            // JSON settings: camelCase + ignore nulls
             _jsonSettings = new JsonSerializerSettings
             {
                 ContractResolver = new CamelCasePropertyNamesContractResolver(),
@@ -53,51 +42,90 @@ namespace AllegroErliSync.Services
             };
         }
 
-        /// <summary>
-        /// Sends a POST request to the specified endpoint with a JSON body.
-        /// </summary>
-        public async Task<string> PostAsync(string endpoint, object body)
+        // Core reusable HTTP method with 429 retry
+        private async Task<string> SendAsync(string endpoint, HttpMethod method, object body = null, int maxRetries = 5)
         {
-            // Serialize with JSON settings
-            var json = JsonConvert.SerializeObject(body, _jsonSettings);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            int attempt = 0;
 
-            // ✅ Log the full request body
-            Log.Information("📦 Sending request to Erli endpoint {Endpoint}:\n{RequestBody}", endpoint, json);
-
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var response = await _httpClient.PostAsync(endpoint, content);
-            var responseBody = await response.Content.ReadAsStringAsync();
-            stopwatch.Stop();
-
-            Log.Information("[ErliAPI] Response {StatusCode} from {Endpoint} in {Elapsed} ms. Body: {ResponseBody}", response.StatusCode, endpoint, stopwatch.ElapsedMilliseconds, responseBody);
-
-            if (!response.IsSuccessStatusCode)
+            while (true)
             {
-                Log.Error("[ErliAPI] Request failed: {StatusCode} {ReasonPhrase}. Response: {ResponseBody}", response.StatusCode, response.ReasonPhrase, responseBody);
+                attempt++;
 
-                throw new Exception($"Erli API call failed: {response.StatusCode} ({response.ReasonPhrase})\n{responseBody}");
+                var request = new HttpRequestMessage(method, endpoint);
+                if (body != null)
+                {
+                    var json = JsonConvert.SerializeObject(body, _jsonSettings);
+                    request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                }
+
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var response = await _httpClient.SendAsync(request);
+                var responseBody = await response.Content.ReadAsStringAsync();
+                stopwatch.Stop();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    return responseBody;
+                }
+
+                // Handle 429 (Too Many Requests)
+                if ((int)response.StatusCode == 429 && attempt <= maxRetries)
+                {
+                    var delay = Math.Pow(2, attempt) * 500;
+                    Log.Information("Erli API rate limit hit (429). Retrying after {Delay}ms. Attempt {Attempt}/{MaxRetries}", delay, attempt, maxRetries);
+                    await Task.Delay((int)delay);
+                    continue;
+                }
+
+                throw new HttpRequestException($"Erli API {method} failed: {response.StatusCode} ({response.ReasonPhrase})\n{responseBody}");
             }
-
-            return responseBody;
         }
 
-        /// <summary>
-        /// Generic POST that deserializes the response to T.
-        /// </summary>
-        public async Task<T> PostAsync<T>(string endpoint, object body)
+        // Generic typed helper
+        private async Task<T> SendAsync<T>(string endpoint, HttpMethod method, object body = null)
         {
-            var responseString = await PostAsync(endpoint, body);
-
+            var responseString = await SendAsync(endpoint, method, body);
             try
             {
                 return JsonConvert.DeserializeObject<T>(responseString);
             }
-            catch (Exception ex)
+            catch
             {
-                Log.Error(ex, "Failed to deserialize Erli response for {Endpoint}. Body: {Body}", endpoint, responseString);
+                //Log.Error(ex, "Failed to deserialize response for {Method} {Endpoint}. Body: {Body}", method, endpoint, responseString);
                 throw;
             }
         }
+
+        // Public API methods
+        public Task<string> GetAsync(string endpoint) =>
+            SendAsync(endpoint, HttpMethod.Get);
+
+        public Task<string> PostAsync(string endpoint, object body) =>
+            SendAsync(endpoint, HttpMethod.Post, body);
+
+        public Task<string> PutAsync(string endpoint, object body) =>
+            SendAsync(endpoint, HttpMethod.Put, body);
+
+        public Task<string> PatchAsync(string endpoint, object body) =>
+            SendAsync(endpoint, new HttpMethod("PATCH"), body);
+
+        public Task<string> DeleteAsync(string endpoint) =>
+            SendAsync(endpoint, HttpMethod.Delete);
+
+        // Generic typed versions
+        public Task<T> GetAsync<T>(string endpoint) =>
+            SendAsync<T>(endpoint, HttpMethod.Get);
+
+        public Task<T> PostAsync<T>(string endpoint, object body) =>
+            SendAsync<T>(endpoint, HttpMethod.Post, body);
+
+        public Task<T> PutAsync<T>(string endpoint, object body) =>
+            SendAsync<T>(endpoint, HttpMethod.Put, body);
+
+        public Task<T> PatchAsync<T>(string endpoint, object body) =>
+            SendAsync<T>(endpoint, new HttpMethod("PATCH"), body);
+
+        public Task<T> DeleteAsync<T>(string endpoint) =>
+            SendAsync<T>(endpoint, HttpMethod.Delete);
     }
 }

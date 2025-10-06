@@ -65,6 +65,7 @@ namespace AllegroErliSync
 
                 await erliService.SyncOffersWithErli();
                 await erliService.CreateProductsInErli();
+                await erliService.UpdateProductsInErli();
 
                 var duration = DateTime.Now - start;
                 Log.Information("Erli sync completed at {Time} (Duration: {Duration})", DateTime.Now, duration);

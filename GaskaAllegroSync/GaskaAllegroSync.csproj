@@ -230,6 +230,10 @@
     <Compile Include="Migrations\202510031234035_AddMoreFields.Designer.cs">
       <DependentUpon>202510031234035_AddMoreFields.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202510060754362_SecionId.cs" />
+    <Compile Include="Migrations\202510060754362_SecionId.Designer.cs">
+      <DependentUpon>202510060754362_SecionId.cs</DependentUpon>
+    </Compile>
     <Compile Include="Models\AllegroCategory.cs" />
     <Compile Include="Models\AllegroOffer.cs" />
     <Compile Include="Models\AllegroOfferAttribute.cs" />
@@ -394,6 +398,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202510031234035_AddMoreFields.resx">
       <DependentUpon>202510031234035_AddMoreFields.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202510060754362_SecionId.resx">
+      <DependentUpon>202510060754362_SecionId.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>

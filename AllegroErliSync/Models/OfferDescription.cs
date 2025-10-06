@@ -12,5 +12,6 @@ namespace AllegroErliSync.Models
         public string OfferId { get; set; }
         public string DescType { get; set; }
         public string Content { get; set; }
+        public int SectionId { get; set; }
     }
 }

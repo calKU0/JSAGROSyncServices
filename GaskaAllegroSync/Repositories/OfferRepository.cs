@@ -158,6 +158,7 @@ namespace GaskaAllegroSync.Repositories
 
                 if (offer.Description?.Sections != null)
                 {
+                    int sectionIndex = 1;
                     foreach (var section in offer.Description.Sections)
                     {
                         foreach (var item in section.Items)
@@ -166,9 +167,12 @@ namespace GaskaAllegroSync.Repositories
                             {
                                 OfferId = existing.Id,
                                 Type = item.Type,
-                                Content = item.Type == "TEXT" ? item.Content : item.Url
+                                Content = item.Type == "TEXT" ? item.Content : item.Url,
+                                SectionId = sectionIndex
                             });
                         }
+
+                        sectionIndex++;
                     }
                 }
 

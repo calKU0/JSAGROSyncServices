@@ -99,6 +99,8 @@
     <Compile Include="DTOs\ErliCreateProductRequest.cs" />
     <Compile Include="DTOs\ErliSearchRequest.cs" />
     <Compile Include="Helpers\AppSettingsLoader.cs" />
+    <Compile Include="Mappers\ErliBreadcrumbHelper.cs" />
+    <Compile Include="Mappers\ErliProductMapper.cs" />
     <Compile Include="Logging\LogConfig.cs" />
     <Compile Include="Models\AllegroCategory.cs" />
     <Compile Include="Models\Offer.cs" />
@@ -129,6 +131,9 @@
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Resources\Images\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\Serilog.4.3.0\build\Serilog.targets" Condition="Exists('..\packages\Serilog.4.3.0\build\Serilog.targets')" />
