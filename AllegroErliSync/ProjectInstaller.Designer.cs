@@ -40,7 +40,7 @@
             // AllegroErliSyncService
             // 
             this.AllegroErliSyncService.DisplayName = "AllegroErliSyncService";
-            this.AllegroErliSyncService.ServiceName = "AllegroErliSync";
+            this.AllegroErliSyncService.ServiceName = "AllegroErliSyncService";
             // 
             // ProjectInstaller
             // 

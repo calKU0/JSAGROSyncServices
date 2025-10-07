@@ -2,6 +2,7 @@
 using GaskaAllegroSync.DTOs.AllegroApi;
 using GaskaAllegroSync.Helpers;
 using GaskaAllegroSync.Models;
+using GaskaAllegroSync.Models.Product;
 using GaskaAllegroSync.Repositories.Interfaces;
 using Newtonsoft.Json;
 using Serilog;
@@ -13,6 +14,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Z.EntityFramework.Extensions;
 
 namespace GaskaAllegroSync.Repositories
 {
@@ -28,216 +30,244 @@ namespace GaskaAllegroSync.Repositories
 
         public async Task UpsertOffers(List<Offer> offers, CancellationToken ct)
         {
-            if (offers == null || !offers.Any())
-            {
-                Log.Warning("No offers to upsert.");
-                return;
-            }
+            if (offers == null || !offers.Any()) return;
 
-            Log.Information("Starting upsert of {Count} offers", offers.Count);
+            Log.Information("Starting bulk upsert of {Count} offers", offers.Count);
             var stopwatchTotal = Stopwatch.StartNew();
 
-            // 1. Load all products for lookup
-            var productCodes = offers.Select(o => o.External.Id).Distinct().ToList();
-            var products = await _context.Products
-                .AsNoTracking()
+            // Preload products
+            var productCodes = offers.Select(o => o.External?.Id)
+                .Where(x => x != null)
+                .Distinct()
+                .ToList();
+
+            var products = _context.Products
                 .Where(p => productCodes.Contains(p.CodeGaska))
-                .ToDictionaryAsync(p => p.CodeGaska, ct);
+                .ToDictionary(p => p.CodeGaska);
 
-            // 2. Load existing offers for lookup
+            // Preload existing offers
             var offerIds = offers.Select(o => o.Id).ToList();
-            var existingOffers = await _context.AllegroOffers
+            var existingOffersDict = _context.AllegroOffers
                 .Where(o => offerIds.Contains(o.Id))
-                .ToDictionaryAsync(o => o.Id, ct);
+                .ToDictionary(o => o.Id);
 
-            int inserts = 0, updates = 0;
-
-            foreach (var offer in offers)
+            // Map all offers
+            var allegroOffers = offers.Select(o =>
             {
-                if (!products.TryGetValue(offer.External.Id, out var product))
-                    continue;
+                products.TryGetValue(o.External?.Id, out var product);
 
-                if (!existingOffers.TryGetValue(offer.Id, out var existing))
+                return new AllegroOffer
                 {
-                    existing = new AllegroOffer { Id = offer.Id };
-                    _context.AllegroOffers.Add(existing);
-                    inserts++;
-                }
-                else
-                {
-                    updates++;
-                }
+                    Id = o.Id,
+                    Name = o.Name ?? string.Empty,
+                    ProductId = product?.Id,
+                    CategoryId = o.Category != null ? Convert.ToInt32(o.Category.Id) : 0,
+                    Price = o.SellingMode?.Price != null
+                        ? Decimal.Parse(o.SellingMode.Price.Amount ?? "0", CultureInfo.InvariantCulture)
+                        : 0m,
+                    Stock = o.Stock?.Available ?? 0,
+                    WatchersCount = o.Stats?.WatchersCount ?? 0,
+                    VisitsCount = o.Stats?.VisitsCount ?? 0,
+                    Status = o.Publication?.Status ?? string.Empty,
+                    DeliveryName = o.Delivery?.ShippingRates?.Name,
+                    HandlingTime = o.Delivery?.HandlingTime,
+                    ExternalId = o.External?.Id,
+                    StartingAt = o.Publication?.StartingAt ?? DateTime.MinValue,
+                };
+            }).ToList();
 
-                existing.Name = offer.Name;
-                existing.ProductId = product.Id;
-                existing.CategoryId = Convert.ToInt32(offer.Category.Id);
-                existing.Price = Decimal.Parse(offer.SellingMode.Price.Amount, CultureInfo.InvariantCulture);
-                existing.Stock = offer.Stock.Available;
-                existing.WatchersCount = offer.Stats.WatchersCount;
-                existing.VisitsCount = offer.Stats.VisitsCount;
-                existing.Status = offer.Publication.Status;
-                existing.DeliveryName = offer.Delivery.ShippingRates.Name;
-                existing.ExternalId = offer.External?.Id;
-                existing.StartingAt = offer.Publication?.StartingAt ?? DateTime.MinValue;
+            // Split into new and existing
+            var newOffers = allegroOffers.Where(a => !existingOffersDict.ContainsKey(a.Id)).ToList();
+            var updateOffers = allegroOffers.Where(a => existingOffersDict.ContainsKey(a.Id)).ToList();
+
+            if (newOffers.Any())
+                _context.BulkInsert(newOffers);
+
+            if (updateOffers.Any())
+            {
+                _context.BulkUpdate(updateOffers, options =>
+                {
+                    options.IgnoreOnUpdateExpression = c => new
+                    {
+                        c.Images,
+                        c.Descriptions,
+                        c.Attributes,
+                        c.ExistsInErli,
+                        c.ResponsiblePerson,
+                        c.ResponsibleProducer
+                    };
+                });
             }
 
-            await _context.SaveChangesAsync(ct);
-
             stopwatchTotal.Stop();
-            Log.Information("Upserted offers completed: {Inserts} inserted, {Updates} updated in {Elapsed} ms",
-                inserts, updates, stopwatchTotal.ElapsedMilliseconds);
+            Log.Information("Bulk upsert of offers completed in {Elapsed} ms", stopwatchTotal.ElapsedMilliseconds);
         }
 
         public async Task UpsertOfferDetails(List<AllegroOfferDetails.Root> offers, CancellationToken ct)
         {
-            if (offers == null || !offers.Any())
-            {
-                Log.Warning("No offers to upsert.");
-                return;
-            }
+            if (offers == null || !offers.Any()) return;
 
-            Log.Information("Starting upsert of {Count} offers", offers.Count);
+            Log.Information("Starting bulk upsert of {Count} offer details", offers.Count);
             var stopwatchTotal = Stopwatch.StartNew();
 
-            // 1. Load products for lookup
-            var productCodes = offers.Select(o => o.External?.Id).Where(x => x != null).Distinct().ToList();
-            var products = await _context.Products
-                .AsNoTracking()
+            // Preload products and category parameters
+            var productCodes = offers.Select(o => o.External?.Id)
+                .Where(x => x != null)
+                .Distinct()
+                .ToList();
+
+            var products = _context.Products
                 .Where(p => productCodes.Contains(p.CodeGaska))
-                .ToDictionaryAsync(p => p.CodeGaska, ct);
+                .GroupBy(p => p.CodeGaska)
+                .ToDictionary(g => g.Key, g => g.First());
 
-            // 2. Load existing offers
+            var categoryParams = _context.CategoryParameters
+                .GroupBy(p => p.ParameterId.ToString())
+                .ToDictionary(g => g.Key, g => g.First());
+
+            // Collect all offer IDs
             var offerIds = offers.Select(o => o.Id).ToList();
-            var existingOffers = await _context.AllegroOffers
-                .Include(o => o.Attributes)
-                .Include(o => o.Descriptions)
+
+            // Then safely create the dictionary
+            var existingOffersDict = _context.AllegroOffers
+                .Include("Attributes")
+                .Include("Descriptions")
                 .Where(o => offerIds.Contains(o.Id))
-                .ToDictionaryAsync(o => o.Id, ct);
+                .GroupBy(o => o.Id)
+                .ToDictionary(g => g.Key, g => g.First());
 
-            int inserts = 0, updates = 0;
-
-            foreach (var offer in offers)
+            // Map AllegroOffer entities
+            var allegroOffers = offers.Select(o =>
             {
-                products.TryGetValue(offer.External?.Id, out var product);
+                products.TryGetValue(o.External?.Id, out var product);
 
-                AllegroOffer existing;
-                if (!existingOffers.TryGetValue(offer.Id, out existing))
-                {
-                    existing = new AllegroOffer { Id = offer.Id };
-                    _context.AllegroOffers.Add(existing);
-                    inserts++;
-                }
-                else
-                {
-                    updates++;
-                }
+                // safely parse price
+                decimal price = 0;
+                if (!decimal.TryParse(o?.SellingMode?.Price?.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out price))
+                    price = 0;
 
-                // main offer fields
-                existing.Name = offer.Name;
-                existing.CategoryId = Convert.ToInt32(offer.Category.Id);
-                existing.Price = Decimal.Parse(offer.SellingMode.Price.Amount, CultureInfo.InvariantCulture);
-                existing.Stock = offer.Stock.Available;
-                existing.Status = offer.Publication.Status;
-                existing.DeliveryName = offer.Delivery.ShippingRates?.Id;
-                existing.ExternalId = offer.External?.Id;
-                existing.ProductId = product?.Id ?? null;
-                existing.Weight = (decimal)product?.WeightGross;
-                existing.Images = offer.Images != null
-                    ? JsonConvert.SerializeObject(offer.Images)
-                    : null;
-                existing.StartingAt = offer.Publication?.StartingAt ?? DateTime.MinValue;
+                int categoryId = 0;
+                if (!int.TryParse(o?.Category?.Id, out categoryId))
+                    categoryId = 0;
 
-                // ---- Update Descriptions ----
-                if (existing.Descriptions == null)
-                    existing.Descriptions = new List<AllegroOfferDescription>();
-                else
+                return new AllegroOffer
                 {
-                    _context.AllegroOfferDescriptions.RemoveRange(existing.Descriptions);
-                    existing.Descriptions.Clear();
-                }
+                    Id = o.Id,
+                    Name = o.Name ?? string.Empty,
+                    CategoryId = categoryId,
+                    Price = price,
+                    Stock = o?.Stock?.Available ?? 0,
+                    Status = o?.Publication?.Status ?? "UNKNOWN",
+                    DeliveryName = o?.Delivery?.ShippingRates?.Id,
+                    ExternalId = o?.External?.Id,
+                    ProductId = product?.Id,
+                    Weight = (decimal?)product?.WeightGross ?? 0m,
+                    Images = o?.Images != null ? System.Text.Json.JsonSerializer.Serialize(o.Images) : null,
+                    StartingAt = o?.Publication?.StartingAt ?? DateTime.MinValue,
+                    HandlingTime = o?.Delivery?.HandlingTime,
+                    ResponsiblePerson = o?.ProductSet?.FirstOrDefault()?.ResponsiblePerson?.Id ?? string.Empty,
+                    ResponsibleProducer = o?.ProductSet?.FirstOrDefault()?.ResponsibleProducer?.Id ?? string.Empty
+                };
+            }).ToList();
 
-                if (offer.Description?.Sections != null)
+            // Split parent offers
+            var updateOffers = allegroOffers.Where(a => existingOffersDict.ContainsKey(a.Id)).ToList();
+            if (updateOffers.Any())
+            {
+                _context.BulkUpdate(updateOffers, options =>
                 {
-                    int sectionIndex = 1;
-                    foreach (var section in offer.Description.Sections)
+                    options.IgnoreOnUpdateExpression = c => new
+                    {
+                        c.Id,
+                        c.Name,
+                        c.CategoryId,
+                        c.Price,
+                        c.Stock,
+                        c.Status,
+                        c.DeliveryName,
+                        c.ExistsInErli,
+                        c.ExternalId,
+                        c.ProductId,
+                        c.WatchersCount,
+                        c.VisitsCount,
+                    };
+                });
+            }
+
+            // ---- Child Descriptions ----
+            var allegroDescriptions = new List<AllegroOfferDescription>();
+            foreach (var o in offers)
+            {
+                int sectionIndex = 1;
+                if (o.Description?.Sections != null)
+                {
+                    foreach (var section in o.Description.Sections)
                     {
                         foreach (var item in section.Items)
                         {
-                            existing.Descriptions.Add(new AllegroOfferDescription
+                            allegroDescriptions.Add(new AllegroOfferDescription
                             {
-                                OfferId = existing.Id,
+                                OfferId = o.Id,
                                 Type = item.Type,
                                 Content = item.Type == "TEXT" ? item.Content : item.Url,
                                 SectionId = sectionIndex
                             });
                         }
-
                         sectionIndex++;
                     }
                 }
+            }
 
-                // ---- Update Attributes ----
-                if (existing.Attributes == null)
-                    existing.Attributes = new List<AllegroOfferAttribute>();
-                else
-                {
-                    _context.AllegroOfferAttributes.RemoveRange(existing.Attributes);
-                    existing.Attributes.Clear();
-                }
+            if (allegroDescriptions.Any()) _context.BulkInsert(allegroDescriptions);
 
-                if (offer.Parameters != null)
+            // ---- Child Attributes ----
+            var allegroAttributes = new List<AllegroOfferAttribute>();
+            foreach (var o in offers)
+            {
+                if (o.Parameters != null)
                 {
-                    foreach (var param in offer.Parameters)
+                    foreach (var param in o.Parameters)
                     {
-                        // Find the first CategoryParameter row for this parameter
-                        var def = _context.CategoryParameters
-                            .FirstOrDefault(p => p.ParameterId.ToString() == param.Id);
-
-                        string type = "PARAM"; // fallback if not found
-                        if (def != null && !string.IsNullOrEmpty(def.Type))
-                        {
+                        string type = "PARAM";
+                        if (categoryParams.TryGetValue(param.Id, out var def) && !string.IsNullOrEmpty(def.Type))
                             type = def.Type;
-                        }
 
-                        existing.Attributes.Add(new AllegroOfferAttribute
+                        allegroAttributes.Add(new AllegroOfferAttribute
                         {
-                            OfferId = existing.Id,
+                            OfferId = o.Id,
                             AttributeId = param.Id,
-                            Type = type, // type from CategoryParameters table
-                            ValuesJson = JsonConvert.SerializeObject(param.Values ?? new List<string>()),
-                            ValuesIdsJson = JsonConvert.SerializeObject(param.ValuesIds ?? new List<string>())
+                            Type = type,
+                            ValuesJson = System.Text.Json.JsonSerializer.Serialize(param.Values ?? new List<string>()),
+                            ValuesIdsJson = System.Text.Json.JsonSerializer.Serialize(param.ValuesIds ?? new List<string>())
                         });
                     }
+                }
 
-                    foreach (var param in offer.ProductSet.First().Product.Parameters)
+                var productParams = o.ProductSet?.FirstOrDefault()?.Product?.Parameters;
+                if (productParams != null)
+                {
+                    foreach (var param in productParams)
                     {
-                        // Find the first CategoryParameter row for this parameter
-                        var def = _context.CategoryParameters
-                            .FirstOrDefault(p => p.ParameterId.ToString() == param.Id);
-
-                        string type = "PARAM"; // fallback if not found
-                        if (def != null && !string.IsNullOrEmpty(def.Type))
-                        {
+                        string type = "PARAM";
+                        if (categoryParams.TryGetValue(param.Id, out var def) && !string.IsNullOrEmpty(def.Type))
                             type = def.Type;
-                        }
 
-                        existing.Attributes.Add(new AllegroOfferAttribute
+                        allegroAttributes.Add(new AllegroOfferAttribute
                         {
-                            OfferId = existing.Id,
+                            OfferId = o.Id,
                             AttributeId = param.Id,
-                            Type = type, // type from CategoryParameters table
-                            ValuesJson = JsonConvert.SerializeObject(param.Values ?? new List<string>()),
-                            ValuesIdsJson = JsonConvert.SerializeObject(param.ValuesIds ?? new List<string>())
+                            Type = type,
+                            ValuesJson = System.Text.Json.JsonSerializer.Serialize(param.Values ?? new List<string>()),
+                            ValuesIdsJson = System.Text.Json.JsonSerializer.Serialize(param.ValuesIds ?? new List<string>())
                         });
                     }
                 }
             }
 
-            await _context.SaveChangesAsync(ct);
+            if (allegroAttributes.Any()) _context.BulkInsert(allegroAttributes);
 
             stopwatchTotal.Stop();
-            Log.Information("Upserted offers completed: {Inserts} inserted, {Updates} updated in {Elapsed} ms",
-                inserts, updates, stopwatchTotal.ElapsedMilliseconds);
+            Log.Information("Bulk upsert of offer details completed in {Elapsed} ms", stopwatchTotal.ElapsedMilliseconds);
         }
 
         public async Task<List<AllegroOffer>> GetAllOffers(CancellationToken ct)

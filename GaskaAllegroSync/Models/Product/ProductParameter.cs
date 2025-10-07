@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace GaskaAllegroSync.Models.Product
 {
@@ -11,7 +12,11 @@ namespace GaskaAllegroSync.Models.Product
         public int CategoryParameterId { get; set; }
         public string Value { get; set; }
         public bool IsForProduct { get; set; }
+
+        [ForeignKey(nameof(ProductId))]
         public virtual Product Product { get; set; }
+
+        [ForeignKey(nameof(CategoryParameterId))]
         public virtual CategoryParameter CategoryParameter { get; set; }
     }
 }

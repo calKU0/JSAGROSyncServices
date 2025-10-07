@@ -117,6 +117,7 @@ namespace ServiceManager
             RefreshServiceStatus();
             LoadLogFiles();
             LoadConfig();
+            _currentLogLines.Clear();
             ServiceNameTextBox.Text = service.Name;
         }
 

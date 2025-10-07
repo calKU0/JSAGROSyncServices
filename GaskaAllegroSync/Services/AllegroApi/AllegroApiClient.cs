@@ -107,6 +107,10 @@ namespace GaskaAllegroSync.Services.AllegroApi
                     retryCount++;
                     continue;
                 }
+                if ((int)response.StatusCode == 404)
+                {
+                    return default;
+                }
 
                 Log.Error("Allegro API error {Status}: {Body}", response.StatusCode, body);
                 return default;

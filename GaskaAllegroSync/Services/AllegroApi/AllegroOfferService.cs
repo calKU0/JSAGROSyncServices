@@ -86,6 +86,10 @@ namespace GaskaAllegroSync.Services.AllegroApi
                     try
                     {
                         var detailedOffer = await _apiClient.GetAsync<AllegroOfferDetails.Root>($"/sale/product-offers/{offer.Id}", ct);
+                        if (detailedOffer == null)
+                            continue;
+
+                        detailedOffer.Delivery.ShippingRates.Id = offer.DeliveryName;
                         if (detailedOffer != null)
                         {
                             offersDetails.Add(detailedOffer);
@@ -264,6 +268,12 @@ namespace GaskaAllegroSync.Services.AllegroApi
                                 //Log.Information("Updated parameter {ParameterId} for {Name} ({Code}) to '{CorrectValue}'",
                                 //    parameterId, product.Name, product.CodeGaska, correctValue);
                             }
+                        }
+                        else if (err.Message == "Producent części" && err.UserMessage.Contains("Nie można podać propozycji wartości"))
+                        {
+                        }
+                        else if (err.Message.Contains(@"The type of this ""Compatible with"" "))
+                        {
                         }
                         else
                         {

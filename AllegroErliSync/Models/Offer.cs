@@ -23,7 +23,9 @@ namespace AllegroErliSync.Models
         public bool ExistsInErli { get; set; }
         public string Images { get; set; }
         public decimal Weight { get; set; }
-
+        public string HandlingTime { get; set; }
+        public string ResponsibleProducer { get; set; }
+        public string ResponsiblePerson { get; set; }
         public List<OfferDescription> Descriptions { get; set; } = new List<OfferDescription>();
         public List<OfferAttribute> Attributes { get; set; } = new List<OfferAttribute>();
     }

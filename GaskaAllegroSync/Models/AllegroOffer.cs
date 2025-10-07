@@ -26,6 +26,9 @@ namespace GaskaAllegroSync.Models
         public bool ExistsInErli { get; set; } = false;
         public string Images { get; set; }
         public decimal Weight { get; set; }
+        public string HandlingTime { get; set; }
+        public string ResponsibleProducer { get; set; }
+        public string ResponsiblePerson { get; set; }
 
         [ForeignKey(nameof(ProductId))]
         public virtual Product.Product Product { get; set; }

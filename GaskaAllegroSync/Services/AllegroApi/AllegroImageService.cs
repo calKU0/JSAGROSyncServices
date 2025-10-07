@@ -38,6 +38,18 @@ namespace GaskaAllegroSync.Services.AllegroApi
                 {
                     try
                     {
+                        var extension = Path.GetExtension(image.Url);
+                        if (extension == null)
+                            continue;
+
+                        extension = extension.ToLowerInvariant();
+
+                        if (extension != ".jpg" && extension != ".jpeg" && extension != ".png")
+                        {
+                            Log.Information("Skipping unsupported image format: {Url}", image.Url);
+                            continue;
+                        }
+
                         string logoUrl = string.Empty;
                         try
                         {

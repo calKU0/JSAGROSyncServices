@@ -82,7 +82,7 @@ namespace GaskaAllegroSync.Helpers
 
             return new AppSettings
             {
-                CategoriesId = ParseIntList("GaskaCategoriesId"),
+                CategoriesId = ParseIntList("Categories"),
 
                 LogsExpirationDays = ParseInt("LogsExpirationDays", 14),
                 FetchIntervalMinutes = ParseInt("FetchIntervalMinutes", 120),

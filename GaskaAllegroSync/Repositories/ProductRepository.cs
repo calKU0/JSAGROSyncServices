@@ -81,24 +81,31 @@ namespace GaskaAllegroSync.Repositories
 
         public async Task UpsertProducts(List<ApiProducts> apiProducts, HashSet<int> fetchedProductIds, CancellationToken ct)
         {
+            if (apiProducts == null || !apiProducts.Any())
+                return;
+
+            // 1 Collect all IDs
+            var productIds = apiProducts.Select(p => p.Id).ToList();
+            foreach (var id in productIds)
+                fetchedProductIds.Add(id);
+
+            // 2 Load existing products
+            var existingProducts = _context.Products
+                .Where(p => productIds.Contains(p.Id))
+                .ToList();
+
+            var existingDict = existingProducts.ToDictionary(p => p.Id);
+
+            var toInsert = new List<Product>();
+            var toUpdate = new List<Product>();
+
             foreach (var apiProduct in apiProducts)
             {
-                fetchedProductIds.Add(apiProduct.Id);
+                existingDict.TryGetValue(apiProduct.Id, out var product);
 
-                var product = await _context.Products
-                    .FirstOrDefaultAsync(p => p.Id == apiProduct.Id, ct);
-
-                if (product == null)
-                {
-                    product = new Product
-                    {
-                        Id = apiProduct.Id
-                    };
-                    _context.Products.Add(product);
-                }
-
+                // Prepare root brands from existing applications
                 List<string> rootBrands;
-                if (product.Applications != null)
+                if (product?.Applications != null)
                 {
                     rootBrands = product.Applications
                         .Where(a => a.ParentID == 0)
@@ -111,6 +118,17 @@ namespace GaskaAllegroSync.Repositories
                     rootBrands = new List<string>();
                 }
 
+                if (product == null)
+                {
+                    product = new Product { Id = apiProduct.Id };
+                    toInsert.Add(product);
+                }
+                else
+                {
+                    toUpdate.Add(product);
+                }
+
+                // Map fields
                 product.Name = FixName(apiProduct.Name, apiProduct.CodeGaska, apiProduct.CodeCustomer, rootBrands);
                 product.CodeGaska = apiProduct.CodeGaska;
                 product.CodeCustomer = apiProduct.CodeCustomer;
@@ -130,131 +148,183 @@ namespace GaskaAllegroSync.Repositories
                 product.Archived = false;
             }
 
-            await _context.SaveChangesAsync(ct);
+            // 3 Bulk operations
+            if (toInsert.Any())
+                _context.BulkInsert(toInsert);
+
+            if (toUpdate.Any())
+                _context.BulkUpdate(toUpdate);
         }
 
         public async Task UpdateProductDetails(int productId, ApiProduct updatedProduct, CancellationToken ct)
         {
-            // Clear existing collections
-            var product = _context.Products
-                .Include(p => p.Packages)
-                .Include(p => p.CrossNumbers)
-                .Include(p => p.Components)
-                .Include(p => p.RecommendedParts)
-                .Include(p => p.Applications)
-                .Include(p => p.Atributes)
-                .Include(p => p.Images)
-                .Include(p => p.Files)
-                .Include(p => p.Categories)
-                .FirstOrDefault(x => x.Id == productId);
+            if (updatedProduct == null)
+                throw new ArgumentNullException(nameof(updatedProduct));
 
-            _context.Packages.RemoveRange(product.Packages);
-            _context.CrossNumbers.RemoveRange(product.CrossNumbers);
-            _context.Components.RemoveRange(product.Components);
-            _context.RecommendedParts.RemoveRange(product.RecommendedParts);
-            _context.Applications.RemoveRange(product.Applications);
-            _context.ProductAttributes.RemoveRange(product.Atributes);
-            _context.ProductImages.RemoveRange(product.Images);
-            _context.ProductFiles.RemoveRange(product.Files);
-            _context.ProductCategories.RemoveRange(product.Categories);
+            // 1️⃣ Load the product
+            var product = await _context.Products
+                .FirstOrDefaultAsync(p => p.Id == productId, ct);
 
-            // Update fields
-            product.CodeGaska = updatedProduct.CodeGaska;
-            product.CodeCustomer = updatedProduct.CodeCustomer;
-            product.SupplierName = updatedProduct.SupplierName;
-            product.SupplierLogo = updatedProduct.SupplierLogo;
-            product.InStock = updatedProduct.InStock;
-            product.CurrencyPrice = updatedProduct.CurrencyPrice;
-            product.PriceNet = updatedProduct.PriceNet;
-            product.PriceGross = updatedProduct.PriceGross;
-            product.DeliveryType = updatedProduct.DeliveryType;
-            product.UpdatedDate = DateTime.UtcNow;
+            if (product == null)
+                return;
 
-            // Map collections
-            product.Packages = updatedProduct.Packages.Select(p => new Package
+            using (var transaction = _context.Database.BeginTransaction())
             {
-                PackUnit = p.PackUnit,
-                PackQty = p.PackQty,
-                PackNettWeight = p.PackNettWeight,
-                PackGrossWeight = p.PackGrossWeight,
-                PackEan = p.PackEan,
-                PackRequired = p.PackRequired
-            }).ToList();
-
-            product.CrossNumbers = (updatedProduct.CrossNumbers ?? Enumerable.Empty<ApiCrossNumber>())
-                .Where(c => c != null && !string.IsNullOrEmpty(c.CrossNumber))
-                .SelectMany(c => c.CrossNumber.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(cn => new CrossNumber
+                try
+                {
+                    // 2️⃣ Delete all child entities in one go
+                    var tables = new[]
                     {
-                        CrossNumberValue = cn.Trim(),
-                        CrossManufacturer = c.CrossManufacturer
-                    }))
-                .ToList();
+                        "Packages", "CrossNumbers", "Components", "RecommendedParts",
+                        "Applications", "ProductAttributes", "ProductImages",
+                        "ProductFiles", "ProductCategories"
+                    };
 
-            product.Components = updatedProduct.Components.Select(c => new Component
-            {
-                TwrID = c.TwrID,
-                CodeGaska = c.CodeGaska,
-                Qty = c.Qty
-            }).ToList();
+                    foreach (var table in tables)
+                    {
+                        await _context.Database.ExecuteSqlCommandAsync(
+                            string.Format("DELETE FROM {0} WHERE ProductId = @p0", table),
+                            new object[] { productId },
+                            ct
+                        );
+                    }
 
-            product.RecommendedParts = updatedProduct.RecommendedParts.Select(r => new RecommendedPart
-            {
-                TwrID = r.TwrID,
-                CodeGaska = r.CodeGaska,
-                Qty = r.Qty
-            }).ToList();
+                    // 3️⃣ Map and bulk insert (null-safe)
+                    var packages = (updatedProduct.Packages ?? new List<ApiPackage>())
+                        .Select(p => new Package
+                        {
+                            ProductId = productId,
+                            PackUnit = p.PackUnit,
+                            PackQty = p.PackQty,
+                            PackNettWeight = p.PackNettWeight,
+                            PackGrossWeight = p.PackGrossWeight,
+                            PackEan = p.PackEan,
+                            PackRequired = p.PackRequired
+                        })
+                        .ToList();
 
-            product.Applications = updatedProduct.Applications.Select(a => new Application
-            {
-                ApplicationId = a.Id,
-                ParentID = a.ParentID,
-                Name = a.Name
-            }).ToList();
+                    var crossNumbers = (updatedProduct.CrossNumbers ?? new List<ApiCrossNumber>())
+                        .SelectMany(c =>
+                            (c.CrossNumber ?? string.Empty)
+                                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                .Select(cn => new CrossNumber
+                                {
+                                    ProductId = productId,
+                                    CrossNumberValue = cn.Trim(),
+                                    CrossManufacturer = c.CrossManufacturer
+                                }))
+                        .ToList();
 
-            product.Atributes = updatedProduct.Parameters.Select(p => new ProductAttribute
-            {
-                AttributeId = p.AttributeId,
-                AttributeName = p.AttributeName,
-                AttributeValue = p.AttributeValue
-            }).ToList();
+                    var components = (updatedProduct.Components ?? new List<ApiComponent>())
+                        .Select(c => new Component
+                        {
+                            ProductId = productId,
+                            TwrID = c.TwrID,
+                            CodeGaska = c.CodeGaska,
+                            Qty = c.Qty
+                        })
+                        .ToList();
 
-            product.Images = updatedProduct.Images.Select(i => new ProductImage
-            {
-                Title = i.Title,
-                Url = i.Url
-            }).ToList();
+                    var recommendedParts = (updatedProduct.RecommendedParts ?? new List<ApiRecommendedPart>())
+                        .Select(r => new RecommendedPart
+                        {
+                            ProductId = productId,
+                            TwrID = r.TwrID,
+                            CodeGaska = r.CodeGaska,
+                            Qty = r.Qty
+                        })
+                        .ToList();
 
-            product.Files = updatedProduct.Files.Select(f => new ProductFile
-            {
-                Title = f.Title,
-                Url = f.Url
-            }).ToList();
+                    var applications = (updatedProduct.Applications ?? new List<ApiApplication>())
+                        .Select(a => new Application
+                        {
+                            ProductId = productId,
+                            ApplicationId = a.Id,
+                            ParentID = a.ParentID,
+                            Name = a.Name
+                        })
+                        .ToList();
 
-            product.Categories = updatedProduct.Categories.Select(c => new ProductCategory
-            {
-                CategoryId = c.Id,
-                ParentID = c.ParentID,
-                Name = c.Name
-            }).ToList();
+                    var attributes = (updatedProduct.Parameters ?? new List<ApiParameter>())
+                        .Select(p => new ProductAttribute
+                        {
+                            ProductId = productId,
+                            AttributeId = p.AttributeId,
+                            AttributeName = p.AttributeName,
+                            AttributeValue = p.AttributeValue
+                        })
+                        .ToList();
 
-            List<string> rootBrands;
-            if (product.Applications != null)
-            {
-                rootBrands = updatedProduct.Applications
-                    .Where(a => a.ParentID == 0)
-                    .Select(a => a.Name)
-                    .Where(n => !string.IsNullOrWhiteSpace(n))
-                    .ToList();
+                    var images = (updatedProduct.Images ?? new List<ApiImage>())
+                        .Select(i => new ProductImage
+                        {
+                            ProductId = productId,
+                            Title = i.Title,
+                            Url = i.Url
+                        })
+                        .ToList();
+
+                    var files = (updatedProduct.Files ?? new List<ApiFile>())
+                        .Select(f => new ProductFile
+                        {
+                            ProductId = productId,
+                            Title = f.Title,
+                            Url = f.Url
+                        })
+                        .ToList();
+
+                    var categories = (updatedProduct.Categories ?? new List<ApiCategory>())
+                        .Select(c => new ProductCategory
+                        {
+                            ProductId = productId,
+                            CategoryId = c.Id,
+                            ParentID = c.ParentID,
+                            Name = c.Name
+                        })
+                        .ToList();
+
+                    // 4️⃣ Bulk insert
+                    if (packages.Any()) await _context.BulkInsertAsync(packages, ct);
+                    if (crossNumbers.Any()) await _context.BulkInsertAsync(crossNumbers, ct);
+                    if (components.Any()) await _context.BulkInsertAsync(components, ct);
+                    if (recommendedParts.Any()) await _context.BulkInsertAsync(recommendedParts, ct);
+                    if (applications.Any()) await _context.BulkInsertAsync(applications, ct);
+                    if (attributes.Any()) await _context.BulkInsertAsync(attributes, ct);
+                    if (images.Any()) await _context.BulkInsertAsync(images, ct);
+                    if (files.Any()) await _context.BulkInsertAsync(files, ct);
+                    if (categories.Any()) await _context.BulkInsertAsync(categories, ct);
+
+                    // 5️⃣ Update main product
+                    product.CodeGaska = updatedProduct.CodeGaska;
+                    product.CodeCustomer = updatedProduct.CodeCustomer;
+                    product.SupplierName = updatedProduct.SupplierName;
+                    product.SupplierLogo = updatedProduct.SupplierLogo;
+                    product.InStock = updatedProduct.InStock;
+                    product.CurrencyPrice = updatedProduct.CurrencyPrice;
+                    product.PriceNet = updatedProduct.PriceNet;
+                    product.PriceGross = updatedProduct.PriceGross;
+                    product.DeliveryType = updatedProduct.DeliveryType;
+                    product.UpdatedDate = DateTime.UtcNow;
+
+                    var rootBrands = applications
+                        .Where(a => a.ParentID == 0)
+                        .Select(a => a.Name)
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .Distinct()
+                        .ToList();
+
+                    product.Name = FixName(updatedProduct.Name, updatedProduct.CodeGaska, updatedProduct.CodeCustomer, rootBrands);
+
+                    await _context.BulkUpdateAsync(new List<Product> { product }, ct);
+
+                    transaction.Commit();
+                }
+                catch (Exception)
+                {
+                    transaction.Rollback();
+                    throw;
+                }
             }
-            else
-            {
-                rootBrands = new List<string>();
-            }
-
-            product.Name = FixName(updatedProduct.Name, updatedProduct.CodeGaska, updatedProduct.CodeCustomer, rootBrands);
-
-            await _context.SaveChangesAsync(ct);
         }
 
         public async Task<List<Product>> GetProductsWithoutDefaultCategory(CancellationToken ct)
@@ -379,7 +449,7 @@ namespace GaskaAllegroSync.Repositories
             if (parameters == null || !parameters.Any())
                 return;
 
-            const int batchSize = 50;
+            const int batchSize = 100;
 
             // Split parameters into batches
             var parameterBatches = parameters
@@ -456,61 +526,37 @@ namespace GaskaAllegroSync.Repositories
             if (products == null || !products.Any())
                 return;
 
-            const int batchSize = 500; // Adjust batch size
+            var ids = products.Select(p => p.Id).ToList();
 
-            var productList = products.ToList();
+            var existingProducts = _context.CompatibleProducts
+                .Where(p => ids.Contains(p.Id))
+                .ToList();
 
-            var stopwatchTotal = Stopwatch.StartNew();
+            var existingDict = existingProducts.ToDictionary(p => p.Id);
 
-            var batches = productList
-                .Select((p, index) => new { p, index })
-                .GroupBy(x => x.index / batchSize)
-                .Select(g => g.Select(x => x.p).ToList());
+            var toInsert = new List<CompatibleProduct>();
+            var toUpdate = new List<CompatibleProduct>();
 
-            int batchNumber = 0;
-            foreach (var batch in batches)
+            foreach (var product in products)
             {
-                batchNumber++;
-                var stopwatchBatch = Stopwatch.StartNew();
-
-                var ids = batch.Select(p => p.Id).ToList();
-
-                // Fetch existing products in this batch
-                var existingProducts = _context.CompatibleProducts
-                    .Where(p => ids.Contains(p.Id))
-                    .ToList();
-
-                var existingDict = existingProducts.ToDictionary(p => p.Id);
-
-                var toInsert = new List<CompatibleProduct>();
-
-                foreach (var product in batch)
+                if (existingDict.TryGetValue(product.Id, out var existing))
                 {
-                    if (existingDict.TryGetValue(product.Id, out var existing))
-                    {
-                        // Update fields
-                        existing.Name = product.Name;
-                        existing.Type = product.Type;
-                        existing.GroupName = product.GroupName;
-                    }
-                    else
-                    {
-                        toInsert.Add(product);
-                    }
+                    existing.Name = product.Name;
+                    existing.Type = product.Type;
+                    existing.GroupName = product.GroupName;
+                    toUpdate.Add(existing);
                 }
-
-                // Bulk insert
-                if (toInsert.Any())
-                    _context.CompatibleProducts.AddRange(toInsert);
-
-                await _context.SaveChangesAsync(ct);
-
-                stopwatchBatch.Stop();
-                Console.WriteLine($"Batch {batchNumber} saved in {stopwatchBatch.ElapsedMilliseconds} ms");
+                else
+                {
+                    toInsert.Add(product);
+                }
             }
 
-            stopwatchTotal.Stop();
-            Console.WriteLine($"Total save time: {stopwatchTotal.ElapsedMilliseconds} ms");
+            if (toInsert.Any())
+                _context.BulkInsert(toInsert);
+
+            if (toUpdate.Any())
+                _context.BulkUpdate(toUpdate);
         }
 
         private string FixName(string name, string code, string supplierName, List<string> rootBrands = null)

@@ -91,7 +91,7 @@ namespace AllegroErliSync.Mappers
                 Price = (int)(offer.Price * 100),
                 Stock = offer.Stock,
                 Status = offer.Status.ToLower() == "ended" ? "inactive" : offer.Status.ToLower(),
-                DispatchTime = new ErliDispatchTime { Period = 3 },
+                DispatchTime = DispatchTimeMapper.MapFromHandlingTime(offer.HandlingTime),
                 Images = string.IsNullOrWhiteSpace(offer.Images)
                     ? new List<ErliImage>()
                     : JsonConvert.DeserializeObject<List<string>>(offer.Images)
@@ -99,7 +99,18 @@ namespace AllegroErliSync.Mappers
                         .Select(url => new ErliImage { Url = url })
                         .ToList(),
                 Weight = (int)(offer.Weight * 1000),
-                InvoiceType = "vatInvoice"
+                InvoiceType = "vatInvoice",
+                DeliveryPriceList = offer.DeliveryName,
+                ExternalResponsiblePerson = new ErliResponsiblePerson
+                {
+                    ExternalId = offer.ResponsiblePerson,
+                    Source = "allegro"
+                },
+                ExternalResponsibleProducer = new ErliResponsibleProducer
+                {
+                    ExternalId = offer.ResponsibleProducer,
+                    Source = "allegro"
+                },
             };
 
             // Build description

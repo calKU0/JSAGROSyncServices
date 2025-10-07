@@ -74,6 +74,12 @@ namespace GaskaAllegroSync.Services.GaskaApiService
                             Log.Error(ex, $"Error while saving products for category {categoryId}");
                             hasErrors = true;
                         }
+
+                        if (apiResponse.Products.Count < _apiSettings.ProductsPerPage)
+                        {
+                            hasMore = false;
+                            break;
+                        }
                     }
                     catch (Exception ex)
                     {

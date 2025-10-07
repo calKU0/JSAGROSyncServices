@@ -66,10 +66,10 @@ namespace AllegroErliSync.Repositories
             {
                 // Step 1: get offers + descriptions
                 var sqlOffers = @"
-                    SELECT o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
+                    SELECT top 3 o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
                     FROM AllegroOffers o
                     LEFT JOIN AllegroOfferDescriptions d ON o.Id = d.OfferId
-                    WHERE ExistsInErli = 0 AND o.Status in ('ACTIVE', 'ENDED', 'INACTIVE')";
+                    WHERE ExistsInErli = 0 AND o.Status in ('ACTIVE', 'ENDED') AND Price > 0";
 
                 var offerDict = new Dictionary<string, Offer>();
 
@@ -119,10 +119,10 @@ namespace AllegroErliSync.Repositories
             {
                 // Step 1: get offers + descriptions
                 var sqlOffers = @"
-                    SELECT o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
+                    SELECT top 3 o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
                     FROM AllegroOffers o
                     LEFT JOIN AllegroOfferDescriptions d ON o.Id = d.OfferId
-                    WHERE ExistsInErli = 1";
+                    WHERE ExistsInErli = 1 AND Price > 0";
 
                 var offerDict = new Dictionary<string, Offer>();
 

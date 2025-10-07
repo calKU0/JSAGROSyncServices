@@ -20,9 +20,24 @@ namespace AllegroErliSync.DTOs
         public string ReferencePriceType { get; set; }
         public int Stock { get; set; }
         public string Status { get; set; }
+        public string DeliveryPriceList { get; set; }
         public ErliDispatchTime DispatchTime { get; set; }
         public int Weight { get; set; }
         public string InvoiceType { get; set; }
+        public ErliResponsiblePerson ExternalResponsiblePerson { get; set; }
+        public ErliResponsibleProducer ExternalResponsibleProducer { get; set; }
+    }
+
+    public class ErliResponsiblePerson
+    {
+        public string ExternalId { get; set; }
+        public string Source { get; set; }
+    }
+
+    public class ErliResponsibleProducer
+    {
+        public string ExternalId { get; set; }
+        public string Source { get; set; }
     }
 
     public class ErliDescription

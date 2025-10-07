@@ -41,35 +41,29 @@ namespace GaskaAllegroSync.Repositories
             if (images == null || !images.Any())
                 return;
 
-            const int batchSize = 100;
+            var imageIds = images.Select(i => i.ImageId).ToList();
 
-            var batches = images
-                .Select((u, index) => new { u, index })
-                .GroupBy(x => x.index / batchSize)
-                .Select(g => g.Select(x => x.u).ToList());
+            // 1 Load all existing images in one query
+            var existingImages = _context.ProductImages
+                .Where(i => imageIds.Contains(i.Id))
+                .ToList();
 
-            foreach (var batch in batches)
+            var dict = existingImages.ToDictionary(i => i.Id);
+
+            // 2 Map updates
+            foreach (var update in images)
             {
-                var ids = batch.Select(u => u.ImageId).ToList();
-
-                var existingImages = await _context.ProductImages
-                    .Where(i => ids.Contains(i.Id))
-                    .ToListAsync(ct);
-
-                var dict = existingImages.ToDictionary(i => i.Id);
-
-                foreach (var update in batch)
+                if (dict.TryGetValue(update.ImageId, out var img))
                 {
-                    if (dict.TryGetValue(update.ImageId, out var img))
-                    {
-                        img.AllegroUrl = update.Url;
-                        img.AllegroLogoUrl = update.LogoUrl;
-                        img.AllegroExpirationDate = update.ExpiresAt;
-                    }
+                    img.AllegroUrl = update.Url;
+                    img.AllegroLogoUrl = update.LogoUrl;
+                    img.AllegroExpirationDate = update.ExpiresAt;
                 }
-
-                await _context.SaveChangesAsync(ct);
             }
+
+            // 3 Bulk update all images at once
+            if (existingImages.Any())
+                _context.BulkUpdate(existingImages);
         }
     }
 }

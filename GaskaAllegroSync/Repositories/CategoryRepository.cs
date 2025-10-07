@@ -68,59 +68,59 @@ namespace GaskaAllegroSync.Repositories
             if (parameters == null || !parameters.Any())
                 return;
 
-            const int batchSize = 500;
             var paramList = parameters.ToList();
 
-            // Batch processing to avoid huge queries
-            var batches = paramList
-                .Select((p, index) => new { p, index })
-                .GroupBy(x => x.index / batchSize)
-                .Select(g => g.Select(x => x.p).ToList());
+            // 1️⃣ Load all existing parameters for this set
+            var categoryIds = paramList.Select(p => p.CategoryId).Distinct().ToList();
+            var paramIds = paramList.Select(p => p.ParameterId).Distinct().ToList();
 
-            foreach (var batch in batches)
+            var existingParams = _context.CategoryParameters
+                .Include(cp => cp.Values)
+                .Where(cp => categoryIds.Contains(cp.CategoryId) && paramIds.Contains(cp.ParameterId))
+                .ToList();
+
+            var existingDict = existingParams.ToDictionary(p => (p.CategoryId, p.ParameterId));
+
+            var toInsert = new List<CategoryParameter>();
+            var toUpdate = new List<CategoryParameter>();
+            var toRemoveValues = new List<CategoryParameterValue>();
+
+            foreach (var param in paramList)
             {
-                var categoryIds = batch.Select(p => p.CategoryId).Distinct().ToList();
-                var paramIds = batch.Select(p => p.ParameterId).Distinct().ToList();
-
-                // Fetch existing parameters for this batch in one query
-                var existingParams = await _context.CategoryParameters
-                    .Include(cp => cp.Values)
-                    .Where(cp => categoryIds.Contains(cp.CategoryId) && paramIds.Contains(cp.ParameterId))
-                    .ToListAsync(ct);
-
-                var existingDict = existingParams.ToDictionary(
-                    p => (p.CategoryId, p.ParameterId)
-                );
-
-                var toInsert = new List<CategoryParameter>();
-                var toRemoveValues = new List<CategoryParameterValue>();
-
-                foreach (var param in batch)
+                if (existingDict.TryGetValue((param.CategoryId, param.ParameterId), out var existing))
                 {
-                    if (existingDict.TryGetValue((param.CategoryId, param.ParameterId), out var existing))
-                    {
-                        existing.Name = param.Name;
-                        existing.Type = param.Type;
-                        existing.Required = param.Required;
-                        existing.Min = param.Min;
-                        existing.Max = param.Max;
+                    existing.Name = param.Name;
+                    existing.Type = param.Type;
+                    existing.Required = param.Required;
+                    existing.Min = param.Min;
+                    existing.Max = param.Max;
 
-                        if (existing.Values != null && existing.Values.Any())
-                            _context.CategoryParameterValues.RemoveRange(existing.Values);
+                    // Collect old values to remove
+                    if (existing.Values != null && existing.Values.Any())
+                        toRemoveValues.AddRange(existing.Values);
 
-                        existing.Values = param.Values ?? new List<CategoryParameterValue>();
-                    }
-                    else
-                    {
-                        toInsert.Add(param);
-                    }
+                    existing.Values = param.Values ?? new List<CategoryParameterValue>();
+                    toUpdate.Add(existing);
                 }
-
-                if (toInsert.Any())
-                    _context.CategoryParameters.AddRange(toInsert);
-
-                await _context.SaveChangesAsync(ct);
+                else
+                {
+                    toInsert.Add(param);
+                }
             }
+
+            // 2 Bulk remove old values
+            if (toRemoveValues.Any())
+                _context.BulkDelete(toRemoveValues);
+
+            // 3 Bulk insert new parameters
+            if (toInsert.Any())
+                _context.BulkInsert(toInsert);
+
+            // 4 Bulk update existing parameters
+            if (toUpdate.Any())
+                _context.BulkUpdate(toUpdate);
+
+            await Task.CompletedTask;
         }
 
         public async Task<List<int>> GetDefaultCategories(CancellationToken ct)

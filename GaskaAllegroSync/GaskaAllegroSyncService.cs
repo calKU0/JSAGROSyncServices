@@ -109,7 +109,7 @@ namespace GaskaAllegroSync
                     Log.Information("Allegro offers details sync completed.");
 
                     // 3. Update product details once a day
-                    if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 1 && DateTime.Now.Hour <= 10)
+                    if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 1 && DateTime.Now.Hour <= 8)
                     {
                         // 3.1 Product details
                         Log.Information("Starting syncing product details...");

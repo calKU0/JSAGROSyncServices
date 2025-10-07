@@ -99,6 +99,7 @@
     <Compile Include="DTOs\ErliCreateProductRequest.cs" />
     <Compile Include="DTOs\ErliSearchRequest.cs" />
     <Compile Include="Helpers\AppSettingsLoader.cs" />
+    <Compile Include="Mappers\DispatchTimeMapper.cs" />
     <Compile Include="Mappers\ErliBreadcrumbHelper.cs" />
     <Compile Include="Mappers\ErliProductMapper.cs" />
     <Compile Include="Logging\LogConfig.cs" />
