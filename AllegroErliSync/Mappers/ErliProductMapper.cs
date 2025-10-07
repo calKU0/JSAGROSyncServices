@@ -76,7 +76,13 @@ namespace AllegroErliSync.Mappers
                     new ErliCategory
                     {
                         Source = "allegro",
-                        Breadcrumb = breadcrumb
+                        Breadcrumb = new List<ErliCategoryBreadcrumb>
+                        {
+                            new ErliCategoryBreadcrumb
+                            {
+                                Id = offer.CategoryId.ToString(),
+                            }
+                        },
                     }
                 },
                 ExternalReferences = new List<ErliExternalReference>
@@ -101,16 +107,21 @@ namespace AllegroErliSync.Mappers
                 Weight = (int)(offer.Weight * 1000),
                 InvoiceType = "vatInvoice",
                 DeliveryPriceList = offer.DeliveryName,
-                ExternalResponsiblePerson = new ErliResponsiblePerson
-                {
-                    ExternalId = offer.ResponsiblePerson,
-                    Source = "allegro"
-                },
-                ExternalResponsibleProducer = new ErliResponsibleProducer
-                {
-                    ExternalId = offer.ResponsibleProducer,
-                    Source = "allegro"
-                },
+                ExternalResponsiblePerson = !string.IsNullOrEmpty(offer.ResponsiblePerson)
+                    ? new ErliResponsiblePerson
+                    {
+                        ExternalId = offer.ResponsiblePerson,
+                        Source = "allegro"
+                    }
+                    : null,
+
+                ExternalResponsibleProducer = !string.IsNullOrEmpty(offer.ResponsibleProducer)
+                    ? new ErliResponsibleProducer
+                    {
+                        ExternalId = offer.ResponsibleProducer,
+                        Source = "allegro"
+                    }
+                    : null
             };
 
             // Build description

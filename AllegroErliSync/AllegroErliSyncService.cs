@@ -22,8 +22,6 @@ namespace AllegroErliSync
     public partial class AllegroErliSyncService : ServiceBase
     {
         private Timer _timer;
-        private DateTime _lastProductDetailsSyncDate = DateTime.MinValue;
-        private DateTime _lastRunTime;
         private readonly AppSettings _appSettings;
 
         public AllegroErliSyncService()

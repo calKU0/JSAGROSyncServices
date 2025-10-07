@@ -257,19 +257,26 @@ namespace GaskaAllegroSync.Services.AllegroApi
                                 //Log.Information("Updated category for {Name} ({Code}) to {CategoryId}", product.Name, product.CodeGaska, correctCategoryId);
                             }
                         }
-                        else if (err.Code == "PARAMETER_MISMATCH" && !string.IsNullOrEmpty(err.UserMessage))
+                        else if (
+                            (err.Code == "PARAMETER_MISMATCH" && !string.IsNullOrEmpty(err.UserMessage)) ||
+                            (err.Code == "ProductConstraintViolationException.DataIntegrity" &&
+                             err.Message.Contains("Incorrect value of the") &&
+                             err.Message.Contains("parameter for the offered product"))
+                        )
                         {
-                            var correctValue = ExtractParameterValueFromMessage(err.UserMessage);
-                            var parameterId = ExtractParameterIdFromMessage(err.Message);
+                            // Try to extract from either UserMessage or Message
+                            var sourceMessage = !string.IsNullOrEmpty(err.UserMessage) ? err.UserMessage : err.Message;
+
+                            var correctValue = ExtractCorrectParameterValue(sourceMessage);
+                            var parameterId = ExtractParameterIdFromConstraintMessage(err.Message);
 
                             if (!string.IsNullOrEmpty(parameterId) && !string.IsNullOrEmpty(correctValue))
                             {
                                 await _productRepo.UpdateParameter(product.Id, Convert.ToInt32(parameterId), correctValue, CancellationToken.None);
-                                //Log.Information("Updated parameter {ParameterId} for {Name} ({Code}) to '{CorrectValue}'",
-                                //    parameterId, product.Name, product.CodeGaska, correctValue);
+                                Log.Information("Updated parameter {ParameterId} for {Name} ({Code}) to '{CorrectValue}'", parameterId, product.Name, product.CodeGaska, correctValue);
                             }
                         }
-                        else if (err.Message == "Producent części" && err.UserMessage.Contains("Nie można podać propozycji wartości"))
+                        else if (err.UserMessage.Contains(@"bez wybierania wartości niejednoznacznej"))
                         {
                         }
                         else if (err.Message.Contains(@"The type of this ""Compatible with"" "))
@@ -304,16 +311,17 @@ namespace GaskaAllegroSync.Services.AllegroApi
             return matches.Count == 1 ? matches[0].Groups[1].Value : null;
         }
 
-        private string ExtractParameterIdFromMessage(string message)
+        private string ExtractCorrectParameterValue(string message)
         {
-            var match = Regex.Match(message, @"id:\s*(\d+)");
+            // Example: The correct parameter value for the product is: "JAG".
+            var match = Regex.Match(message, @"correct parameter value.*?:\s*""([^""]+)""", RegexOptions.IgnoreCase);
             return match.Success ? match.Groups[1].Value : null;
         }
 
-        private string ExtractParameterValueFromMessage(string message)
+        private string ExtractParameterIdFromConstraintMessage(string message)
         {
-            // Example: "change the value to `JAG`"
-            var match = Regex.Match(message, @"change the value to\s+`([^`]+)`", RegexOptions.IgnoreCase);
+            // Example: Producent części (247835)
+            var match = Regex.Match(message, @"\((\d+)\)");
             return match.Success ? match.Groups[1].Value : null;
         }
     }

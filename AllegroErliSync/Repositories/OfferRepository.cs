@@ -66,10 +66,10 @@ namespace AllegroErliSync.Repositories
             {
                 // Step 1: get offers + descriptions
                 var sqlOffers = @"
-                    SELECT top 3 o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
+                    SELECT o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
                     FROM AllegroOffers o
                     LEFT JOIN AllegroOfferDescriptions d ON o.Id = d.OfferId
-                    WHERE ExistsInErli = 0 AND o.Status in ('ACTIVE', 'ENDED') AND Price > 0";
+                    WHERE ExistsInErli = 0 AND o.Status in ('ACTIVE', 'ENDED') AND Price > 0 AND Stock > 0 AND CategoryId != 0 AND CategoryId is not null";
 
                 var offerDict = new Dictionary<string, Offer>();
 
@@ -96,7 +96,7 @@ namespace AllegroErliSync.Repositories
                 var sqlAttrs = @"
                     SELECT *
                     FROM AllegroOfferAttributes
-                    WHERE OfferId IN @OfferIds";
+                    WHERE OfferId IN @OfferIds and type in ('dictionary', 'string', 'number', 'float', 'int')";
 
                 var allAttrs = connection.Query<OfferAttribute>(sqlAttrs, new { OfferIds = offerDict.Keys.ToArray() });
 
@@ -119,14 +119,15 @@ namespace AllegroErliSync.Repositories
             {
                 // Step 1: get offers + descriptions
                 var sqlOffers = @"
-                    SELECT top 3 o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
+                    SELECT o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
                     FROM AllegroOffers o
                     LEFT JOIN AllegroOfferDescriptions d ON o.Id = d.OfferId
-                    WHERE ExistsInErli = 1 AND Price > 0";
+                    WHERE ExistsInErli = 1 AND Price > 0 AND CategoryId != 0 AND CategoryId is not null";
 
                 var offerDict = new Dictionary<string, Offer>();
 
-                connection.Query<Offer, OfferDescription, Offer>(sqlOffers,
+                connection.Query<Offer, OfferDescription, Offer>(
+                    sqlOffers,
                     (offer, desc) =>
                     {
                         if (!offerDict.TryGetValue(offer.Id, out var currentOffer))
@@ -145,13 +146,23 @@ namespace AllegroErliSync.Repositories
                     splitOn: "DescriptionId"
                 ).ToList();
 
-                // Step 2: get all attributes separately
-                var sqlAttrs = @"
-                    SELECT *
-                    FROM AllegroOfferAttributes
-                    WHERE OfferId IN @OfferIds";
+                // Step 2: get all attributes in batches
+                var offerIds = offerDict.Keys.ToList();
+                var allAttrs = new List<OfferAttribute>();
 
-                var allAttrs = connection.Query<OfferAttribute>(sqlAttrs, new { OfferIds = offerDict.Keys.ToArray() });
+                const int batchSize = 2000;
+                for (int i = 0; i < offerIds.Count; i += batchSize)
+                {
+                    var batch = offerIds.Skip(i).Take(batchSize).ToArray();
+
+                    var sqlAttrs = @"
+                        SELECT *
+                        FROM AllegroOfferAttributes
+                        WHERE OfferId IN @OfferIds and type in ('dictionary', 'string', 'number', 'float', 'int')";
+
+                    var batchAttrs = connection.Query<OfferAttribute>(sqlAttrs, new { OfferIds = batch });
+                    allAttrs.AddRange(batchAttrs);
+                }
 
                 // Step 3: merge attributes
                 foreach (var attr in allAttrs)

@@ -228,9 +228,24 @@ namespace GaskaAllegroSync.Repositories
                 {
                     foreach (var param in o.Parameters)
                     {
-                        string type = "PARAM";
+                        string type;
+
                         if (categoryParams.TryGetValue(param.Id, out var def) && !string.IsNullOrEmpty(def.Type))
+                        {
                             type = def.Type;
+                        }
+                        else if (param.ValuesIds != null && param.ValuesIds.Any())
+                        {
+                            type = "dictionary";
+                        }
+                        else if (param.Values != null && param.Values.Any(v => double.TryParse(v, out _)))
+                        {
+                            type = "number";
+                        }
+                        else
+                        {
+                            type = "string";
+                        }
 
                         allegroAttributes.Add(new AllegroOfferAttribute
                         {
@@ -248,9 +263,24 @@ namespace GaskaAllegroSync.Repositories
                 {
                     foreach (var param in productParams)
                     {
-                        string type = "PARAM";
+                        string type;
+
                         if (categoryParams.TryGetValue(param.Id, out var def) && !string.IsNullOrEmpty(def.Type))
+                        {
                             type = def.Type;
+                        }
+                        else if (param.ValuesIds != null && param.ValuesIds.Any())
+                        {
+                            type = "dictionary";
+                        }
+                        else if (param.Values != null && param.Values.Any(v => double.TryParse(v, out _)))
+                        {
+                            type = "number";
+                        }
+                        else
+                        {
+                            type = "string";
+                        }
 
                         allegroAttributes.Add(new AllegroOfferAttribute
                         {

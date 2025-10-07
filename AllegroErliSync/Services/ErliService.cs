@@ -100,7 +100,7 @@ namespace AllegroErliSync.Services
         {
             try
             {
-                Log.Information("Fetching offers for Erli product creation...");
+                Log.Information("Fetching offers for Erli product update...");
                 var offersToUpdate = _offerRepository.GetOffersForErliUpdate().ToList();
                 Log.Information("Total offers to update in Erli: {Count}", offersToUpdate.Count);
 
@@ -111,7 +111,7 @@ namespace AllegroErliSync.Services
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Failed to get offers to create in erli.");
+                Log.Error(ex, "Failed to get offers to update in erli.");
             }
         }
 
