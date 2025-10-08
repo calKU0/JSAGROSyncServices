@@ -91,6 +91,7 @@ namespace GaskaAllegroSync.Repositories
 
             // 2 Load existing products
             var existingProducts = _context.Products
+                .AsNoTracking()
                 .Where(p => productIds.Contains(p.Id))
                 .ToList();
 
@@ -183,9 +184,9 @@ namespace GaskaAllegroSync.Repositories
                     foreach (var table in tables)
                     {
                         await _context.Database.ExecuteSqlCommandAsync(
-                            string.Format("DELETE FROM {0} WHERE ProductId = @p0", table),
-                            new object[] { productId },
-                            ct
+                            $"DELETE FROM {table} WHERE ProductId = @p0",
+                            ct,
+                            productId
                         );
                     }
 

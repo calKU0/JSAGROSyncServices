@@ -89,7 +89,8 @@ namespace AllegroErliSync.Repositories
 
                         return offer;
                     },
-                    splitOn: "DescriptionId"
+                    splitOn: "DescriptionId",
+                    commandTimeout: 600
                 ).ToList();
 
                 // Step 2: get all attributes separately
@@ -143,7 +144,8 @@ namespace AllegroErliSync.Repositories
 
                         return offer;
                     },
-                    splitOn: "DescriptionId"
+                    splitOn: "DescriptionId",
+                    commandTimeout: 600
                 ).ToList();
 
                 // Step 2: get all attributes in batches
@@ -174,15 +176,6 @@ namespace AllegroErliSync.Repositories
                 }
 
                 return offerDict.Values;
-            }
-        }
-
-        public IEnumerable<AllegroCategory> GetAllCategories()
-        {
-            using (var connection = _context.CreateConnection())
-            {
-                var sql = "SELECT Id, CategoryId, Name, ParentId FROM AllegroCategories";
-                return connection.Query<AllegroCategory>(sql).ToList();
             }
         }
     }

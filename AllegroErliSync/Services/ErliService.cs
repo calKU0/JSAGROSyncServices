@@ -117,8 +117,7 @@ namespace AllegroErliSync.Services
 
         private async Task SendProductToErli(Offer offer, bool isUpdate = false)
         {
-            var categories = _offerRepository.GetAllCategories().ToDictionary(c => c.Id);
-            var request = ErliProductMapper.MapFromOffer(offer, categories);
+            var request = ErliProductMapper.MapFromOffer(offer);
 
             var endpoint = $"products/{offer.Id}";
 

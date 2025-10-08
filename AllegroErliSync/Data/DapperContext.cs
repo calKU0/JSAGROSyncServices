@@ -15,7 +15,12 @@ namespace AllegroErliSync.Data
 
         public DapperContext()
         {
-            _connectionString = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+            var baseConnection = ConfigurationManager.ConnectionStrings["DefaultConnection"].ConnectionString;
+            var builder = new SqlConnectionStringBuilder(baseConnection)
+            {
+                ConnectTimeout = 600
+            };
+            _connectionString = builder.ToString();
         }
 
         public IDbConnection CreateConnection() => new SqlConnection(_connectionString);

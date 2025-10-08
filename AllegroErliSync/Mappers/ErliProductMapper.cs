@@ -12,11 +12,9 @@ namespace AllegroErliSync.Mappers
 {
     public static class ErliProductMapper
     {
-        public static ErliCreateProductRequest MapFromOffer(Offer offer, Dictionary<int, AllegroCategory> categories)
+        public static ErliCreateProductRequest MapFromOffer(Offer offer)
         {
             if (offer == null) throw new ArgumentNullException(nameof(offer));
-
-            var breadcrumb = ErliBreadcrumbHelper.BuildBreadcrumb(offer.CategoryId, categories);
 
             var attributes = offer.Attributes?.Select(attr =>
             {

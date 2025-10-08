@@ -27,21 +27,25 @@ namespace GaskaAllegroSync
         private readonly GaskaApiCredentials _gaskaApiSettings;
         private readonly AppSettings _appSettings;
 
-        private Timer _timer;
+        private CancellationTokenSource _cts;
+        private Task _workerTask;
         private DateTime _lastProductDetailsSyncDate = DateTime.MinValue;
-        private DateTime _lastRunTime;
 
         public GaskaAllegroSyncService()
         {
-            // Load settings
             _gaskaApiSettings = AppSettingsLoader.LoadGaskaCredentials();
             _allegroApiSettings = AppSettingsLoader.LoadAllegroCredentials();
             _appSettings = AppSettingsLoader.LoadAppSettings();
 
-            // HttpClients
-            _allegroHttp = new HttpClient { BaseAddress = new Uri(_allegroApiSettings.BaseUrl) };
-            _gaskaHttp = new HttpClient { BaseAddress = new Uri(_gaskaApiSettings.BaseUrl) };
-            _allegroAuthHttp = new HttpClient { BaseAddress = new Uri(_allegroApiSettings.AuthBaseUrl) };
+            var handler = new HttpClientHandler
+            {
+                MaxConnectionsPerServer = 10
+            };
+
+            _allegroHttp = new HttpClient(handler, false) { BaseAddress = new Uri(_allegroApiSettings.BaseUrl) };
+            _gaskaHttp = new HttpClient(handler, false) { BaseAddress = new Uri(_gaskaApiSettings.BaseUrl) };
+            _allegroAuthHttp = new HttpClient(handler, false) { BaseAddress = new Uri(_allegroApiSettings.AuthBaseUrl) };
+
             ApiHelper.AddDefaultHeaders(_gaskaApiSettings, _gaskaHttp);
 
             InitializeComponent();
@@ -49,31 +53,74 @@ namespace GaskaAllegroSync
 
         protected override void OnStart(string[] args)
         {
-            // Serilog config
             LogConfig.Configure(_appSettings.LogsExpirationDays);
+            _cts = new CancellationTokenSource();
 
-            _timer = new Timer(
-                async _ => await TimerTickAsync(),
-                null,
-                TimeSpan.Zero,
-                Timeout.InfiniteTimeSpan
-            );
+            _workerTask = Task.Run(() => RunLoopAsync(_cts.Token));
 
-            Log.Information("Service started. First run immediately. Interval: {Interval}", TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes));
+            Log.Information("Service started. Interval: {Interval} minutes", _appSettings.FetchIntervalMinutes);
         }
 
         protected override void OnStop()
         {
+            if (_cts != null)
+            {
+                _cts.Cancel();
+            }
+
+            try
+            {
+                if (_workerTask != null)
+                    _workerTask.Wait(TimeSpan.FromSeconds(30));
+            }
+            catch (AggregateException ex)
+            {
+                Log.Warning(ex, "Worker task stopped with exception.");
+            }
+
             Log.Information("Service stopped.");
             Log.CloseAndFlush();
         }
 
-        private async Task TimerTickAsync()
+        private async Task RunLoopAsync(CancellationToken ct)
         {
-            using (var dbContext = new MyDbContext())
-            {
-                dbContext.Database.CommandTimeout = 880;
+            var interval = TimeSpan.FromMinutes(_appSettings.FetchIntervalMinutes);
 
+            while (!ct.IsCancellationRequested)
+            {
+                try
+                {
+                    await RunSyncCycleAsync(ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    // normal stop
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Unexpected error in synchronization loop.");
+                }
+
+                try
+                {
+                    Log.Information("Waiting {Delay} before next run...", interval);
+                    await Task.Delay(interval, ct);
+                }
+                catch (TaskCanceledException)
+                {
+                    // service stopping
+                }
+            }
+        }
+
+        private async Task RunSyncCycleAsync(CancellationToken ct)
+        {
+            var dbContext = new MyDbContext();
+            dbContext.Database.CommandTimeout = 880;
+            dbContext.Configuration.AutoDetectChangesEnabled = false;
+
+            try
+            {
                 var productRepo = new ProductRepository(dbContext);
                 var categoryRepo = new CategoryRepository(dbContext);
                 var imageRepo = new ImageRepository(dbContext);
@@ -90,81 +137,64 @@ namespace GaskaAllegroSync
                 var compatibilityService = new AllegroCompatibilityService(productRepo, allegroApiClient);
                 var offerService = new AllegroOfferService(productRepo, offerRepo, categoryRepo, allegroApiClient);
 
+                Log.Information("=== Starting full synchronization cycle ===");
+
+                await gaskaApiService.SyncProducts();
+                Log.Information("Basic product sync completed.");
+
+                await offerService.SyncAllegroOffers();
+                Log.Information("Allegro offers sync completed.");
+
+                await offerService.SyncAllegroOffersDetails();
+                Log.Information("Allegro offers details completed.");
+
+                if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 1 && DateTime.Now.Hour <= 9)
+                {
+                    await gaskaApiService.SyncProductDetails();
+                    Log.Information("Detailed product sync completed.");
+
+                    await categoryService.UpdateAllegroCategories();
+                    Log.Information("Allegro categories updated.");
+
+                    await compatibilityService.FetchAndSaveCompatibleProducts();
+                    Log.Information("Compatibility products fetched.");
+
+                    _lastProductDetailsSyncDate = DateTime.Today;
+                }
+
+                await categoryService.FetchAndSaveCategoryParameters();
+                Log.Information("Category parameters fetched.");
+
+                await parametersService.UpdateParameters();
+                Log.Information("Product parameters updated.");
+
+                await imageService.ImportImages();
+                Log.Information("Images import completed.");
+
+                await offerService.CreateOffers();
+                Log.Information("Offers creation completed.");
+
+                await offerService.UpdateOffers();
+                Log.Information("Offers update completed.");
+
+                Log.Information("=== Synchronization cycle finished successfully ===");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error during synchronization cycle.");
+            }
+            finally
+            {
                 try
                 {
-                    _lastRunTime = DateTime.Now;
-
-                    // 1. Sync base products
-                    Log.Information("Starting syncing basic products info...");
-                    await gaskaApiService.SyncProducts();
-                    Log.Information("Basic product sync completed.");
-
-                    // 2. Sync Allegro offers
-                    Log.Information("Starting syncing Allegro offers...");
-                    await offerService.SyncAllegroOffers();
-                    Log.Information("Allegro offers sync completed.");
-
-                    Log.Information("Starting syncing Allegro offers details...");
-                    await offerService.SyncAllegroOffersDetails();
-                    Log.Information("Allegro offers details sync completed.");
-
-                    // 3. Update product details once a day
-                    if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 1 && DateTime.Now.Hour <= 8)
-                    {
-                        // 3.1 Product details
-                        Log.Information("Starting syncing product details...");
-                        await gaskaApiService.SyncProductDetails();
-                        Log.Information("Detailed product sync completed.");
-
-                        // 3.2 Allegro categories
-                        Log.Information("Starting Allegro categories mapping...");
-                        await categoryService.UpdateAllegroCategories();
-                        Log.Information("Allegro Categories mapping completed.");
-
-                        // 3.5 Compatibility products
-                        Log.Information("Starting fetching compatible products...");
-                        await compatibilityService.FetchAndSaveCompatibleProducts();
-                        Log.Information("Compatible products fetched.");
-
-                        _lastProductDetailsSyncDate = DateTime.Today;
-                    }
-
-                    // 3.3 Allegro parameters for categories
-                    Log.Information("Starting Allegro parameters for category mapping...");
-                    await categoryService.FetchAndSaveCategoryParameters();
-                    Log.Information("Allegro parameters for category mapping completed.");
-
-                    // 3.4 Product parameters
-                    Log.Information("Starting product parameters update...");
-                    await parametersService.UpdateParameters();
-                    Log.Information("Product parameters update completed.");
-
-                    // 3.6 Images
-                    Log.Information("Starting importing images to allegro...");
-                    await imageService.ImportImages();
-                    Log.Information("Images import completed.");
-
-                    // 3.7. Create Allegro offers
-                    Log.Information("Starting Allegro offers creation...");
-                    await offerService.CreateOffers();
-                    Log.Information("Allegro Offer creation completed.");
-
-                    // 4.Update Allegro offers
-                    Log.Information("Starting updating Allegro offers...");
-                    await offerService.UpdateOffers();
-                    Log.Information("Allegro offers update completed.");
+                    dbContext.Dispose();
                 }
-                catch (Exception ex)
+                catch (Exception disposeEx)
                 {
-                    Log.Error(ex, "Error during API synchronization.");
+                    Log.Warning(disposeEx, "Failed to dispose DbContext.");
                 }
-                finally
-                {
-                    DateTime nextRun = DateTime.Now.AddHours(2);
-                    _timer.Change(TimeSpan.FromHours(2), Timeout.InfiniteTimeSpan);
 
-                    Log.Information("All processes completed. Next run scheduled at: {NextRun}", nextRun);
-                }
+                GC.Collect();
             }
         }
     }

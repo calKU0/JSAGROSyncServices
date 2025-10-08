@@ -100,10 +100,8 @@
     <Compile Include="DTOs\ErliSearchRequest.cs" />
     <Compile Include="Helpers\AppSettingsLoader.cs" />
     <Compile Include="Mappers\DispatchTimeMapper.cs" />
-    <Compile Include="Mappers\ErliBreadcrumbHelper.cs" />
     <Compile Include="Mappers\ErliProductMapper.cs" />
     <Compile Include="Logging\LogConfig.cs" />
-    <Compile Include="Models\AllegroCategory.cs" />
     <Compile Include="Models\Offer.cs" />
     <Compile Include="Models\OfferAttribute.cs" />
     <Compile Include="Models\OfferDescription.cs" />
