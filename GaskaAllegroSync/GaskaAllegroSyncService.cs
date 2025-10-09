@@ -63,19 +63,21 @@ namespace GaskaAllegroSync
 
         protected override void OnStop()
         {
-            if (_cts != null)
-            {
-                _cts.Cancel();
-            }
+            Log.Information("Service stopping...");
 
-            try
+            _cts?.Cancel();
+
+            if (_workerTask != null)
             {
-                if (_workerTask != null)
-                    _workerTask.Wait(TimeSpan.FromSeconds(30));
-            }
-            catch (AggregateException ex)
-            {
-                Log.Warning(ex, "Worker task stopped with exception.");
+                try
+                {
+                    // Wait for the task to complete but don't block for too long
+                    var completed = _workerTask.Wait(TimeSpan.FromSeconds(5));
+                }
+                catch (AggregateException ex)
+                {
+                    Log.Warning(ex, "Worker task stopped with exception.");
+                }
             }
 
             Log.Information("Service stopped.");
