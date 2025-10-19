@@ -3,13 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36310.24
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GaskaAllegroSync", "GaskaAllegroSync\GaskaAllegroSync.csproj", "{27E33AE0-712F-48FB-B3A4-65DF2BC627D7}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceManager", "ServiceManager\ServiceManager.csproj", "{99D56FE4-6713-4992-8ECA-011581427AB8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AllegroErliSync", "AllegroErliSync\AllegroErliSync.csproj", "{CACC543E-3DAD-497D-95DE-D23BB96E20ED}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GaskaAllegroProductsSync", "GaskaAllegroProductsSync\GaskaAllegroProductsSync.csproj", "{E613B824-2053-4523-81BE-394D0B124221}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GaskaAllegroSyncService", "GaskaAllegroSyncService\GaskaAllegroSyncService.csproj", "{E613B824-2053-4523-81BE-394D0B124221}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +15,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{27E33AE0-712F-48FB-B3A4-65DF2BC627D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{27E33AE0-712F-48FB-B3A4-65DF2BC627D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{27E33AE0-712F-48FB-B3A4-65DF2BC627D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{27E33AE0-712F-48FB-B3A4-65DF2BC627D7}.Release|Any CPU.Build.0 = Release|Any CPU
 		{99D56FE4-6713-4992-8ECA-011581427AB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{99D56FE4-6713-4992-8ECA-011581427AB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{99D56FE4-6713-4992-8ECA-011581427AB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
