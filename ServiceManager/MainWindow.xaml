@@ -235,9 +235,13 @@
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
 
-                                    <StackPanel Orientation="Horizontal" Grid.Row="0" VerticalAlignment="Center">
-                                        <TextBlock Text="Zawartość pliku:" FontWeight="Bold" Margin="0,0,8,0" />
-                                        <TextBlock x:Name="TxtSelectedFileName" Text="(brak)" VerticalAlignment="Center" />
+                                    <StackPanel Orientation="Horizontal" Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,0,8">
+                                        <TextBlock Text="Zawartość pliku:" FontWeight="Bold" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                        <TextBlock x:Name="TxtSelectedFileName" Text="(brak)" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                        <CheckBox x:Name="ChkShowOnlyWarningsAndErrors" Content="Pokaż tylko ostrzeżenia i błędy"
+                                          VerticalAlignment="Center"
+                                          Checked="ChkShowOnlyWarningsAndErrors_Changed"
+                                          Unchecked="ChkShowOnlyWarningsAndErrors_Changed" />
                                     </StackPanel>
 
                                     <ListBox Grid.Row="1"

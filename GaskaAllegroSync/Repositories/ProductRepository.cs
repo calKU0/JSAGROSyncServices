@@ -1,6 +1,5 @@
 ﻿using GaskaAllegroSync.Data;
 using GaskaAllegroSync.DTOs;
-using GaskaAllegroSync.DTOs.AllegroApi;
 using GaskaAllegroSync.Models;
 using GaskaAllegroSync.Models.Product;
 using GaskaAllegroSync.Repositories.Interfaces;
@@ -390,7 +389,7 @@ namespace GaskaAllegroSync.Repositories
 
         public async Task<List<Product>> GetProductsToUpload(CancellationToken ct)
         {
-            var cutoff = DateTime.UtcNow.AddMinutes(-60);
+            var cutoff = DateTime.UtcNow.AddMinutes(60);
             const int pageSize = 500;
             var result = new List<Product>();
 
@@ -438,7 +437,7 @@ namespace GaskaAllegroSync.Repositories
                     return x.Product;
                 }).ToList();
 
-                result.AddRange(batch);
+                result.AddRange(batch.Where(x => x.Images.Where(i => !string.IsNullOrEmpty(i.AllegroUrl)).Any()));
                 page++;
             } while (batch.Any());
 

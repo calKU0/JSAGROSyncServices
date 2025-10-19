@@ -146,14 +146,13 @@ namespace GaskaAllegroSync.Services.AllegroApi
             try
             {
                 var offers = await _offerRepo.GetOffersToUpdate(ct);
-                var compatibleProducts = await _categoryRepo.GetCompatibilityList(ct);
                 var allegroCategories = await _categoryRepo.GetAllegroCategories(ct);
 
                 foreach (var offer in offers)
                 {
                     try
                     {
-                        var offerDto = OfferFactory.PatchOffer(offer, compatibleProducts, allegroCategories, _appSettings);
+                        var offerDto = OfferFactory.PatchOffer(offer, allegroCategories, _appSettings);
                         var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", new HttpMethod("PATCH"), offerDto, ct);
                         var body = await response.Content.ReadAsStringAsync();
                         await LogAllegroResponse(offer.Product, response, body, true);
@@ -175,14 +174,13 @@ namespace GaskaAllegroSync.Services.AllegroApi
             try
             {
                 var products = await _productRepo.GetProductsToUpload(ct);
-                var compatibleProducts = await _categoryRepo.GetCompatibilityList(ct);
                 var allegroCategories = await _categoryRepo.GetAllegroCategories(ct);
 
                 foreach (var product in products)
                 {
                     try
                     {
-                        var offer = OfferFactory.BuildOffer(product, compatibleProducts, allegroCategories, _appSettings);
+                        var offer = OfferFactory.BuildOffer(product, allegroCategories, _appSettings);
                         var response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, offer, ct);
                         var body = await response.Content.ReadAsStringAsync();
                         await LogAllegroResponse(product, response, body);

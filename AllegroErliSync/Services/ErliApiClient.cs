@@ -1,5 +1,4 @@
 ﻿using AllegroErliSync.Helpers;
-using AllegroErliSync.Settings;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Serilog;

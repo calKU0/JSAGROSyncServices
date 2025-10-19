@@ -1,16 +1,19 @@
-﻿using ServiceManager.Enums;
+﻿using Microsoft.Extensions.Configuration;
+using ServiceManager.Enums;
+using ServiceManager.Helpers;
 using ServiceManager.Models;
 using System.Collections.ObjectModel;
 using System.Configuration;
-using System.Globalization;
+using System.Diagnostics;
 using System.IO;
 using System.ServiceProcess;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using System.Collections.Specialized;
-using ServiceManager.Helpers;
+using ConfigurationManager = System.Configuration.ConfigurationManager;
 
 namespace ServiceManager
 {
@@ -26,6 +29,7 @@ namespace ServiceManager
         private const int PageLines = 1000;
 
         private readonly BulkObservableCollection<LogLine> _currentLogLines = new();
+        private BulkObservableCollection<LogLine> _filteredLogLines = new();
         private string? _currentPath;
         private long _loadedStartOffset = 0;
         private bool _isLoadingMore = false;
@@ -159,7 +163,9 @@ namespace ServiceManager
             ConfigViewContainer.Visibility = Visibility.Collapsed;
 
             LvLogFiles.ItemsSource = logFiles;
-            IcLogLines.ItemsSource = _currentLogLines;
+            IcLogLines.ItemsSource = _filteredLogLines;
+
+            HookLogLinesScrollViewer();
 
             if (refreshTimer != null)
             {
@@ -207,6 +213,7 @@ namespace ServiceManager
                 {
                     // update in-memory log lines
                     _currentLogLines.AddRange(newLines.Select(ParseLogLine));
+                    ApplyFilter();
 
                     // update warning/error counters
                     int newWarnings = newLines.Count(l => l.Contains("WRN]", StringComparison.Ordinal));
@@ -231,14 +238,50 @@ namespace ServiceManager
             }
         }
 
+        private IConfigurationRoot LoadAppSettings(string path)
+        {
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(Path.GetDirectoryName(path) ?? ".")
+                .AddJsonFile(Path.GetFileName(path), optional: false, reloadOnChange: true);
+
+            return builder.Build();
+        }
+
+        private void SaveAppSettings(string path, Dictionary<string, string> values)
+        {
+            var json = File.ReadAllText(path);
+            var jsonObject = JsonNode.Parse(json)?.AsObject() ?? new JsonObject();
+
+            foreach (var kvp in values)
+            {
+                var parts = kvp.Key.Split(':');
+                JsonObject current = jsonObject;
+
+                for (int i = 0; i < parts.Length - 1; i++)
+                {
+                    if (current[parts[i]] == null || current[parts[i]].GetType() != typeof(JsonObject))
+                        current[parts[i]] = new JsonObject();
+                    current = current[parts[i]].AsObject();
+                }
+
+                current[parts[^1]] = kvp.Value;
+            }
+
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+            File.WriteAllText(path, jsonObject.ToJsonString(options));
+        }
+
         private void LoadConfig()
         {
             if (_selectedService == null) return;
 
             try
             {
-                var map = new ExeConfigurationFileMap { ExeConfigFilename = _selectedService.ExternalConfigPath };
-                var config = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
+                var config = LoadAppSettings(_selectedService.ExternalConfigPath);
 
                 ConfigStackPanel.Children.Clear();
 
@@ -246,18 +289,18 @@ namespace ServiceManager
 
                 foreach (var group in groupedFields)
                 {
-                    // Keep only fields that exist in config
-                    var existingFields = group.Where(f => config.AppSettings.Settings.AllKeys.Contains(f.Key)).ToList();
+                    // Keep only fields that exist in JSON
+                    var existingFields = group.ToList(); // JSON can have missing keys; show all fields
 
                     if (!existingFields.Any())
-                        continue; // skip empty groups
+                        continue;
 
                     var groupBox = new GroupBox { Header = group.Key, Margin = new Thickness(0, 6, 0, 6) };
                     var groupPanel = new StackPanel { Margin = new Thickness(6) };
 
                     foreach (var field in existingFields)
                     {
-                        string value = config.AppSettings.Settings[field.Key]?.Value ?? "";
+                        string value = config[field.Key] ?? "";
 
                         var label = new TextBlock
                         {
@@ -295,6 +338,7 @@ namespace ServiceManager
                     ConfigStackPanel.Children.Add(groupBox);
                 }
 
+                // Save button
                 var saveButton = new Button
                 {
                     Content = "Zapisz",
@@ -310,7 +354,6 @@ namespace ServiceManager
                 };
 
                 saveButton.Click += BtnSaveConfig_Click;
-
                 ConfigStackPanel.Children.Add(saveButton);
 
                 ConfigViewContainer.Visibility = Visibility.Visible;
@@ -332,25 +375,18 @@ namespace ServiceManager
 
             try
             {
-                var map = new ExeConfigurationFileMap { ExeConfigFilename = _selectedService.ExternalConfigPath };
-                var config = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
+                var valuesToSave = new Dictionary<string, string>();
 
                 foreach (var grid in ConfigStackPanel.Children.OfType<GroupBox>()
                              .SelectMany(gb => ((StackPanel)gb.Content).Children.OfType<Grid>()))
                 {
                     var tb = grid.Children.OfType<TextBox>().FirstOrDefault();
                     if (tb != null && tb.Tag is string key)
-                    {
-                        string value = tb.Text;
-                        if (config.AppSettings.Settings[key] != null)
-                            config.AppSettings.Settings[key].Value = value;
-                        else
-                            config.AppSettings.Settings.Add(key, value);
-                    }
+                        valuesToSave[key] = tb.Text;
                 }
 
-                config.Save(ConfigurationSaveMode.Modified);
-                ConfigurationManager.RefreshSection("appSettings");
+                SaveAppSettings(_selectedService.ExternalConfigPath, valuesToSave);
+
                 MessageBox.Show("Konfiguracja zapisana.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
@@ -429,11 +465,105 @@ namespace ServiceManager
             }
         }
 
+        private async Task LoadEntireFileWithFilterAsync()
+        {
+            if (LvLogFiles.SelectedItem is not LogFileItem item || !File.Exists(item.Path))
+                return;
+
+            _currentLogLines.Clear();
+
+            // Inicjalizujemy zmienną
+            string[] allLines = Array.Empty<string>();
+
+            // Czytamy plik w tle
+            await Task.Run(() =>
+            {
+                using var fs = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(fs);
+
+                var lines = new List<string>();
+                string? line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    lines.Add(line);
+                }
+
+                allLines = lines.ToArray();
+            });
+
+            // Filtrujemy linie
+            var filteredLines = allLines.Select(ParseLogLine)
+                                        .Where(l => l.Level == LogLevel.Error || l.Level == LogLevel.Warning);
+
+            _currentLogLines.AddRange(filteredLines);
+
+            ApplyFilter(); // Aktualizujemy widok
+        }
+
+        private void ApplyFilter()
+        {
+            _filteredLogLines.Clear();
+
+            bool filter = ChkShowOnlyWarningsAndErrors.IsChecked == true;
+
+            foreach (var line in _currentLogLines)
+            {
+                if (!filter || line.Level == LogLevel.Warning || line.Level == LogLevel.Error)
+                    _filteredLogLines.Add(line);
+            }
+
+            if (_filteredLogLines.Count > 0)
+                IcLogLines.ScrollIntoView(_filteredLogLines[^1]);
+        }
+
+        private async void ChkShowOnlyWarningsAndErrors_Changed(object sender, RoutedEventArgs e)
+        {
+            if (ChkShowOnlyWarningsAndErrors.IsChecked == true)
+            {
+                await LoadEntireFileWithFilterAsync();
+            }
+            else
+            {
+                LoadSelectedFileContent();
+            }
+        }
+
         private void IcLogLines_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
-            // np. doładowywanie przy dojściu do góry
             if (e.VerticalOffset <= 0)
                 _ = LoadMoreAsync();
+        }
+
+        private void HookLogLinesScrollViewer()
+        {
+            // Use Dispatcher to ensure layout is ready
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var sv = GetScrollViewer(IcLogLines);
+                if (sv != null)
+                {
+                    sv.ScrollChanged -= IcLogLines_ScrollChanged; // prevent double hook
+                    sv.ScrollChanged += IcLogLines_ScrollChanged;
+                }
+                else
+                {
+                    Debug.WriteLine("ScrollViewer still null! Wait until ListBox is visible.");
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        private ScrollViewer? GetScrollViewer(DependencyObject dep)
+        {
+            if (dep is ScrollViewer viewer)
+                return viewer;
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(dep); i++)
+            {
+                var child = VisualTreeHelper.GetChild(dep, i);
+                var result = GetScrollViewer(child);
+                if (result != null) return result;
+            }
+            return null;
         }
 
         private async void LoadSelectedFileContent()
@@ -454,6 +584,7 @@ namespace ServiceManager
                 _reachedFileStart = reachedStart;
 
                 _currentLogLines.AddRange(lines.Select(ParseLogLine));
+                ApplyFilter();
 
                 await Dispatcher.BeginInvoke(() =>
                 {
@@ -485,6 +616,7 @@ namespace ServiceManager
                 if (older.Count > 0)
                 {
                     _currentLogLines.InsertRange(0, older.Select(ParseLogLine));
+                    ApplyFilter();
                     _loadedStartOffset = newStart;
                     _reachedFileStart = reachedStart;
 
