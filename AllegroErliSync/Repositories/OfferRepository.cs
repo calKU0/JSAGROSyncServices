@@ -1,12 +1,8 @@
 ﻿using AllegroErliSync.Data;
 using AllegroErliSync.Models;
 using Dapper;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.Remoting.Contexts;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace AllegroErliSync.Repositories
 {

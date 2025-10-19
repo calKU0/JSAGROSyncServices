@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.IO;
 
 namespace ServiceManager.Helpers
 {
@@ -103,13 +98,17 @@ namespace ServiceManager.Helpers
             private readonly long _limit;
             private long _read;
 
-            public LimitedStream(Stream @base, long limit) { _base = @base; _limit = limit; }
+            public LimitedStream(Stream @base, long limit)
+            { _base = @base; _limit = limit; }
+
             public override bool CanRead => true;
             public override bool CanSeek => false;
             public override bool CanWrite => false;
             public override long Length => _limit;
             public override long Position { get => _read; set => throw new NotSupportedException(); }
+
             public override void Flush() => _base.Flush();
+
             public override int Read(byte[] buffer, int offset, int count)
             {
                 var remain = _limit - _read;
@@ -121,9 +120,12 @@ namespace ServiceManager.Helpers
             }
 
             public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
             public override void SetLength(long value) => throw new NotSupportedException();
+
             public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         }
+
         public static List<string> ReadNewLines(string path, ref long lastReadOffset)
         {
             var result = new List<string>();
@@ -144,5 +146,4 @@ namespace ServiceManager.Helpers
             return result;
         }
     }
-
 }

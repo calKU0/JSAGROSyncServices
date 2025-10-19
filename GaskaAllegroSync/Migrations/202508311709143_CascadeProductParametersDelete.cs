@@ -1,8 +1,7 @@
 ﻿namespace GaskaAllegroSync.Migrations
 {
-    using System;
     using System.Data.Entity.Migrations;
-    
+
     public partial class CascadeProductParametersDelete : DbMigration
     {
         public override void Up()
@@ -13,7 +12,7 @@
             AddForeignKey("dbo.ProductParameters", "CategoryParameterId", "dbo.CategoryParameters", "Id");
             AddForeignKey("dbo.ProductParameters", "CategoryParameter_Id", "dbo.CategoryParameters", "Id");
         }
-        
+
         public override void Down()
         {
             DropForeignKey("dbo.ProductParameters", "CategoryParameter_Id", "dbo.CategoryParameters");

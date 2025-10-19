@@ -2,7 +2,6 @@
 using GaskaAllegroSync.DTOs.Settings;
 using GaskaAllegroSync.Models;
 using GaskaAllegroSync.Models.Product;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -13,7 +12,7 @@ namespace GaskaAllegroSync.Helpers
 {
     public static class OfferFactory
     {
-        public static ProductOfferRequest BuildOffer(Product product, List<CompatibleProduct> compatibleList, List<AllegroCategory> allegroCategories, AppSettings appSettings)
+        public static ProductOfferRequest BuildOffer(Product product, List<AllegroCategory> allegroCategories, AppSettings appSettings)
         {
             int productQuantity = product.Packages.Any(p => p.PackRequired == 1) ? Convert.ToInt32(product.Packages.Where(p => p.PackRequired == 1).Select(p => p.PackQty).FirstOrDefault()) : 1;
             return new ProductOfferRequest
@@ -75,11 +74,11 @@ namespace GaskaAllegroSync.Helpers
                     ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
                 },
                 Parameters = BuildParameters(product.Parameters, false),
-                CompatibilityList = BuildCompatibilityList(product.DefaultAllegroCategory, product.Applications, allegroCategories, compatibleList)
+                CompatibilityList = BuildCompatibilityList(product.DefaultAllegroCategory, product.Applications, allegroCategories)
             };
         }
 
-        public static ProductOfferRequest PatchOffer(AllegroOffer offer, List<CompatibleProduct> compatibleList, List<AllegroCategory> allegroCategories, AppSettings appSettings)
+        public static ProductOfferRequest PatchOffer(AllegroOffer offer, List<AllegroCategory> allegroCategories, AppSettings appSettings)
         {
             int productQuantity = offer.Product.Packages.Any(p => p.PackRequired == 1) ? Convert.ToInt32(offer.Product.Packages.Where(p => p.PackRequired == 1).Select(p => p.PackQty).FirstOrDefault()) : 1;
             return new ProductOfferRequest
@@ -125,7 +124,7 @@ namespace GaskaAllegroSync.Helpers
                     ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
                 },
                 Parameters = BuildParameters(offer.Product.Parameters, false),
-                CompatibilityList = BuildCompatibilityList(offer.Product.DefaultAllegroCategory == 0 ? offer.CategoryId : offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories, compatibleList)
+                CompatibilityList = BuildCompatibilityList(offer.Product.DefaultAllegroCategory == 0 ? offer.CategoryId : offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories)
             };
         }
 
@@ -261,7 +260,7 @@ namespace GaskaAllegroSync.Helpers
             return result;
         }
 
-        public static CompatibilityList BuildCompatibilityList(int categoryId, IEnumerable<Application> applications, IEnumerable<AllegroCategory> categories, IEnumerable<CompatibleProduct> compatibleProducts)
+        public static CompatibilityList BuildCompatibilityList(int categoryId, IEnumerable<Application> applications, IEnumerable<AllegroCategory> categories)
         {
             if (applications == null || !applications.Any())
                 return null;
@@ -295,24 +294,6 @@ namespace GaskaAllegroSync.Helpers
 
             if (IsCategoryOrParent(categoryId, "252204"))
             {
-                foreach (var leaf in leafApps)
-                {
-                    var compatItem = compatibleProducts.FirstOrDefault(cp => cp.Name == leaf.Name && cp.Type == "ID");
-
-                    if (compatItem != null)
-                    {
-                        string newValue = leaf.Name;
-                        if (int.TryParse(leaf.Name, out int lastNodeNum))
-                        {
-                            lastNodeNum += 1;
-                            string incremented = lastNodeNum.ToString();
-                            if (compatibleProducts.Any(cp => cp.Id == incremented && cp.Type == "ID"))
-                                newValue = incremented;
-                        }
-
-                        items.Add(new Item { Type = "ID", Text = compatItem.Id });
-                    }
-                }
             }
             else
             {

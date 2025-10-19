@@ -1,5 +1,4 @@
-﻿using GaskaAllegroSync.Data;
-using GaskaAllegroSync.DTOs.AllegroApi;
+﻿using GaskaAllegroSync.DTOs.AllegroApi;
 using GaskaAllegroSync.Models.Product;
 using GaskaAllegroSync.Repositories.Interfaces;
 using GaskaAllegroSync.Services.AllegroApi.Interfaces;
@@ -9,7 +8,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 

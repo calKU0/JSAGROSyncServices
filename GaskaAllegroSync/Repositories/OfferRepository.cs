@@ -2,9 +2,7 @@
 using GaskaAllegroSync.DTOs.AllegroApi;
 using GaskaAllegroSync.Helpers;
 using GaskaAllegroSync.Models;
-using GaskaAllegroSync.Models.Product;
 using GaskaAllegroSync.Repositories.Interfaces;
-using Newtonsoft.Json;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -14,7 +12,6 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Z.EntityFramework.Extensions;
 
 namespace GaskaAllegroSync.Repositories
 {

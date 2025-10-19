@@ -6,8 +6,6 @@ using GaskaAllegroSync.Logging;
 using GaskaAllegroSync.Repositories;
 using GaskaAllegroSync.Services;
 using GaskaAllegroSync.Services.AllegroApi;
-using GaskaAllegroSync.Services.AllegroApi.Interfaces;
-using GaskaAllegroSync.Services.GaskaApi.Interfaces;
 using GaskaAllegroSync.Services.GaskaApiService;
 using Serilog;
 using System;
@@ -117,7 +115,7 @@ namespace GaskaAllegroSync
         {
             var dbContext = new MyDbContext();
             dbContext.Database.CommandTimeout = 880;
-            dbContext.Configuration.AutoDetectChangesEnabled = false;
+            //dbContext.Configuration.AutoDetectChangesEnabled = false;
 
             try
             {

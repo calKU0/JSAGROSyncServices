@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace AllegroErliSync.Settings
+﻿namespace AllegroErliSync.Settings
 {
     public class AppSettings
     {
