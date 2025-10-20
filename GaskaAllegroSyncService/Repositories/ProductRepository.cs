@@ -455,7 +455,7 @@ namespace GaskaAllegroSyncService.Repositories
                     updatedProduct.PriceNet,
                     updatedProduct.PriceGross,
                     updatedProduct.DeliveryType,
-                    UpdatedDate = DateTime.UtcNow,
+                    UpdatedDate = DateTime.Now,
                     Name = FixName(updatedProduct.Name, updatedProduct.CodeGaska, updatedProduct.CodeCustomer, rootBrands)
                 }, tran);
 
@@ -471,14 +471,43 @@ namespace GaskaAllegroSyncService.Repositories
         public async Task<List<Product>> GetProductsWithoutDefaultCategory(CancellationToken ct)
         {
             const string sql = @"
-                SELECT *
-                FROM Products
-                WHERE DefaultAllegroCategory = 0
-                  AND Archived = 0
-                  AND EXISTS (SELECT 1 FROM ProductCategories pc WHERE pc.ProductId = Products.Id);";
+        SELECT p.*, a.*
+        FROM Products p
+        LEFT JOIN Applications a ON a.ProductId = p.Id
+        WHERE p.DefaultAllegroCategory = 0
+          AND p.Archived = 0
+          AND EXISTS (
+              SELECT 1
+              FROM ProductCategories pc
+              WHERE pc.ProductId = p.Id
+          );";
 
             using var conn = _context.CreateConnection();
-            return (await conn.QueryAsync<Product>(sql)).ToList();
+
+            var productDictionary = new Dictionary<int, Product>();
+
+            var products = await conn.QueryAsync<Product, Application, Product>(
+                sql,
+                (product, application) =>
+                {
+                    if (!productDictionary.TryGetValue(product.Id, out var productEntry))
+                    {
+                        productEntry = product;
+                        productEntry.Applications = new List<Application>();
+                        productDictionary.Add(productEntry.Id, productEntry);
+                    }
+
+                    if (application != null)
+                        productEntry.Applications.Add(application);
+
+                    return productEntry;
+                },
+                splitOn: "Id",
+                commandTimeout: 60,
+                transaction: null
+            );
+
+            return productDictionary.Values.ToList();
         }
 
         public async Task<List<Product>> GetProductsToUpdateParameters(CancellationToken ct)
@@ -642,11 +671,12 @@ namespace GaskaAllegroSyncService.Repositories
 
                 // 2️ Load child entities
                 var images = (await conn.QueryAsync<ProductImage>(@"
-                    SELECT *
+                    SELECT ProductId, AllegroUrl, MAX(AllegroLogoUrl) AS AllegroLogoUrl
                     FROM ProductImages
                     WHERE ProductId IN @ProductIds
                       AND AllegroUrl IS NOT NULL
-                      AND AllegroExpirationDate >= @Cutoff;",
+                      AND AllegroExpirationDate >= @Cutoff
+                    GROUP BY ProductId, AllegroUrl;",
                     new { ProductIds = productIds, Cutoff = cutoff }
                 )).ToList();
 

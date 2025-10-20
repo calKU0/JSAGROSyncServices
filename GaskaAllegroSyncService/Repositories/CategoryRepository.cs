@@ -148,7 +148,7 @@ namespace GaskaAllegroSyncService.Repositories
                 }
             }
 
-            // 🔹 1. Insert new CategoryParameters
+            // 1. Insert new CategoryParameters
             if (toInsert.Any())
             {
                 await conn.ExecuteAsync(@"
@@ -158,7 +158,7 @@ namespace GaskaAllegroSyncService.Repositories
                     toInsert, tran);
             }
 
-            // 🔹 2. Update existing CategoryParameters
+            // 2. Update existing CategoryParameters
             if (toUpdate.Any())
             {
                 await conn.ExecuteAsync(@"
@@ -169,7 +169,7 @@ namespace GaskaAllegroSyncService.Repositories
                     toUpdate, tran);
             }
 
-            // 🔹 3. Handle parameter values
+            // 3. Handle parameter values
             var allParams = toInsert.Concat(toUpdate).ToList();
             if (allParams.Any())
             {

@@ -402,7 +402,7 @@ namespace GaskaAllegroSyncService.Repositories
 
             // 3️ Load child entities in batches
             var images = await QueryInBatchesAsync<ProductImage>(
-                "SELECT * FROM ProductImages WHERE ProductId IN @batch AND AllegroUrl IS NOT NULL;", productIds);
+                "SELECT ProductId, AllegroUrl, MAX(AllegroLogoUrl) AS AllegroLogoUrl FROM ProductImages WHERE ProductId IN @batch  AND AllegroUrl IS NOT NULL GROUP BY ProductId, AllegroUrl", productIds);
 
             var packages = await QueryInBatchesAsync<Package>(
                 "SELECT * FROM Packages WHERE ProductId IN @batch;", productIds);
