@@ -1,0 +1,24 @@
+﻿using AllegroGaskaOrdersSyncService.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace AllegroGaskaOrdersSyncService.Repositories.Interfaces
+{
+    public interface IOrderRepository
+    {
+        public Task SaveAllegroOrder(AllegroOrder order);
+
+        public Task MarkAsOrderedInGaska(int orderId, int gaskaOrderId);
+
+        public Task<List<AllegroOrder>> GetOrdersToUpdateGaskaInfo();
+
+        public Task<List<AllegroOrder>> GetPendingOrdersForGaska(int delayMinutes);
+
+        public Task UpdateOrderGaskaInfo(AllegroOrder order);
+
+        public Task<List<AllegroOrder>> GetOrdersToUpdateInAllegro();
+    }
+}
