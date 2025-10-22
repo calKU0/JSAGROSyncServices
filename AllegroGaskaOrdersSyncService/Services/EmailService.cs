@@ -24,9 +24,14 @@ namespace AllegroGaskaOrdersSyncService.Services
             {
                 var message = new MimeMessage();
                 message.From.Add(new MailboxAddress("Automat Allegro-Gąska", _smtpSettings.User));
-                message.To.Add(MailboxAddress.Parse(to));
-                message.Subject = subject;
 
+                var recipients = to.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var address in recipients)
+                {
+                    message.To.Add(MailboxAddress.Parse(address.Trim()));
+                }
+
+                message.Subject = subject;
                 message.Body = new TextPart("html") { Text = htmlBody };
 
                 using var client = new SmtpClient();
