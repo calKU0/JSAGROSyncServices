@@ -18,7 +18,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories
         public async Task<List<AllegroOrder>> GetOrdersToUpdateGaskaInfo()
         {
             using var conn = _context.CreateConnection();
-
+            conn.Open();
             var sql = @"
                 SELECT
                     o.*,
@@ -59,7 +59,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories
         public async Task<List<AllegroOrder>> GetOrdersToUpdateInAllegro()
         {
             using var conn = _context.CreateConnection();
-
+            conn.Open();
             var sql = @"
                 SELECT
                     o.*,
@@ -114,7 +114,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories
         public async Task<List<AllegroOrder>> GetPendingOrdersForGaska(int delayMinutes)
         {
             using var conn = _context.CreateConnection();
-
+            conn.Open();
             var sql = @"
                 SELECT
                     o.*,
@@ -157,6 +157,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories
         public async Task MarkAsOrderedInGaska(int orderId, int gaskaOrderId)
         {
             using var conn = _context.CreateConnection();
+            conn.Open();
             var sql = @"
                 UPDATE AllegroOrders
                 SET
@@ -298,7 +299,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories
             }
         }
 
-        public Task SetEmailSent(int orderId)
+        public async Task SetEmailSent(int orderId)
         {
             using var conn = _context.CreateConnection();
             conn.Open();
@@ -307,9 +308,9 @@ namespace AllegroGaskaOrdersSyncService.Repositories
                 UPDATE AllegroOrders
                 SET EmailSent = 1
                 WHERE Id = @OrderId;
-                ";
+            ";
 
-            return conn.ExecuteAsync(sql, new { OrderId = orderId });
+            await conn.ExecuteAsync(sql, new { OrderId = orderId });
         }
 
         public async Task UpdateOrderGaskaInfo(AllegroOrder order)

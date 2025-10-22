@@ -148,9 +148,6 @@ namespace AllegroGaskaOrdersSyncService.Services
                         await FetchAndUpdateGaskaOrder(order, ct);
                         _logger.LogInformation("Created Order {GaskaOrderId} in Gąska for Allegro Order {AllegroOrderId}.", order.GaskaOrderNumber, order.AllegroId);
 
-                        if (order.EmailSent)
-                            continue;
-
                         // Send success email
                         var body = BuildOrderEmailBody(order);
                         await _emailService.SendEmailAsync(_appSettings.NotificationsEmail, $"Złożono automatyczne zamówienie", body);
@@ -250,7 +247,7 @@ namespace AllegroGaskaOrdersSyncService.Services
                             if (!response.IsSuccessStatusCode)
                             {
                                 var body = await response.Content.ReadAsStringAsync(ct);
-                                await LogAllegroErrors(response, body, "status", order.AllegroId);
+                                LogAllegroErrors(response, body, "status", order.AllegroId);
                             }
                             else
                             {
@@ -309,7 +306,7 @@ namespace AllegroGaskaOrdersSyncService.Services
                             if (!response.IsSuccessStatusCode)
                             {
                                 var body = await response.Content.ReadAsStringAsync(ct);
-                                await LogAllegroErrors(response, body, "tracking numbers", order.AllegroId);
+                                LogAllegroErrors(response, body, "tracking numbers", order.AllegroId);
                             }
                             else
                             {
@@ -353,9 +350,9 @@ namespace AllegroGaskaOrdersSyncService.Services
                 RecipientCity = address.City.Trim(),
                 RecipientPostalCode = address.ZipCode.Trim(),
                 RecipientCountry = address.CountryCode.Trim(),
-                RecipientCompanyName = address?.CompanyName.Trim(),
-                RecipientEmail = allegroOrder.Buyer?.Email.Trim(),
-                RecipientPhoneNumber = address?.PhoneNumber.Trim(),
+                RecipientCompanyName = address?.CompanyName,
+                RecipientEmail = allegroOrder.Buyer?.Email,
+                RecipientPhoneNumber = address?.PhoneNumber,
                 DeliveryMethodId = allegroOrder.Delivery.Method.Id,
                 DeliveryMethodName = allegroOrder.Delivery.Method.Name.ToUpper(),
                 CancellationDate = allegroOrder.Delivery?.Cancellation?.Date,
@@ -451,7 +448,7 @@ namespace AllegroGaskaOrdersSyncService.Services
             };
         }
 
-        private async Task LogAllegroErrors(HttpResponseMessage response, string body, string action, string orderId)
+        private void LogAllegroErrors(HttpResponseMessage response, string body, string action, string orderId)
         {
             try
             {
