@@ -25,15 +25,17 @@ namespace AllegroGaskaOrdersSyncService.Services
         private readonly AppSettings _appSettings;
         private readonly CourierSettings _courierSettings;
         private readonly IOrderRepository _orderRepo;
+        private readonly IEmailService _emailService;
         private readonly AllegroApiClient _allegroApiClient;
         private readonly GaskaApiClient _gaskaApiClient;
 
-        public OrderService(ILogger<OrderService> logger, IOptions<AppSettings> appSettings, IOptions<CourierSettings> courierSettings, IOrderRepository orderRepo, AllegroApiClient allegroApiClient, GaskaApiClient gaskaApiClient)
+        public OrderService(ILogger<OrderService> logger, IOptions<AppSettings> appSettings, IOptions<CourierSettings> courierSettings, IOrderRepository orderRepo, IEmailService emailService, AllegroApiClient allegroApiClient, GaskaApiClient gaskaApiClient)
         {
             _logger = logger;
             _appSettings = appSettings.Value;
             _courierSettings = courierSettings.Value;
             _orderRepo = orderRepo;
+            _emailService = emailService;
             _allegroApiClient = allegroApiClient;
             _gaskaApiClient = gaskaApiClient;
         }
@@ -95,7 +97,7 @@ namespace AllegroGaskaOrdersSyncService.Services
 
                             if (!allItemsUseGaska)
                             {
-                                _logger.LogInformation("Skipping order {OrderId} - not all items use {ShippingRate} shipping method.", _appSettings.AllegroDeliveryName, order.Id);
+                                _logger.LogInformation("Skipping order {OrderId} - not all items use {ShippingRate} shipping method.", order.Id, _appSettings.AllegroDeliveryName);
                                 continue;
                             }
 
@@ -135,35 +137,50 @@ namespace AllegroGaskaOrdersSyncService.Services
                 {
                     try
                     {
+                        // Create Delivery Address in Gąska
                         var addressRequest = MapAllegroOrderToGaskaDeliveryRequest(order);
                         var addressResponse = await _gaskaApiClient.PostAsync<GaskaCreateDeliveryAddressResponse>("addDeliveryAddress", addressRequest, ct);
                         if (addressResponse.Result != 0)
-                        {
-                            _logger.LogError($"Failed to create DeliveryAddress in Gąska. Error: {addressResponse.Message}");
-                            continue;
-                        }
-                        _logger.LogInformation($"Created DeliveryAddress in Gąska with ID {addressResponse.AddressId} for Allegro Order {order.AllegroId}.");
+                            throw new Exception(addressResponse.Message);
 
+                        // Create Order in Gąska
                         var orderRequest = MapAllegroOrderToGaskaOrderRequest(order, addressResponse.AddressId);
                         var orderResponse = await _gaskaApiClient.PostAsync<GaskaCreateOrderResponse>("order", orderRequest, ct);
                         if (orderResponse.Result != 0)
-                        {
-                            _logger.LogError($"Failed to create Order in Gąska for Allegro Order {order.AllegroId}. Error: {orderResponse.Message}");
-                            continue;
-                        }
-                        _logger.LogInformation($"Created Order in Gąska for Allegro Order {order.AllegroId} with Gąska Order IDs: {string.Join(", ", orderResponse.NewOrders)}.");
+                            throw new Exception(orderResponse.Message);
 
-                        await _orderRepo.MarkAsOrderedInGaska(order.Id, orderResponse.NewOrders.FirstOrDefault());
+                        order.GaskaOrderId = orderResponse.NewOrders.FirstOrDefault();
+                        await _orderRepo.MarkAsOrderedInGaska(order.Id, order.GaskaOrderId);
+
+                        // Fetch order data from Gąska to update local record
+                        await FetchAndUpdateGaskaOrder(order, ct);
+                        _logger.LogInformation("Created Order {GaskaOrderId} in Gąska for Allegro Order {AllegroOrderId}.", order.GaskaOrderNumber, order.AllegroId);
+
+                        if (order.EmailSent)
+                            continue;
+
+                        // Send success email
+                        var body = BuildOrderEmailBody(order);
+                        await _emailService.SendEmailAsync(_appSettings.NotificationsEmail, $"Złożono automatyczne zamówienie", body);
+                        await _orderRepo.SetEmailSent(order.Id);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to create Order in Gąska for Allegro Order {AllegroOrderId}.", order.AllegroId);
+                        _logger.LogError(ex, "Failed to create order in Gąska for Allegro Order {AllegroOrderId}.", order.AllegroId);
+
+                        if (order.EmailSent)
+                            continue;
+
+                        // Send error email
+                        var body = BuildOrderEmailBody(order, ex.Message);
+                        await _emailService.SendEmailAsync(_appSettings.NotificationsEmail, $"BŁĄD przy składaniu zamówienia: {order.AllegroId}", body);
+                        await _orderRepo.SetEmailSent(order.Id);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to create orders in Gaska.");
+                _logger.LogError(ex, "Failed to create orders in Gąska.");
             }
         }
 
@@ -174,44 +191,48 @@ namespace AllegroGaskaOrdersSyncService.Services
                 var orders = await _orderRepo.GetOrdersToUpdateGaskaInfo();
                 foreach (var order in orders)
                 {
-                    try
-                    {
-                        var gaskaOrderResponse = await _gaskaApiClient.GetAsync<GaskaGetOrderResponse>($"order?id={order.GaskaOrderId}&lng=pl", ct);
-                        if (gaskaOrderResponse.Result != 0)
-                        {
-                            _logger.LogError($"Failed to fetch Order {order.GaskaOrderId} from Gąska. Error: {gaskaOrderResponse.Message}");
-                            continue;
-                        }
-
-                        if (gaskaOrderResponse.Order == null)
-                        {
-                            _logger.LogError($"No Order data returned from Gąska for Order ID {order.GaskaOrderId}.");
-                            continue;
-                        }
-
-                        order.GaskaDeliveryName = gaskaOrderResponse.Order.Delivery;
-                        order.GaskaOrderStatus = gaskaOrderResponse.Order.Items.FirstOrDefault().RealizeDeliveryStatus;
-                        order.GaskaOrderNumber = gaskaOrderResponse.Order.OrderNumber;
-                        foreach (var item in order.Items)
-                        {
-                            var gaskaItem = gaskaOrderResponse.Order.Items.FirstOrDefault(i => i.Id == item.GaskaItemId);
-                            if (gaskaItem != null)
-                            {
-                                item.GaskaTrackingNumber = gaskaItem.RealizeTrackingNumber;
-                            }
-                        }
-
-                        await _orderRepo.UpdateOrderGaskaInfo(order);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to update Order {AllegroOrderId} with Gąska info.", order.AllegroId);
-                    }
+                    await FetchAndUpdateGaskaOrder(order, ct);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to update orders from Gaska API.");
+                _logger.LogError(ex, "Failed to update orders from Gąska API.");
+            }
+        }
+
+        private async Task FetchAndUpdateGaskaOrder(AllegroOrder order, CancellationToken ct = default!)
+        {
+            try
+            {
+                var gaskaOrderResponse = await _gaskaApiClient.GetAsync<GaskaGetOrderResponse>($"order?id={order.GaskaOrderId}&lng=pl", ct);
+                if (gaskaOrderResponse.Result != 0)
+                {
+                    _logger.LogError($"Failed to fetch Order {order.GaskaOrderId} from Gąska. Error: {gaskaOrderResponse.Message}");
+                    return;
+                }
+
+                if (gaskaOrderResponse.Order == null)
+                {
+                    _logger.LogError($"No Order data returned from Gąska for Order ID {order.GaskaOrderId}.");
+                    return;
+                }
+
+                order.GaskaDeliveryName = gaskaOrderResponse.Order.Delivery;
+                order.GaskaOrderStatus = gaskaOrderResponse.Order.Items.FirstOrDefault()?.RealizeDeliveryStatus;
+                order.GaskaOrderNumber = gaskaOrderResponse.Order.OrderNumber;
+
+                foreach (var item in order.Items)
+                {
+                    var gaskaItem = gaskaOrderResponse.Order.Items.FirstOrDefault(i => i.Id == item.GaskaItemId);
+                    if (gaskaItem != null)
+                        item.GaskaTrackingNumber = gaskaItem.RealizeTrackingNumber;
+                }
+
+                await _orderRepo.UpdateOrderGaskaInfo(order);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update Order {AllegroOrderId} with Gąska info.", order.AllegroId);
             }
         }
 
@@ -300,8 +321,7 @@ namespace AllegroGaskaOrdersSyncService.Services
                             }
                             else
                             {
-                                _logger.LogInformation("Updated tracking number {TrackingNumber} for Allegro Order {AllegroOrderId} (Items: {Count}).",
-                                    trackingNumber, order.AllegroId, lineItems.Count);
+                                _logger.LogInformation("Updated tracking number {TrackingNumber} for Allegro Order {AllegroOrderId} (Items: {Count}).", trackingNumber, order.AllegroId, lineItems.Count);
                             }
                         }
 
@@ -334,6 +354,7 @@ namespace AllegroGaskaOrdersSyncService.Services
                 Note = allegroOrder.Note?.Text,
                 Status = allegroOrder.Status,
                 RealizeStatus = fulfillment.Status,
+                ClientNickname = allegroOrder.Buyer.Login,
                 RecipientFirstName = address.FirstName,
                 RecipientLastName = address.LastName,
                 RecipientStreet = address.Street,
@@ -476,6 +497,70 @@ namespace AllegroGaskaOrdersSyncService.Services
                 .Where(c => c.Name != currentCourier && nowHour <= c.FinalHour)
                 .Select(c => c.Name)
                 .FirstOrDefault() ?? currentCourier;
+        }
+
+        private string BuildOrderEmailBody(AllegroOrder order, string? errorMessage = null)
+        {
+            var color = string.IsNullOrEmpty(errorMessage) ? "#28a745" : "#dc3545";
+            var headerText = string.IsNullOrEmpty(errorMessage)
+                ? "Złożono automatyczne zamówienie w Gąsce"
+                : "Wystąpił błąd przy składaniu automatycznego zamówienia w Gąsce";
+
+            var html = $@"
+                <html>
+                <body style='font-family:Arial,sans-serif; background-color:#f9f9f9; padding:20px;'>
+                    <div style='max-width:900px; margin:0 auto; background-color:#ffffff; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,0.1); padding:20px;'>
+                        <h2 style='color:{color}; text-align:center;'>{headerText}</h2>
+
+                        <p><strong>ID zamówienia Allegro:</strong> {order.AllegroId}</p>
+                        <p><strong>Klient:</strong> {order.ClientNickname}</p>
+                        <p><strong>Imię i Nazwisko:</strong> {order.RecipientFirstName} {order.RecipientLastName}</p>
+                        {(string.IsNullOrEmpty(order.RecipientCompanyName) ? "" : $"<p><strong>Firma:</strong> {order.RecipientCompanyName}</p>")}
+                        <p><strong>Email:</strong> {order.RecipientEmail}</p>
+                        <p><strong>Telefon:</strong> {order.RecipientPhoneNumber ?? "BRAK"}</p>
+                        <p><strong>Adres:</strong> {order.RecipientStreet}, {order.RecipientCity}, {order.RecipientPostalCode}, {order.RecipientCountry}</p>
+                        <p><strong>Metoda dostawy:</strong> {order.DeliveryMethodName}</p>
+                        {(string.IsNullOrEmpty(order.GaskaOrderNumber) ? "" : $"<p><strong>Numer zamówienia Gąski:</strong> {order.GaskaOrderNumber}</p>")}
+                        {(string.IsNullOrEmpty(order.GaskaDeliveryName) ? "" : $"<p><strong>Metoda dostawy Gąski:</strong> {order.GaskaDeliveryName}</p>")}
+                        {(string.IsNullOrEmpty(errorMessage) ? "" : $"<p style='color:#dc3545; font-weight:bold;'>Błąd: {errorMessage}</p>")}
+
+                        <h3 style='border-bottom:2px solid #eee; padding-bottom:5px;'>Produkty:</h3>
+                        <table style='width:100%; border-collapse:collapse; margin-top:10px;'>
+                            <thead style='background-color:#f2f2f2;'>
+                                <tr>
+                                    <th style='padding:10px; text-align:left; border-bottom:1px solid #ddd;'>Kod</th>
+                                    <th style='padding:10px; text-align:left; border-bottom:1px solid #ddd;'>Nazwa</th>
+                                    <th style='padding:10px; text-align:center; border-bottom:1px solid #ddd;'>Ilość</th>
+                                    <th style='padding:10px; text-align:right; border-bottom:1px solid #ddd;'>Cena jedn.</th>
+                                    <th style='padding:10px; text-align:right; border-bottom:1px solid #ddd;'>Razem</th>
+                                </tr>
+                            </thead>
+                            <tbody>";
+
+            foreach (var item in order.Items)
+            {
+                decimal lineTotal = Convert.ToDecimal(item.PriceGross, CultureInfo.InvariantCulture) * item.Quantity;
+
+                html += $@"
+                                <tr>
+                                    <td style='padding:10px; border-bottom:1px solid #eee;'>{item.ExternalId}</td>
+                                    <td style='padding:10px; border-bottom:1px solid #eee;'>{item.OfferName}</td>
+                                    <td style='padding:10px; text-align:center; border-bottom:1px solid #eee;'>{item.Quantity}</td>
+                                    <td style='padding:10px; text-align:right; border-bottom:1px solid #eee;'>{Convert.ToDecimal(item.PriceGross, CultureInfo.InvariantCulture):C}</td>
+                                    <td style='padding:10px; text-align:right; border-bottom:1px solid #eee;'>{lineTotal:C}</td>
+                                </tr>";
+            }
+
+            html += $@"
+                            </tbody>
+                        </table>
+                        <p style='text-align:right; font-weight:bold; margin-top:10px;'>Suma zamówienia: {order.Amount:C}</p>
+                        <p style='text-align:center; color:#888; margin-top:20px; font-size:12px;'>Email wysłany automatycznie przez usługę AllegroGaskaOrdersSync</p>
+                    </div>
+                </body>
+                </html>";
+
+            return html;
         }
     }
 }

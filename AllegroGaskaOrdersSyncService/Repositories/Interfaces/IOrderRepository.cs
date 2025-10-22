@@ -20,5 +20,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories.Interfaces
         public Task UpdateOrderGaskaInfo(AllegroOrder order);
 
         public Task<List<AllegroOrder>> GetOrdersToUpdateInAllegro();
+
+        public Task SetEmailSent(int orderId);
     }
 }

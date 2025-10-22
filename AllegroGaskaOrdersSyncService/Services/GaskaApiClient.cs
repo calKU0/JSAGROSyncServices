@@ -101,12 +101,15 @@ namespace AllegroGaskaOrdersSyncService.Services
             var response = await send();
             var body = await response.Content.ReadAsStringAsync();
 
-            if (response.IsSuccessStatusCode)
+            try
             {
-                return JsonSerializer.Deserialize<T>(body);
+                var result = JsonSerializer.Deserialize<T>(body);
+                return result;
             }
-
-            throw new HttpRequestException($"Gaska API request failed with status {(int)response.StatusCode} ({response.StatusCode}). Body: {body}");
+            catch (JsonException)
+            {
+                throw new HttpRequestException($"Failed to deserialize response with status {(int)response.StatusCode} ({response.StatusCode}). Body: {body}");
+            }
         }
     }
 }

@@ -57,7 +57,7 @@ namespace AllegroGaskaOrdersSyncService
 
                 await orderService.SyncOrdersFromAllegro();
                 await orderService.CreateOrdersInGaska();
-                //await orderService.UpdateOrderGaskaInfo();
+                await orderService.UpdateOrderGaskaInfo();
                 await orderService.UpdateOrdersInAllegro();
 
                 _logger.LogInformation("=== Synchronization cycle finished successfully ===");
