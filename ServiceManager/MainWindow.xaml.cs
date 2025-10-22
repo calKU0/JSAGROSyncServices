@@ -290,7 +290,9 @@ namespace ServiceManager
                 foreach (var group in groupedFields)
                 {
                     // Keep only fields that exist in JSON
-                    var existingFields = group.ToList(); // JSON can have missing keys; show all fields
+                    var existingFields = group
+                        .Where(f => config.GetSection(f.Key).Exists())
+                        .ToList();
 
                     if (!existingFields.Any())
                         continue;
@@ -322,7 +324,7 @@ namespace ServiceManager
                         };
 
                         var grid = new Grid();
-                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
+                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(270) });
                         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
                         Grid.SetColumn(label, 0);
@@ -376,13 +378,41 @@ namespace ServiceManager
             try
             {
                 var valuesToSave = new Dictionary<string, string>();
+                var errors = new List<string>();
 
                 foreach (var grid in ConfigStackPanel.Children.OfType<GroupBox>()
                              .SelectMany(gb => ((StackPanel)gb.Content).Children.OfType<Grid>()))
                 {
                     var tb = grid.Children.OfType<TextBox>().FirstOrDefault();
                     if (tb != null && tb.Tag is string key)
-                        valuesToSave[key] = tb.Text;
+                    {
+                        var fieldDef = ConfigFieldDefinitions.AllFields.FirstOrDefault(f => f.Key == key);
+                        var value = tb.Text.Trim();
+
+                        if (fieldDef != null)
+                        {
+                            switch (fieldDef.FieldType)
+                            {
+                                case ConfigFieldType.Int:
+                                    if (!int.TryParse(value, out _))
+                                        errors.Add($"Pole „{fieldDef.Label}” wymaga liczby całkowitej.");
+                                    break;
+
+                                case ConfigFieldType.Decimal:
+                                    if (!decimal.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _))
+                                        errors.Add($"Pole „{fieldDef.Label}” wymaga liczby dziesiętnej (np. 12.5).");
+                                    break;
+                            }
+                        }
+
+                        valuesToSave[key] = value;
+                    }
+                }
+
+                if (errors.Any())
+                {
+                    MessageBox.Show(string.Join("\n", errors), "Błąd walidacji", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
                 }
 
                 SaveAppSettings(_selectedService.ExternalConfigPath, valuesToSave);
