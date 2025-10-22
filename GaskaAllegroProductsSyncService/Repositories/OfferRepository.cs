@@ -1,12 +1,11 @@
-﻿using Dapper;
-using AllegroGaskaProductsSyncService.Data;
+﻿using AllegroGaskaProductsSyncService.Data;
 using AllegroGaskaProductsSyncService.DTOs.AllegroApi;
 using AllegroGaskaProductsSyncService.Models;
 using AllegroGaskaProductsSyncService.Models.Product;
 using AllegroGaskaProductsSyncService.Repositories.Interfaces;
 using AllegroGaskaProductsSyncService.Settings;
+using Dapper;
 using Microsoft.Extensions.Options;
-using Serilog;
 using System.Globalization;
 
 namespace AllegroGaskaProductsSyncService.Repositories

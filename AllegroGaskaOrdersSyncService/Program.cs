@@ -7,9 +7,6 @@ using AllegroGaskaOrdersSyncService.Services;
 using AllegroGaskaOrdersSyncService.Services.Interfaces;
 using AllegroGaskaOrdersSyncService.Settings;
 using DbUp;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Serilog;
 
 var host = Host.CreateDefaultBuilder(args)

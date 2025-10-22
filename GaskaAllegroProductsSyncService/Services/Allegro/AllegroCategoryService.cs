@@ -2,7 +2,6 @@
 using AllegroGaskaProductsSyncService.DTOs.AllegroApiResponses;
 using AllegroGaskaProductsSyncService.Models;
 using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories;
 using AllegroGaskaProductsSyncService.Repositories.Interfaces;
 using AllegroGaskaProductsSyncService.Services.Allegro.Interfaces;
 

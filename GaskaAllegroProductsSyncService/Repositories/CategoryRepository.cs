@@ -1,9 +1,9 @@
-﻿using Dapper;
-using AllegroGaskaProductsSyncService.Data;
+﻿using AllegroGaskaProductsSyncService.Data;
 using AllegroGaskaProductsSyncService.DTOs.AllegroApiResponses;
 using AllegroGaskaProductsSyncService.Models;
 using AllegroGaskaProductsSyncService.Models.Product;
 using AllegroGaskaProductsSyncService.Repositories.Interfaces;
+using Dapper;
 using System.Data;
 
 namespace AllegroGaskaProductsSyncService.Repositories

@@ -3,11 +3,6 @@ using AllegroGaskaOrdersSyncService.Data.Enums;
 using AllegroGaskaOrdersSyncService.Models;
 using AllegroGaskaOrdersSyncService.Repositories.Interfaces;
 using Dapper;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace AllegroGaskaOrdersSyncService.Repositories
 {

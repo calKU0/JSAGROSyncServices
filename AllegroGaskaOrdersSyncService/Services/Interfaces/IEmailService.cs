@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace AllegroGaskaOrdersSyncService.Services.Interfaces
+﻿namespace AllegroGaskaOrdersSyncService.Services.Interfaces
 {
     public interface IEmailService
     {

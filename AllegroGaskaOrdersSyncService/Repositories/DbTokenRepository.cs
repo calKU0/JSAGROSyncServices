@@ -1,9 +1,9 @@
-﻿using Dapper;
-using AllegroGaskaOrdersSyncService.Data;
+﻿using AllegroGaskaOrdersSyncService.Data;
 using AllegroGaskaOrdersSyncService.DTOs;
 using AllegroGaskaOrdersSyncService.Models;
 using AllegroGaskaOrdersSyncService.Repositories.Interfaces;
 using AllegroGaskaOrdersSyncService.Settings;
+using Dapper;
 using Microsoft.Extensions.Options;
 
 namespace AllegroGaskaOrdersSyncService.Repositories

@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace AllegroErliProductsSyncService.Models
+﻿namespace AllegroErliProductsSyncService.Models
 {
     public class Offer
     {

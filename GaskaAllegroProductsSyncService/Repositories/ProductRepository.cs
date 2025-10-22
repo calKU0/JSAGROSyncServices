@@ -1,10 +1,9 @@
-﻿using Dapper;
-using AllegroGaskaProductsSyncService.Data;
+﻿using AllegroGaskaProductsSyncService.Data;
 using AllegroGaskaProductsSyncService.DTOs;
 using AllegroGaskaProductsSyncService.Models;
 using AllegroGaskaProductsSyncService.Models.Product;
 using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using Serilog;
+using Dapper;
 using System.Text.RegularExpressions;
 
 namespace AllegroGaskaProductsSyncService.Repositories

@@ -4,7 +4,6 @@ using AllegroGaskaProductsSyncService.Repositories.Interfaces;
 using AllegroGaskaProductsSyncService.Services.Gaska.Interfaces;
 using AllegroGaskaProductsSyncService.Settings;
 using Microsoft.Extensions.Options;
-using Serilog;
 using System.Text.Json;
 
 namespace AllegroGaskaProductsSyncService.Services.GaskaApiService

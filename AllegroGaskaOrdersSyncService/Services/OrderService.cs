@@ -6,16 +6,8 @@ using AllegroGaskaOrdersSyncService.Repositories.Interfaces;
 using AllegroGaskaOrdersSyncService.Services.Interfaces;
 using AllegroGaskaOrdersSyncService.Settings;
 using Microsoft.Extensions.Options;
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using static AllegroGaskaOrdersSyncService.DTOs.GaskaApi.GaskaGetOrderResponse;
 
 namespace AllegroGaskaOrdersSyncService.Services
 {

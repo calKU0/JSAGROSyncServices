@@ -1,8 +1,7 @@
-﻿using Dapper;
-using AllegroGaskaProductsSyncService.Data;
+﻿using AllegroGaskaProductsSyncService.Data;
 using AllegroGaskaProductsSyncService.Models.Product;
 using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using Serilog;
+using Dapper;
 
 namespace AllegroGaskaProductsSyncService.Repositories
 {

@@ -1,9 +1,9 @@
-﻿using AllegroGaskaOrdersSyncService.Settings;
+﻿using AllegroGaskaOrdersSyncService.Services.Interfaces;
+using AllegroGaskaOrdersSyncService.Settings;
+using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Options;
-using MailKit.Net.Smtp;
 using MimeKit;
-using AllegroGaskaOrdersSyncService.Services.Interfaces;
 
 namespace AllegroGaskaOrdersSyncService.Services
 {

@@ -3,7 +3,6 @@ using AllegroErliProductsSyncService.Data;
 using AllegroErliProductsSyncService.Repositories;
 using AllegroErliProductsSyncService.Services;
 using AllegroErliProductsSyncService.Settings;
-using Microsoft.Extensions.Options;
 using Serilog;
 
 var host = Host.CreateDefaultBuilder(args)

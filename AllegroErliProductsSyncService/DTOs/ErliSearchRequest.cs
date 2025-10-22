@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace AllegroErliProductsSyncService.DTOs
+﻿namespace AllegroErliProductsSyncService.DTOs
 {
     public class ErliSearchRequest
     {

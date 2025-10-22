@@ -1,7 +1,4 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
-
-namespace AllegroGaskaProductsSyncService.Models
+﻿namespace AllegroGaskaProductsSyncService.Models
 {
     public class AllegroTokenEntity
     {
