@@ -1,7 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-
-namespace AllegroGaskaProductsSyncService.Models.Product
+﻿namespace AllegroGaskaProductsSyncService.Models.Product
 {
     public class ProductAttribute
     {

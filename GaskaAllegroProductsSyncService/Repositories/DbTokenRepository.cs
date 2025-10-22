@@ -1,5 +1,5 @@
-﻿using AllegroGaskaProductsSyncService.DTOs;
-using AllegroGaskaProductsSyncService.Data;
+﻿using AllegroGaskaProductsSyncService.Data;
+using AllegroGaskaProductsSyncService.DTOs;
 using AllegroGaskaProductsSyncService.Models;
 using AllegroGaskaProductsSyncService.Repositories.Interfaces;
 using AllegroGaskaProductsSyncService.Settings;

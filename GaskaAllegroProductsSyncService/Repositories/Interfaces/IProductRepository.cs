@@ -1,5 +1,4 @@
 ﻿using AllegroGaskaProductsSyncService.DTOs;
-using AllegroGaskaProductsSyncService.Models;
 using AllegroGaskaProductsSyncService.Models.Product;
 
 namespace AllegroGaskaProductsSyncService.Repositories.Interfaces

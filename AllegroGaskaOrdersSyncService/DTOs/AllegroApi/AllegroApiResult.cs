@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace AllegroGaskaOrdersSyncService.DTOs.AllegroApi
+﻿namespace AllegroGaskaOrdersSyncService.DTOs.AllegroApi
 {
     public class ApiResult<T>
     {

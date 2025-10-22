@@ -1,5 +1,4 @@
 ﻿using AllegroErliProductsSyncService.DTOs;
-using System;
 using System.Text.RegularExpressions;
 
 namespace AllegroErliProductsSyncService.Mappers
