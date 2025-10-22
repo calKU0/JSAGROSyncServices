@@ -16,6 +16,7 @@ namespace AllegroGaskaOrdersSyncService.Models
         public AllegroCheckoutFormStatus Status { get; set; }
         public AllegroOrderStatus RealizeStatus { get; set; }
         public decimal Amount { get; set; }
+        public string ClientNickname { get; set; } = string.Empty;
         public string RecipientFirstName { get; set; } = string.Empty;
         public string RecipientLastName { get; set; } = string.Empty;
         public string RecipientStreet { get; set; } = string.Empty;
@@ -36,6 +37,7 @@ namespace AllegroGaskaOrdersSyncService.Models
         public string? GaskaOrderStatus { get; set; }
         public string? GaskaOrderNumber { get; set; }
         public string? GaskaDeliveryName { get; set; }
+        public bool EmailSent { get; set; }
         public List<AllegroOrderItem> Items { get; set; } = new();
     }
 }

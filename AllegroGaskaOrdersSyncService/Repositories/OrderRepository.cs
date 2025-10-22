@@ -192,6 +192,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories
                             Status = @Status,
                             RealizeStatus = @RealizeStatus,
                             Amount = @Amount,
+                            ClientNickname = @ClientNickname,
                             RecipientFirstName = @RecipientFirstName,
                             RecipientLastName = @RecipientLastName,
                             RecipientStreet = @RecipientStreet,
@@ -214,14 +215,14 @@ namespace AllegroGaskaOrdersSyncService.Repositories
                     ELSE
                     BEGIN
                         INSERT INTO AllegroOrders (
-                            AllegroId, MessageToSeller, Note, Status, RealizeStatus, Amount,
+                            AllegroId, MessageToSeller, Note, Status, RealizeStatus, Amount, ClientNickname,
                             RecipientFirstName, RecipientLastName, RecipientStreet, RecipientCity, RecipientPostalCode, RecipientCountry,
                             RecipientCompanyName, RecipientEmail, RecipientPhoneNumber,
                             DeliveryMethodId, DeliveryMethodName, CancellationDate, CreatedAt, Revision,
                             SentToGaska, GaskaOrderId, PaymentType, GaskaOrderStatus, GaskaOrderNumber, GaskaDeliveryName
                         )
                         VALUES (
-                            @AllegroId, @MessageToSeller, @Note, @Status, @RealizeStatus, @Amount,
+                            @AllegroId, @MessageToSeller, @Note, @Status, @RealizeStatus, @Amount, @ClientNickname,
                             @RecipientFirstName, @RecipientLastName, @RecipientStreet, @RecipientCity, @RecipientPostalCode, @RecipientCountry,
                             @RecipientCompanyName, @RecipientEmail, @RecipientPhoneNumber,
                             @DeliveryMethodId, @DeliveryMethodName, @CancellationDate, @CreatedAt, @Revision,
@@ -302,6 +303,20 @@ namespace AllegroGaskaOrdersSyncService.Repositories
             }
         }
 
+        public Task SetEmailSent(int orderId)
+        {
+            using var conn = _context.CreateConnection();
+            conn.Open();
+
+            var sql = @"
+                UPDATE AllegroOrders
+                SET EmailSent = 1
+                WHERE Id = @OrderId;
+                ";
+
+            return conn.ExecuteAsync(sql, new { OrderId = orderId });
+        }
+
         public async Task UpdateOrderGaskaInfo(AllegroOrder order)
         {
             using var conn = _context.CreateConnection();
@@ -314,7 +329,6 @@ namespace AllegroGaskaOrdersSyncService.Repositories
                 var orderSql = @"
                     UPDATE AllegroOrders
                     SET
-                        GaskaOrderId = @GaskaOrderId,
                         GaskaOrderStatus = @GaskaOrderStatus,
                         GaskaOrderNumber = @GaskaOrderNumber,
                         GaskaDeliveryName = @GaskaDeliveryName
