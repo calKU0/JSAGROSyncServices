@@ -11,8 +11,6 @@ using Serilog;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Hosting.WindowsServices;
 
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
