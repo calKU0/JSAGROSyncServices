@@ -1,4 +1,6 @@
-﻿namespace ServiceManager.Models
+﻿using ServiceManager.Enums;
+
+namespace ServiceManager.Models
 {
     public class ConfigField
     {
@@ -7,5 +9,6 @@
         public string Description { get; set; } = "";
         public string Group { get; set; } = "Other";
         public bool IsEnabled { get; set; } = true;
+        public ConfigFieldType FieldType { get; set; } = ConfigFieldType.String;
     }
 }
