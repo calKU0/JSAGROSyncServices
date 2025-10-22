@@ -103,7 +103,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
                 },
                 Publication = new Publication
                 {
-                    Status = offer.Product.InStock > 0 ? "ACTIVE" : "ENDED",
+                    Status = offer.Product.InStock > 1 ? "ACTIVE" : "ENDED",
                     StartingAt = null,
                 },
                 Delivery = new Delivery

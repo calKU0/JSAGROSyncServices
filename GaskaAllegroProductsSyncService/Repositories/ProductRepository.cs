@@ -471,16 +471,16 @@ namespace AllegroGaskaProductsSyncService.Repositories
         public async Task<List<Product>> GetProductsWithoutDefaultCategory(CancellationToken ct)
         {
             const string sql = @"
-        SELECT p.*, a.*
-        FROM Products p
-        LEFT JOIN Applications a ON a.ProductId = p.Id
-        WHERE p.DefaultAllegroCategory = 0
-          AND p.Archived = 0
-          AND EXISTS (
-              SELECT 1
-              FROM ProductCategories pc
-              WHERE pc.ProductId = p.Id
-          );";
+                SELECT p.*, a.*
+                FROM Products p
+                LEFT JOIN Applications a ON a.ProductId = p.Id
+                WHERE p.DefaultAllegroCategory = 0
+                  AND p.Archived = 0
+                  AND EXISTS (
+                      SELECT 1
+                      FROM ProductCategories pc
+                      WHERE pc.ProductId = p.Id
+                  );";
 
             using var conn = _context.CreateConnection();
 
@@ -655,7 +655,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                     WHERE p.Archived = 0
                       AND p.DefaultAllegroCategory <> 0
                       AND p.PriceGross > 1
-                      AND p.InStock > 0
+                      AND p.InStock > 1
                       AND NOT EXISTS (SELECT 1 FROM AllegroOffers ao WHERE ao.ExternalId = p.CodeGaska)
                       AND pi.AllegroUrl IS NOT NULL
                       AND pi.AllegroExpirationDate >= @Cutoff
