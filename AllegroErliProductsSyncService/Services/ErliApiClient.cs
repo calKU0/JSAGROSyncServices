@@ -1,4 +1,5 @@
-﻿using AllegroErliSync.Helpers;
+﻿using AllegroErliProductsSyncService.Settings;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Serilog;
@@ -8,17 +9,16 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace AllegroErliSync.Services
+namespace AllegroErliProductsSyncService.Services
 {
     public class ErliClient
     {
         private readonly HttpClient _httpClient;
         private readonly JsonSerializerSettings _jsonSettings;
 
-        public ErliClient()
+        public ErliClient(IOptions<ErliApiCredentials> options)
         {
-            var credentials = AppSettingsLoader.LoadErliCredentials();
-
+            var credentials = options.Value;
             if (string.IsNullOrWhiteSpace(credentials.BaseUrl))
                 throw new Exception("ErliBaseUrl is not configured.");
             if (string.IsNullOrWhiteSpace(credentials.ApiKey))

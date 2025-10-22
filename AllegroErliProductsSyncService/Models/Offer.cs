@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace AllegroErliSync.Models
+namespace AllegroErliProductsSyncService.Models
 {
     public class Offer
     {

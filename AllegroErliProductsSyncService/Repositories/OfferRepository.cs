@@ -1,10 +1,10 @@
-﻿using AllegroErliSync.Data;
-using AllegroErliSync.Models;
+﻿using AllegroErliProductsSyncService.Data;
+using AllegroErliProductsSyncService.Models;
 using Dapper;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace AllegroErliSync.Repositories
+namespace AllegroErliProductsSyncService.Repositories
 {
     public class OfferRepository
     {

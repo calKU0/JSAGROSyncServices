@@ -1,11 +1,11 @@
-﻿using AllegroErliSync.DTOs;
-using AllegroErliSync.Models;
+﻿using AllegroErliProductsSyncService.DTOs;
+using AllegroErliProductsSyncService.Models;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace AllegroErliSync.Mappers
+namespace AllegroErliProductsSyncService.Mappers
 {
     public static class ErliProductMapper
     {

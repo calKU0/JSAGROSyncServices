@@ -1,4 +1,4 @@
-﻿namespace AllegroErliSync.Settings
+﻿namespace AllegroErliProductsSyncService.Settings
 {
     public class AppSettings
     {

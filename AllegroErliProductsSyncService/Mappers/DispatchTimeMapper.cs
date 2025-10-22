@@ -1,8 +1,8 @@
-﻿using AllegroErliSync.DTOs;
+﻿using AllegroErliProductsSyncService.DTOs;
 using System;
 using System.Text.RegularExpressions;
 
-namespace AllegroErliSync.Mappers
+namespace AllegroErliProductsSyncService.Mappers
 {
     public static class DispatchTimeMapper
     {

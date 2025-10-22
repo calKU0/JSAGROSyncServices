@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace AllegroErliSync.DTOs
+namespace AllegroErliProductsSyncService.DTOs
 {
     public class ErliCreateProductRequest
     {

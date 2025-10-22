@@ -1,7 +1,7 @@
-﻿using AllegroErliSync.DTOs;
-using AllegroErliSync.Mappers;
-using AllegroErliSync.Models;
-using AllegroErliSync.Repositories;
+﻿using AllegroErliProductsSyncService.DTOs;
+using AllegroErliProductsSyncService.Mappers;
+using AllegroErliProductsSyncService.Models;
+using AllegroErliProductsSyncService.Repositories;
 using Newtonsoft.Json;
 using Serilog;
 using System;
@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace AllegroErliSync.Services
+namespace AllegroErliProductsSyncService.Services
 {
     public class ErliService
     {
