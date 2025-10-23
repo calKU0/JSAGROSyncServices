@@ -183,7 +183,7 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
         {
             try
             {
-                var products = await _productRepo.GetProductsToUpload(ct);
+                var products = await _productRepo.GetProductsToUpload(_appSettings.MinProductStock, _appSettings.MinProductPrice, ct);
                 var allegroCategories = (await _categoryRepo.GetAllegroCategories(ct)).ToList();
 
                 if (products == null || !products.Any())
