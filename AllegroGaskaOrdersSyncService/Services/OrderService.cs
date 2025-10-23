@@ -8,6 +8,7 @@ using AllegroGaskaOrdersSyncService.Settings;
 using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AllegroGaskaOrdersSyncService.Services
 {
@@ -36,7 +37,11 @@ namespace AllegroGaskaOrdersSyncService.Services
         {
             const int limit = 100;
             int offset = 0, totalFetched = 0;
-            const string boughtFrom = "2025-10-21T00:00:00Z";
+            const string minBoughtFrom = "2025-10-23T00:00:00Z";
+            var minBoughtDate = DateTime.Parse(minBoughtFrom, null, DateTimeStyles.AdjustToUniversal);
+            var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
+            var boughtDate = sevenDaysAgo < minBoughtDate ? minBoughtDate : sevenDaysAgo;
+            string boughtDateIso = boughtDate.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
             try
             {
@@ -54,7 +59,7 @@ namespace AllegroGaskaOrdersSyncService.Services
 
                 while (true)
                 {
-                    var query = $"order/checkout-forms?limit={limit}&offset={offset}&lineItems.boughtAt.gte={boughtFrom}";
+                    var query = $"order/checkout-forms?limit={limit}&offset={offset}&lineItems.boughtAt.gte={boughtDateIso}";
                     var response = await _allegroApiClient.GetAsync<AllegroGetOrdersResponse>(query, ct);
 
                     var orders = response?.CheckoutForms ?? Enumerable.Empty<AllegroGetOrdersResponse.CheckoutForm>();
@@ -336,6 +341,21 @@ namespace AllegroGaskaOrdersSyncService.Services
             var address = allegroOrder.Delivery.Address;
             var fulfillment = allegroOrder.Fulfillment;
 
+            string street = address.Street?.Trim() ?? "";
+            string city = address.City?.Trim() ?? "";
+
+            // Detect and split street if it contains a city and "ul." pattern
+            if (!string.IsNullOrEmpty(street))
+            {
+                // Regex matches: "something (ul\.?|ulica\.?) rest"
+                var match = Regex.Match(street, @"^(?<city>.+?)\s+(?:ul\.?|ulica\.?)\s*(?<street>.+)$", RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    city = match.Groups["city"].Value.Trim();
+                    street = match.Groups["street"].Value.Trim();
+                }
+            }
+
             return new AllegroOrder
             {
                 AllegroId = allegroOrder.Id,
@@ -346,8 +366,8 @@ namespace AllegroGaskaOrdersSyncService.Services
                 ClientNickname = allegroOrder.Buyer.Login.Trim(),
                 RecipientFirstName = address.FirstName.Trim(),
                 RecipientLastName = address.LastName.Trim(),
-                RecipientStreet = address.Street.Trim(),
-                RecipientCity = address.City.Trim(),
+                RecipientStreet = street,
+                RecipientCity = city,
                 RecipientPostalCode = address.ZipCode.Trim(),
                 RecipientCountry = address.CountryCode.Trim(),
                 RecipientCompanyName = address?.CompanyName,
@@ -433,18 +453,17 @@ namespace AllegroGaskaOrdersSyncService.Services
         private AllegroOrderStatus MapGaskaStatusToAllegro(string status)
         {
             if (string.IsNullOrWhiteSpace(status))
-                return AllegroOrderStatus.NEW;
+                return AllegroOrderStatus.PROCESSING;
 
             // Normalize input for case-insensitive matching
             status = status.Trim().ToLowerInvariant();
 
             return status switch
             {
-                "przyjęte na magazyn" or "w przyjęciu na magazyn" or "przygotowane" or "pakowanie" or "w realizacji" => AllegroOrderStatus.PROCESSING,
                 "spakowane" or "czeka na kuriera" => AllegroOrderStatus.READY_FOR_SHIPMENT,
                 "wysłane" or "w drodze" => AllegroOrderStatus.SENT,
                 "dostarczone" => AllegroOrderStatus.PICKED_UP,
-                _ => AllegroOrderStatus.NEW
+                _ => AllegroOrderStatus.PROCESSING
             };
         }
 

@@ -39,5 +39,8 @@
     <None Update="Migrations\20251022_02_AddEmailSent.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Migrations\20251023_01_MessageToSeller_Nullable.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

@@ -70,6 +70,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories
                 WHERE
                     o.SentToGaska = 1
                     AND o.GaskaOrderId IS NOT NULL
+                    AND o.Status = @ReadyStatus
                     AND o.RealizeStatus IN (
                         @NewStatus,
                         @ProcessingStatus,
@@ -103,7 +104,8 @@ namespace AllegroGaskaOrdersSyncService.Repositories
                     ProcessingStatus = AllegroOrderStatus.PROCESSING,
                     ReadyForShipmentStatus = AllegroOrderStatus.READY_FOR_SHIPMENT,
                     ReadyForPickupStatus = AllegroOrderStatus.READY_FOR_PICKUP,
-                    SentStatus = AllegroOrderStatus.SENT
+                    SentStatus = AllegroOrderStatus.SENT,
+                    ReadyStatus = AllegroCheckoutFormStatus.READY_FOR_PROCESSING
                 },
                 splitOn: "Id"
             );
@@ -126,7 +128,7 @@ namespace AllegroGaskaOrdersSyncService.Repositories
                     o.SentToGaska = 0
                     AND o.Status = @ReadyStatus
                     AND o.RealizeStatus = @NewStatus
-                    AND DATEDIFF(MINUTE, o.CreatedAt, GETDATE()) >= @DelayMinutes;
+                    AND DATEDIFF(MINUTE, o.CreatedAt, GETUTCDATE()) >= @DelayMinutes;
                 ";
 
             var orderDict = new Dictionary<int, AllegroOrder>();
