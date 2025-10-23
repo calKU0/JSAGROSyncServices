@@ -6,7 +6,7 @@ namespace AllegroGaskaOrdersSyncService.Models
     {
         public int Id { get; set; }
         public string AllegroId { get; set; } = string.Empty;
-        public string MessageToSeller { get; set; } = string.Empty;
+        public string? MessageToSeller { get; set; }
         public string? Note { get; set; }
         public AllegroCheckoutFormStatus Status { get; set; }
         public AllegroOrderStatus RealizeStatus { get; set; }
