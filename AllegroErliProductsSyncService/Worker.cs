@@ -34,14 +34,34 @@ namespace AllegroErliProductsSyncService
                     var erliService = scope.ServiceProvider.GetRequiredService<ErliService>();
 
                     _logger.LogInformation("Starting Erli sync at {time}", DateTime.Now);
-                    var start = DateTime.Now;
 
-                    await erliService.SyncOffersWithErli();
-                    await erliService.CreateProductsInErli();
-                    await erliService.UpdateProductsInErli();
+                    var totalSw = System.Diagnostics.Stopwatch.StartNew();
+                    var stepTimes = new Dictionary<string, TimeSpan>();
 
-                    var duration = DateTime.Now - start;
-                    _logger.LogInformation("Erli sync completed at {time} (Duration: {duration})", DateTime.Now, duration);
+                    async Task MeasureStepAsync(string stepName, Func<Task> action)
+                    {
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        await action();
+                        sw.Stop();
+                        stepTimes[stepName] = sw.Elapsed;
+                        _logger.LogInformation($"{stepName} completed in {FormatDuration(sw.Elapsed)}.");
+                    }
+
+                    await MeasureStepAsync("Sync offers with Erli", () => erliService.SyncOffersWithErli());
+                    await MeasureStepAsync("Create products in Erli", () => erliService.CreateProductsInErli());
+                    await MeasureStepAsync("Update products in Erli", () => erliService.UpdateProductsInErli());
+
+                    totalSw.Stop();
+
+                    _logger.LogInformation("=== Erli sync completed at {time} ===", DateTime.Now);
+                    _logger.LogInformation("=== Step durations ===");
+
+                    foreach (var kv in stepTimes)
+                    {
+                        _logger.LogInformation($" - {kv.Key}: {FormatDuration(kv.Value)}");
+                    }
+
+                    _logger.LogInformation($"=== Total time: {FormatDuration(totalSw.Elapsed)} ===");
                 }
                 catch (Exception ex)
                 {
@@ -56,6 +76,11 @@ namespace AllegroErliProductsSyncService
             }
 
             _logger.LogInformation("Erli sync worker stopped.");
+
+            string FormatDuration(TimeSpan timeSpan)
+            {
+                return $"{(int)timeSpan.TotalMinutes:D2}m {timeSpan.Seconds:D2}s";
+            }
         }
     }
 }
