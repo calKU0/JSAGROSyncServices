@@ -3,6 +3,8 @@
     public class AppSettings
     {
         public string CategoriesId { get; set; } = string.Empty;
+        public int MinProductStock { get; set; }
+        public decimal MinProductPrice { get; set; }
         public int LogsExpirationDays { get; set; }
         public int FetchIntervalMinutes { get; set; }
         public decimal OwnMarginPercent { get; set; }

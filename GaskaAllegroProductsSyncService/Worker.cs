@@ -63,48 +63,57 @@ public class Worker : BackgroundService
 
         _logger.LogInformation("=== Starting full synchronization cycle ===");
 
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var stepTimes = new Dictionary<string, TimeSpan>();
+
         try
         {
-            await gaskaApiService.SyncProducts();
-            _logger.LogInformation("Basic product sync completed.");
+            async Task MeasureStepAsync(string stepName, Func<Task> action)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await action();
+                sw.Stop();
+                stepTimes[stepName] = sw.Elapsed;
+                _logger.LogInformation($"{stepName} completed in {FormatDuration(sw.Elapsed)}.");
+            }
 
-            await offerService.SyncAllegroOffers();
-            _logger.LogInformation("Allegro offers sync completed.");
-
-            await offerService.SyncAllegroOffersDetails();
-            _logger.LogInformation("Allegro offers details completed.");
+            await MeasureStepAsync("Basic product sync", () => gaskaApiService.SyncProducts());
+            await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());
+            await MeasureStepAsync("Allegro offers details", () => offerService.SyncAllegroOffersDetails());
 
             if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 1 && DateTime.Now.Hour <= 8)
             {
-                await gaskaApiService.SyncProductDetails();
-                _logger.LogInformation("Detailed product sync completed.");
-
-                await categoryService.UpdateAllegroCategories();
-                _logger.LogInformation("Allegro categories updated.");
-
+                await MeasureStepAsync("Detailed product sync", () => gaskaApiService.SyncProductDetails());
+                await MeasureStepAsync("Allegro categories update", () => categoryService.UpdateAllegroCategories());
                 _lastProductDetailsSyncDate = DateTime.Today;
             }
 
-            await categoryService.FetchAndSaveCategoryParameters();
-            _logger.LogInformation("Category parameters fetched.");
+            await MeasureStepAsync("Category parameters fetch", () => categoryService.FetchAndSaveCategoryParameters());
+            await MeasureStepAsync("Product parameters update", () => parametersService.UpdateParameters());
+            await MeasureStepAsync("Images import", () => imageService.ImportImages());
+            await MeasureStepAsync("Offers creation", () => offerService.CreateOffers());
+            await MeasureStepAsync("Offers update", () => offerService.UpdateOffers());
 
-            await parametersService.UpdateParameters();
-            _logger.LogInformation("Product parameters updated.");
-
-            await imageService.ImportImages();
-            _logger.LogInformation("Images import completed.");
-
-            await offerService.CreateOffers();
-            _logger.LogInformation("Offers creation completed.");
-
-            await offerService.UpdateOffers();
-            _logger.LogInformation("Offers update completed.");
+            totalStopwatch.Stop();
 
             _logger.LogInformation("=== Synchronization cycle finished successfully ===");
+            _logger.LogInformation("=== Step durations ===");
+
+            foreach (var kv in stepTimes)
+            {
+                _logger.LogInformation($" - {kv.Key}: {FormatDuration(kv.Value)}");
+            }
+
+            _logger.LogInformation($"=== Total time: {FormatDuration(totalStopwatch.Elapsed)} ===");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during synchronization cycle.");
+        }
+
+        string FormatDuration(TimeSpan timeSpan)
+        {
+            return $"{(int)timeSpan.TotalMinutes:D2}m {timeSpan.Seconds:D2}s";
         }
     }
 }
