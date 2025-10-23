@@ -35,6 +35,7 @@ namespace ServiceManager
         private bool _reachedFileStart = false;
         private long _lastReadOffset = 0;
         private object _lastSelectedLog;
+        private bool _isAtBottom = true;
 
         public MainWindow()
         {
@@ -323,7 +324,7 @@ namespace ServiceManager
                         };
 
                         var grid = new Grid();
-                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(270) });
+                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(295) });
                         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
                         Grid.SetColumn(label, 0);
@@ -541,7 +542,7 @@ namespace ServiceManager
                     _filteredLogLines.Add(line);
             }
 
-            if (_filteredLogLines.Count > 0)
+            if (_filteredLogLines.Count > 0 && _isAtBottom)
                 IcLogLines.ScrollIntoView(_filteredLogLines[^1]);
         }
 
@@ -559,7 +560,13 @@ namespace ServiceManager
 
         private void IcLogLines_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
-            if (e.VerticalOffset <= 0)
+            var sv = e.OriginalSource as ScrollViewer;
+            if (sv != null)
+            {
+                _isAtBottom = sv.VerticalOffset >= sv.ScrollableHeight - 1;
+            }
+
+            if (e.VerticalOffset <= 2)
                 _ = LoadMoreAsync();
         }
 
@@ -573,10 +580,6 @@ namespace ServiceManager
                 {
                     sv.ScrollChanged -= IcLogLines_ScrollChanged; // prevent double hook
                     sv.ScrollChanged += IcLogLines_ScrollChanged;
-                }
-                else
-                {
-                    Debug.WriteLine("ScrollViewer still null! Wait until ListBox is visible.");
                 }
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
@@ -617,10 +620,10 @@ namespace ServiceManager
 
                 await Dispatcher.BeginInvoke(() =>
                 {
-                    if (IcLogLines.Items.Count > 0)
+                    if (IcLogLines.Items.Count > 0 && _isAtBottom)
                     {
                         IcLogLines.UpdateLayout();
-                        IcLogLines.ScrollIntoView(IcLogLines.Items[^1]); // bottom
+                        IcLogLines.ScrollIntoView(IcLogLines.Items[^1]);
                     }
                 }, DispatcherPriority.Background);
             }
