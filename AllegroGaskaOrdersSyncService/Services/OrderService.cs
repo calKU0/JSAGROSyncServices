@@ -37,7 +37,7 @@ namespace AllegroGaskaOrdersSyncService.Services
         {
             const int limit = 100;
             int offset = 0, totalFetched = 0;
-            const string minBoughtFrom = "2025-10-23T00:00:00Z";
+            const string minBoughtFrom = "2025-10-24T00:00:00Z";
             var minBoughtDate = DateTime.Parse(minBoughtFrom, null, DateTimeStyles.AdjustToUniversal);
             var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
             var boughtDate = sevenDaysAgo < minBoughtDate ? minBoughtDate : sevenDaysAgo;
@@ -411,7 +411,9 @@ namespace AllegroGaskaOrdersSyncService.Services
             // Determine the delivery method
             string deliveryMethod = order.DeliveryMethodName;
 
-            if (order.PaymentType != AllegroPaymentType.CASH_ON_DELIVERY)
+            if (order.PaymentType != AllegroPaymentType.CASH_ON_DELIVERY
+                && DateTime.Now.DayOfWeek != DayOfWeek.Saturday
+                && DateTime.Now.DayOfWeek != DayOfWeek.Sunday)
             {
                 var nowHour = DateTime.Now.Hour;
 
