@@ -59,17 +59,24 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
             });
         }
 
-        public async Task<HttpResponseMessage> SendWithResponseAsync(string url, HttpMethod method, object body = null, CancellationToken ct = default)
+        public async Task<HttpResponseMessage> SendWithResponseAsync(
+            string url,
+            HttpMethod method,
+            object body = null,
+            CancellationToken ct = default)
         {
-            var request = await CreateRequest(method, url, ct);
-
-            if (body != null)
+            return await SendWithRetry(async () =>
             {
-                var json = JsonSerializer.Serialize(body, _options);
-                request.Content = new StringContent(json, Encoding.UTF8, "application/vnd.allegro.public.v1+json");
-            }
+                var request = await CreateRequest(method, url, ct);
 
-            return await _http.SendAsync(request, ct);
+                if (body != null)
+                {
+                    var json = JsonSerializer.Serialize(body, _options);
+                    request.Content = new StringContent(json, Encoding.UTF8, "application/vnd.allegro.public.v1+json");
+                }
+
+                return await _http.SendAsync(request, ct);
+            });
         }
 
         private async Task<HttpRequestMessage> CreateRequest(HttpMethod method, string url, CancellationToken ct)
@@ -83,34 +90,55 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
 
         private async Task<T> DeserializeWithRetry<T>(Func<Task<HttpResponseMessage>> send)
         {
+            var response = await SendWithRetry(send);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+                return JsonSerializer.Deserialize<T>(body, _options);
+
+            if ((int)response.StatusCode == 404)
+                return default;
+
+            return default;
+        }
+
+        private async Task<HttpResponseMessage> SendWithRetry(Func<Task<HttpResponseMessage>> send)
+        {
             int retryCount = 0;
 
             while (true)
             {
                 var response = await send();
-                var body = await response.Content.ReadAsStringAsync();
 
                 if (response.IsSuccessStatusCode)
-                {
-                    return JsonSerializer.Deserialize<T>(body, _options);
-                }
+                    return response;
 
+                // Retry on Too Many Requests
                 if ((int)response.StatusCode == 429 && retryCount < MaxRetries)
                 {
-                    _logger.LogWarning("Rate limit exceeded. Waiting 30 seconds before retry {RetryCount}/{MaxRetries}...",
-                        retryCount + 1, MaxRetries);
-                    await Task.Delay(DelayOnTooManyRequestsMs);
+                    int delay = DelayOnTooManyRequestsMs;
 
+                    // Respect Retry-After header if available
+                    if (response.Headers.TryGetValues("Retry-After", out var values) &&
+                        int.TryParse(values.FirstOrDefault(), out var retryAfterSeconds))
+                    {
+                        delay = retryAfterSeconds * 1000;
+                    }
+
+                    _logger.LogInformation(
+                        "Rate limit hit. Waiting {Delay}s before retry {RetryCount}/{MaxRetries}...",
+                        delay / 1000,
+                        retryCount + 1,
+                        MaxRetries);
+
+                    await Task.Delay(delay);
                     retryCount++;
                     continue;
                 }
-                if ((int)response.StatusCode == 404)
-                {
-                    return default;
-                }
 
-                _logger.LogError("Allegro API error {Status}: {Body}", response.StatusCode, body);
-                return default;
+                // Other errors: log and return
+                var body = await response.Content.ReadAsStringAsync();
+                return response;
             }
         }
     }

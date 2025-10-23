@@ -151,7 +151,7 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                 var parallelOptions = new ParallelOptions
                 {
                     CancellationToken = ct,
-                    MaxDegreeOfParallelism = 30
+                    MaxDegreeOfParallelism = 25
                 };
 
                 await Parallel.ForEachAsync(offers, parallelOptions, async (offer, token) =>
@@ -195,7 +195,7 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                 await Parallel.ForEachAsync(products, new ParallelOptions
                 {
                     CancellationToken = ct,
-                    MaxDegreeOfParallelism = 30
+                    MaxDegreeOfParallelism = 25
                 },
                 async (product, token) =>
                 {
@@ -338,15 +338,14 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
 
         private string ExtractCorrectParameterValue(string message)
         {
-            // Example: The correct parameter value for the product is: "JAG".
-            var match = Regex.Match(message, @"correct parameter value.*?:\s*""([^""]+)""", RegexOptions.IgnoreCase);
+            // Handles: "change the value to `JAG`" OR `"JAG"` OR similar phrases
+            var match = Regex.Match(message, @"value\s*(?:to|is)\s*[`""]([^`""]+)[`""]", RegexOptions.IgnoreCase);
             return match.Success ? match.Groups[1].Value : null;
         }
 
         private string ExtractParameterIdFromConstraintMessage(string message)
         {
-            // Example: Producent części (247835)
-            var match = Regex.Match(message, @"\((\d+)\)");
+            var match = Regex.Match(message, @"id:\s*(\d+)", RegexOptions.IgnoreCase);
             return match.Success ? match.Groups[1].Value : null;
         }
     }
