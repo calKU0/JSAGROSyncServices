@@ -25,7 +25,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
             const string sql = @"SELECT * FROM Products WHERE Id = @Id;
                                  SELECT * FROM ProductAttributes WHERE ProductId = @Id;";
 
-            using var multi = await conn.QueryMultipleAsync(sql, new { Id = id });
+            using var multi = await conn.QueryMultipleAsync(sql, new { Id = id }, commandTimeout: 900);
             var product = await multi.ReadFirstOrDefaultAsync<Product>();
             if (product != null)
                 product.Atributes = (await multi.ReadAsync<ProductAttribute>()).ToList();
@@ -44,7 +44,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                 ORDER BY p.Id
                 OFFSET 0 ROWS FETCH NEXT @Limit ROWS ONLY;";
 
-            return (await conn.QueryAsync<Product>(sql, new { Limit = limit })).ToList();
+            return (await conn.QueryAsync<Product>(sql, new { Limit = limit }, commandTimeout: 900)).ToList();
         }
 
         public async Task<int> ArchiveProductsNotIn(HashSet<int> fetchedProductIds, CancellationToken ct)
@@ -69,7 +69,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
             {
                 var batch = ids.Skip(i).Take(batchSize).Select(x => $"({x})");
                 var sqlInsert = $"INSERT INTO ProductSyncTemp (ProductId) VALUES {string.Join(",", batch)};";
-                await conn.ExecuteAsync(sqlInsert, transaction: tran);
+                await conn.ExecuteAsync(sqlInsert, transaction: tran, commandTimeout: 900);
             }
 
             // 3. Archive missing products
@@ -79,7 +79,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                 WHERE Archived = 0
                   AND Id NOT IN (SELECT ProductId FROM ProductSyncTemp);";
 
-            var archivedCount = await conn.ExecuteAsync(sqlArchive, transaction: tran);
+            var archivedCount = await conn.ExecuteAsync(sqlArchive, transaction: tran, commandTimeout: 900);
             tran.Commit();
 
             return archivedCount;
@@ -127,7 +127,8 @@ namespace AllegroGaskaProductsSyncService.Repositories
                 },
                 new { Ids = productIds },
                 splitOn: "Id",  // Tells Dapper where Application columns start
-                transaction: tran
+                transaction: tran,
+                commandTimeout: 900
             );
 
             var existingProducts = productDictionary.ToDictionary(p => p.Key, p => p.Value);
@@ -189,7 +190,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                      @WeightGross, @WeightNet, @SupplierName, @SupplierLogo, @InStock, @Unit,
                      @CurrencyPrice, @PriceNet, @PriceGross, @DeliveryType, @Archived, @CreatedDate, @UpdatedDate);";
 
-                await conn.ExecuteAsync(insertSql, toInsert, tran);
+                await conn.ExecuteAsync(insertSql, toInsert, tran, commandTimeout: 900);
             }
 
             if (toUpdate.Any())
@@ -215,7 +216,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                         Archived = @Archived
                     WHERE Id = @Id;";
 
-                await conn.ExecuteAsync(updateSql, toUpdate, tran);
+                await conn.ExecuteAsync(updateSql, toUpdate, tran, commandTimeout: 900);
             }
 
             tran.Commit();
@@ -254,7 +255,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                         .ToList();
 
                     foreach (var del in toDelete)
-                        await conn.ExecuteAsync($"DELETE FROM {tableName} WHERE Id = @Id", new { Id = idSelector(del) }, tran);
+                        await conn.ExecuteAsync($"DELETE FROM {tableName} WHERE Id = @Id", new { Id = idSelector(del) }, tran, commandTimeout: 900);
 
                     // Update existing items
                     foreach (var dbItem in dbItems)
@@ -269,7 +270,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
 
                         var setSql = string.Join(",", props.Select(p => $"{p.Name} = @{p.Name}"));
                         var sql = $"UPDATE {tableName} SET {setSql} WHERE Id = @Id";
-                        await conn.ExecuteAsync(sql, apiItem, tran);
+                        await conn.ExecuteAsync(sql, apiItem, tran, commandTimeout: 900);
                     }
 
                     // Insert new items
@@ -286,7 +287,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                         var colNames = string.Join(",", insertProps.Select(p => p.Name));
                         var paramNames = string.Join(",", insertProps.Select(p => "@" + p.Name));
                         var sql = $"INSERT INTO {tableName} ({colNames}) VALUES ({paramNames})";
-                        await conn.ExecuteAsync(sql, item, tran);
+                        await conn.ExecuteAsync(sql, item, tran, commandTimeout: 900);
                     }
                 }
 
@@ -502,7 +503,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                     return productEntry;
                 },
                 splitOn: "Id",
-                commandTimeout: 60,
+                commandTimeout: 900,
                 transaction: null
             );
 
@@ -535,12 +536,12 @@ namespace AllegroGaskaProductsSyncService.Repositories
             {
                 var apps = await conn.QueryAsync<Application>(
                     "SELECT * FROM Applications WHERE ProductId IN @batch",
-                    new { batch });
+                    new { batch }, commandTimeout: 900);
                 applications.AddRange(apps);
 
                 var crosses = await conn.QueryAsync<CrossNumber>(
                     "SELECT * FROM CrossNumbers WHERE ProductId IN @batch",
-                    new { batch });
+                    new { batch }, commandTimeout: 900);
                 crossNumbers.AddRange(crosses);
             }
 
@@ -571,7 +572,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                     INNER JOIN Products p ON pp.ProductId = p.Id
                     WHERE pp.ProductId = @ProductId AND p.DefaultAllegroCategory <> @CategoryId;",
                     new { ProductId = productId, CategoryId = categoryId },
-                    tran
+                    tran, commandTimeout: 900
                 );
 
                 // Update the product category
@@ -580,7 +581,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                     SET DefaultAllegroCategory = @CategoryId
                     WHERE Id = @ProductId;",
                     new { ProductId = productId, CategoryId = categoryId },
-                    tran
+                    tran, commandTimeout: 900
                 );
 
                 tran.Commit();
@@ -676,7 +677,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                       AND AllegroUrl IS NOT NULL
                       AND AllegroExpirationDate >= @Cutoff
                     GROUP BY ProductId, AllegroUrl;",
-                    new { ProductIds = productIds, Cutoff = cutoff }
+                    new { ProductIds = productIds, Cutoff = cutoff }, commandTimeout: 900
                 )).ToList();
 
                 var packages = (await conn.QueryAsync<Package>(@"
@@ -722,7 +723,8 @@ namespace AllegroGaskaProductsSyncService.Repositories
                         return pp;
                     },
                     new { ProductIds = productIds },
-                    splitOn: "CpId"
+                    splitOn: "CpId",
+                    commandTimeout: 900
                 )).ToList();
 
                 // 3️ Map child collections to each product
@@ -787,6 +789,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                     @"SELECT * FROM ProductParameters
                       WHERE ProductId IN @ProductIds AND CategoryParameterId IN @CategoryParamIds;",
                     new { ProductIds = productIds, CategoryParamIds = categoryParamIds }
+                    , commandTimeout: 900
                 )).ToList();
 
                 var existingDict = existingParams.ToDictionary(p => (p.ProductId, p.CategoryParameterId));
@@ -821,7 +824,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                     var insertSql = @"
                         INSERT INTO ProductParameters (ProductId, CategoryParameterId, Value, IsForProduct)
                         VALUES (@ProductId, @CategoryParameterId, @Value, @IsForProduct);";
-                    await conn.ExecuteAsync(insertSql, toInsert);
+                    await conn.ExecuteAsync(insertSql, toInsert, commandTimeout: 900);
                 }
             }
         }
@@ -837,7 +840,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                   FROM CategoryParameters cp
                   INNER JOIN Products p ON p.DefaultAllegroCategory = cp.CategoryId
                   WHERE p.Id = @ProductId AND cp.ParameterId = @ParameterId;",
-                new { ProductId = productId, ParameterId = parameterId }
+                new { ProductId = productId, ParameterId = parameterId }, commandTimeout: 900
             );
 
             if (categoryParameterId == 0) return;
@@ -847,7 +850,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                 @"UPDATE ProductParameters
                   SET Value = @Value
                   WHERE ProductId = @ProductId AND CategoryParameterId = @CategoryParameterId;",
-                new { Value = value, ProductId = productId, CategoryParameterId = categoryParameterId }
+                new { Value = value, ProductId = productId, CategoryParameterId = categoryParameterId }, commandTimeout: 900
             );
         }
 
