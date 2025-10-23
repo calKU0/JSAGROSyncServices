@@ -37,10 +37,10 @@ namespace ServiceManager.Helpers
             // AppSettings
             new ConfigField { Key = "AppSettings:CategoriesId", Label = "ID synchronizowanych kategorii", Group = "Inne ustawienia" },
             new ConfigField { Key = "AppSettings:MinProductStock", Label = "Minimalny stan produktu", Group = "Inne ustawienia", FieldType = ConfigFieldType.Int },
-            new ConfigField { Key = "AppSettings:MinProductPrice", Label = "Minimalna cena produktu (cena brutto zakupu u Gąski)", Group = "Inne ustawienia", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "AppSettings:LogsExpirationDays", Label = "Ilość dni zachowania logów", Group = "Inne ustawienia", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:FetchIntervalMinutes", Label = "Co ile wywoływać synchronizację (min)", Group = "Inne ustawienia", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:OwnMarginPercent", Label = "Własna marża (%)", Group = "Inne ustawienia", FieldType = ConfigFieldType.Decimal },
+            new ConfigField { Key = "AppSettings:OwnMarginPercentUnder10PLN", Label = "Własna marża poniżej 10 PLN (%)", Group = "Inne ustawienia", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "AppSettings:AllegroMarginUnder5PLN", Label = "Marża allegro poniżej 5 PLN", Group = "Inne ustawienia", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "AppSettings:AllegroMarginBetween5and1000PLNPercent", Label = "Marża allegro 5-1000 PLN (%)", Group = "Inne ustawienia", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "AppSettings:AllegroMarginMoreThan1000PLN", Label = "Marża allegro powyżej 1000 PLN", Group = "Inne ustawienia", FieldType = ConfigFieldType.Decimal },

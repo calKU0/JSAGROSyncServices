@@ -30,7 +30,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(product.PriceGross, product.DeliveryType, productQuantity, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(product.PriceGross, product.DeliveryType, productQuantity, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -91,7 +91,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(offer.Product.PriceGross, offer.Product.DeliveryType, productQuantity, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(offer.Product.PriceGross, offer.Product.DeliveryType, productQuantity, appSettings.AddPLNToBulkyProducts, appSettings.AddPLNToCustomProducts, appSettings.OwnMarginPercent, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -103,7 +103,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
                 },
                 Publication = new Publication
                 {
-                    Status = offer.Product.InStock >= appSettings.MinProductStock && offer.Product.PriceGross >= appSettings.MinProductPrice ? "ACTIVE" : "ENDED",
+                    Status = offer.Product.InStock >= appSettings.MinProductStock ? "ACTIVE" : "ENDED",
                     StartingAt = null,
                 },
                 Delivery = new Delivery
@@ -567,6 +567,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
             decimal addPLNToBulky,
             decimal addPLNToCustom,
             decimal ownMarginPercent,
+            decimal ownMarginPercentLessThan10PLN,
             decimal marginLessThan5PLN,
             decimal marginMoreThan5PLNPercent,
             decimal marginMoreThan1000PLN)
@@ -574,7 +575,13 @@ namespace AllegroGaskaProductsSyncService.Helpers
             var calculatedPrice = initialPrice;
 
             // Apply own margin
-            calculatedPrice = initialPrice * quantity * (1 + (ownMarginPercent / 100m));
+            decimal effectiveMargin = ownMarginPercent;
+
+            if (initialPrice < 10m)
+                effectiveMargin = ownMarginPercentLessThan10PLN;
+
+            // Apply own margin
+            calculatedPrice = initialPrice * quantity * (1 + (effectiveMargin / 100m));
 
             // Product type adjustments
             if (productType == 1) // bulky
