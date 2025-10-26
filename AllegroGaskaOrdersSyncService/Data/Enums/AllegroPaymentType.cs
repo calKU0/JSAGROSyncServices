@@ -1,5 +1,8 @@
-﻿namespace AllegroGaskaOrdersSyncService.Data.Enums
+﻿using System.Text.Json.Serialization;
+
+namespace AllegroGaskaOrdersSyncService.Data.Enums
 {
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum AllegroPaymentType
     {
         CASH_ON_DELIVERY,
