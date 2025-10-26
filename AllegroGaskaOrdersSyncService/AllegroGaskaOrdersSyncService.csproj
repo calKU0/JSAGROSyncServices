@@ -23,10 +23,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Helpers\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Update="Migrations\20251021_01_CreateAllegroOrdersTables.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

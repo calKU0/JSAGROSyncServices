@@ -374,13 +374,10 @@ namespace AllegroGaskaOrdersSyncService.DTOs.AllegroApi
             public string Id { get; set; }
 
             [JsonPropertyName("type")]
-            public string Type { get; set; }
+            public AllegroPaymentType Type { get; set; }
 
             [JsonPropertyName("provider")]
             public string Provider { get; set; }
-
-            [JsonPropertyName("finishedAt")]
-            public DateTime FinishedAt { get; set; }
 
             [JsonPropertyName("paidAmount")]
             public PaidAmount PaidAmount { get; set; }
@@ -520,12 +517,6 @@ namespace AllegroGaskaOrdersSyncService.DTOs.AllegroApi
 
         public class Time
         {
-            [JsonPropertyName("from")]
-            public DateTime From { get; set; }
-
-            [JsonPropertyName("to")]
-            public DateTime To { get; set; }
-
             [JsonPropertyName("guaranteed")]
             public Guaranteed Guaranteed { get; set; }
 

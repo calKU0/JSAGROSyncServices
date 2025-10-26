@@ -155,7 +155,7 @@ namespace AllegroGaskaOrdersSyncService.Services
 
                         // Send success email
                         var body = BuildOrderEmailBody(order);
-                        await _emailService.SendEmailAsync(_appSettings.NotificationsEmail, $"Złożono automatyczne zamówienie", body);
+                        await _emailService.SendEmailAsync(_appSettings.NotificationsEmail, $"Złożono automatyczne zamówienie {order.GaskaOrderNumber}", body);
                         await _orderRepo.SetEmailSent(order.Id);
                     }
                     catch (Exception ex)
@@ -219,7 +219,10 @@ namespace AllegroGaskaOrdersSyncService.Services
                 {
                     var gaskaItem = gaskaOrderResponse.Order.Items.FirstOrDefault(i => i.Id == item.GaskaItemId);
                     if (gaskaItem != null)
+                    {
                         item.GaskaTrackingNumber = gaskaItem.RealizeTrackingNumber;
+                        item.GaskaCourier = gaskaItem.RealizeDelivery;
+                    }
                 }
 
                 await _orderRepo.UpdateOrderGaskaInfo(order);
@@ -338,7 +341,7 @@ namespace AllegroGaskaOrdersSyncService.Services
 
         private AllegroOrder MapAllegroOrderToModel(AllegroGetOrdersResponse.CheckoutForm allegroOrder)
         {
-            var address = allegroOrder.Delivery.Address;
+            var address = allegroOrder.Delivery?.Address ?? allegroOrder.Buyer?.Address;
             var fulfillment = allegroOrder.Fulfillment;
 
             string street = address.Street?.Trim() ?? "";
@@ -363,30 +366,31 @@ namespace AllegroGaskaOrdersSyncService.Services
                 Note = allegroOrder.Note?.Text,
                 Status = allegroOrder.Status,
                 RealizeStatus = fulfillment.Status,
-                ClientNickname = allegroOrder.Buyer.Login.Trim(),
-                RecipientFirstName = address.FirstName.Trim(),
-                RecipientLastName = address.LastName.Trim(),
+                ClientNickname = allegroOrder.Buyer?.Login?.Trim(),
+                RecipientFirstName = (address.FirstName ?? allegroOrder.Buyer?.FirstName).Trim(),
+                RecipientLastName = (address.LastName ?? allegroOrder.Buyer?.LastName).Trim(),
                 RecipientStreet = street,
                 RecipientCity = city,
-                RecipientPostalCode = address.ZipCode.Trim(),
-                RecipientCountry = address.CountryCode.Trim(),
-                RecipientCompanyName = address?.CompanyName,
+                RecipientPostalCode = address?.ZipCode?.Trim() ?? address?.PostCode.Trim(),
+                RecipientCountry = address?.CountryCode?.Trim() ?? "",
+                RecipientCompanyName = address?.CompanyName ?? allegroOrder.Buyer?.CompanyName,
                 RecipientEmail = allegroOrder.Buyer?.Email,
-                RecipientPhoneNumber = address?.PhoneNumber,
-                DeliveryMethodId = allegroOrder.Delivery.Method.Id,
-                DeliveryMethodName = allegroOrder.Delivery.Method.Name.ToUpper(),
+                RecipientPhoneNumber = (address?.PhoneNumber ?? allegroOrder.Buyer?.PhoneNumber).Trim(),
+                DeliveryMethodId = allegroOrder.Delivery?.Method?.Id,
+                DeliveryMethodName = allegroOrder.Delivery?.Method?.Name?.ToUpper() ?? "",
                 CancellationDate = allegroOrder.Delivery?.Cancellation?.Date,
-                Amount = decimal.Parse(allegroOrder.Summary.TotalToPay.Amount, CultureInfo.InvariantCulture),
+                Amount = decimal.TryParse(allegroOrder.Summary?.TotalToPay?.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out var amt) ? amt : 0m,
                 CreatedAt = allegroOrder.LineItems?.Max(i => (DateTime?)i.BoughtAt) ?? default,
                 Revision = allegroOrder.Revision,
+                PaymentType = allegroOrder.Payment.Type,
                 Items = allegroOrder.LineItems?.Select(item => new AllegroOrderItem
                 {
-                    ExternalId = item.Offer.External.Id,
+                    ExternalId = item.Offer?.External?.Id,
                     Quantity = item.Quantity,
-                    PriceGross = item.Price.Amount,
-                    Currency = item.Price.Currency,
-                    OfferName = item.Offer.Name,
-                    OfferId = item.Offer.Id,
+                    PriceGross = item.Price?.Amount,
+                    Currency = item.Price?.Currency,
+                    OfferName = item.Offer?.Name,
+                    OfferId = item.Offer?.Id,
                     OrderItemId = item.Id,
                     BoughtAt = item.BoughtAt,
                 }).ToList() ?? new List<AllegroOrderItem>()
@@ -409,7 +413,7 @@ namespace AllegroGaskaOrdersSyncService.Services
         private GaskaCreateOrderRequest MapAllegroOrderToGaskaOrderRequest(AllegroOrder order, int addressId)
         {
             // Determine the delivery method
-            string deliveryMethod = order.DeliveryMethodName;
+            string deliveryMethod = NormalizeCourierName(order.DeliveryMethodName);
 
             if (order.PaymentType != AllegroPaymentType.CASH_ON_DELIVERY
                 && DateTime.Now.DayOfWeek != DayOfWeek.Saturday
@@ -422,18 +426,29 @@ namespace AllegroGaskaOrdersSyncService.Services
                 {
                     var name when name.Contains("DPD", StringComparison.OrdinalIgnoreCase)
                         && nowHour >= _courierSettings.DpdFinalOrderHour
-                        => GetNextAvailableCourier("DPD", nowHour),
+                        => NormalizeCourierName(GetNextAvailableCourier("DPD", nowHour)),
 
                     var name when name.Contains("FEDEX", StringComparison.OrdinalIgnoreCase)
                         && nowHour >= _courierSettings.FedexFinalOrderHour
-                        => GetNextAvailableCourier("FEDEX", nowHour),
+                        => NormalizeCourierName(GetNextAvailableCourier("FEDEX", nowHour)),
 
                     var name when name.Contains("GLS", StringComparison.OrdinalIgnoreCase)
                         && nowHour >= _courierSettings.GlsFinalOrderHour
-                        => GetNextAvailableCourier("GLS", nowHour),
+                        => NormalizeCourierName(GetNextAvailableCourier("GLS", nowHour)),
 
-                    _ => order.DeliveryMethodName
+                    _ => NormalizeCourierName(order.DeliveryMethodName)
                 };
+            }
+
+            static string NormalizeCourierName(string name)
+            {
+                if (name.Contains("DPD", StringComparison.OrdinalIgnoreCase))
+                    return "DPD";
+                if (name.Contains("FEDEX", StringComparison.OrdinalIgnoreCase))
+                    return "FedEx";
+                if (name.Contains("GLS", StringComparison.OrdinalIgnoreCase))
+                    return "GLS";
+                return name; // if it’s something else entirely
             }
 
             return new GaskaCreateOrderRequest
