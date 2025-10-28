@@ -97,6 +97,9 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                 ["stan"] = _ => "Nowy",
                 ["waga produktu z opakowaniem jednostkowym"] = p => p.WeightNet.ToString(), // bez ?. dla float
                 ["numer katalogowy części"] = p => p.CodeGaska,
+                ["typ maszyny"] = _ => "Inny",
+                ["rodzaj skrzyni"] = _ => "Brak informacji",
+                ["typ samochodu"] = _ => "Niezdefiniowany",
                 ["numer katalogowy oryginału"] = p => p.CodeGaska,
                 ["numery katalogowe zamienników"] = p => p.CrossNumbers != null ? string.Join(",", p.CrossNumbers.Select(cn => cn.CrossNumberValue)) : null,
                 ["stan opakowania"] = _ => "oryginalne",
