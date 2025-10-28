@@ -35,17 +35,15 @@ namespace AllegroGaskaProductsSyncService.Repositories
         {
             const string sql = @"
                 SELECT pi.*, p.Id, p.CodeGaska, p.Name, p.PriceGross, p.InStock, p.DefaultAllegroCategory
-                FROM ProductImages pi
-                INNER JOIN Products p ON pi.ProductId = p.Id
-                LEFT JOIN AllegroOffers o on p.CodeGaska = o.ExternalId
-                WHERE
-                    (pi.AllegroUrl IS NULL OR pi.AllegroExpirationDate <= GETDATE())
-                    AND p.Archived = 0
-                    AND p.DefaultAllegroCategory != 0
-                    AND p.PriceGross > 1
-                    AND p.InStock > 0
-                    AND o.Id is null
-                    AND pi.Url NOT LIKE '%+%'";
+                 FROM ProductImages pi
+                 INNER JOIN Products p ON pi.ProductId = p.Id
+                 LEFT JOIN AllegroOffers o on p.CodeGaska = o.ExternalId
+                 WHERE
+                     (pi.AllegroUrl IS NULL OR (pi.AllegroExpirationDate <= GETDATE() and o.Id is null))
+                     AND p.Archived = 0
+                     AND p.DefaultAllegroCategory != 0
+                     AND ((p.PriceGross > 1 AND p.InStock > 1) or (o.Status = 'ACTIVE' AND pi.AllegroUrl is null))
+                     AND pi.Url NOT LIKE '%+%'";
 
             using var connection = _context.CreateConnection();
             connection.Open();

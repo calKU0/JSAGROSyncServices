@@ -269,13 +269,13 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                     foreach (var err in errorResponse.Errors)
                     {
                         // Special handling for category mismatch
-                        if (err.Code == "CATEGORY_MISMATCH" && !string.IsNullOrEmpty(err.UserMessage))
+                        if (((err.Code?.Contains("ProductConstraintViolationException", StringComparison.OrdinalIgnoreCase) == true && (err.UserMessage ?? "").Contains("kategorii produktu", StringComparison.OrdinalIgnoreCase)) || err.Code?.Contains("CATEGORY_MISMATCH", StringComparison.OrdinalIgnoreCase) == true) && !string.IsNullOrEmpty(err.UserMessage))
                         {
                             var correctCategoryId = ExtractCorrectCategoryId(err.UserMessage);
                             if (!string.IsNullOrEmpty(correctCategoryId))
                             {
                                 await _productRepo.UpdateProductAllegroCategory(product.Id, Convert.ToInt32(correctCategoryId), CancellationToken.None);
-                                //_logger.LogInformation("Updated category for {Name} ({Code}) to {CategoryId}", product.Name, product.CodeGaska, correctCategoryId);
+                                _logger.LogInformation("Updated category for {Name} ({Code}) to {CategoryId}", product.Name, product.CodeGaska, correctCategoryId);
                             }
                         }
                         else if (
@@ -327,13 +327,17 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
 
         private string ExtractCorrectCategoryId(string message)
         {
-            var matches = Regex.Matches(message, @"\((\d+)\)");
-            if (matches.Count > 1)
-            {
-                // Allegro returns: (providedId) ... (correctId)
-                return matches[matches.Count - 1].Groups[1].Value;
-            }
-            return matches.Count == 1 ? matches[0].Groups[1].Value : null;
+            // Try to match specifically "produktu (123456)" first (preferred pattern)
+            var correctMatch = Regex.Match(message, @"produktu\s*\((\d+)\)", RegexOptions.IgnoreCase);
+            if (correctMatch.Success)
+                return correctMatch.Groups[1].Value;
+
+            // Fallback: if message contains multiple category IDs, assume the last one is correct
+            var allMatches = Regex.Matches(message, @"\((\d+)\)");
+            if (allMatches.Count > 1)
+                return allMatches[^1].Groups[1].Value;
+
+            return allMatches.Count == 1 ? allMatches[0].Groups[1].Value : null;
         }
 
         private string ExtractCorrectParameterValue(string message)

@@ -383,16 +383,29 @@ namespace AllegroGaskaOrdersSyncService.Services
                 CreatedAt = allegroOrder.LineItems?.Max(i => (DateTime?)i.BoughtAt) ?? default,
                 Revision = allegroOrder.Revision,
                 PaymentType = allegroOrder.Payment.Type,
-                Items = allegroOrder.LineItems?.Select(item => new AllegroOrderItem
+                Items = allegroOrder.LineItems?.Select(item =>
                 {
-                    ExternalId = item.Offer?.External?.Id,
-                    Quantity = item.Quantity,
-                    PriceGross = item.Price?.Amount,
-                    Currency = item.Price?.Currency,
-                    OfferName = item.Offer?.Name,
-                    OfferId = item.Offer?.Id,
-                    OrderItemId = item.Id,
-                    BoughtAt = item.BoughtAt,
+                    // Default quantity from item
+                    int quantity = item.Quantity;
+
+                    // Check for productSet and multiply quantities if available
+                    var productQuantity = item.Offer?.ProductSet?.Products?.FirstOrDefault()?.Quantity;
+                    if (productQuantity.HasValue)
+                    {
+                        quantity = quantity * productQuantity.Value;
+                    }
+
+                    return new AllegroOrderItem
+                    {
+                        ExternalId = item.Offer?.External?.Id,
+                        Quantity = quantity,
+                        PriceGross = item.Price?.Amount,
+                        Currency = item.Price?.Currency,
+                        OfferName = item.Offer?.Name,
+                        OfferId = item.Offer?.Id,
+                        OrderItemId = item.Id,
+                        BoughtAt = item.BoughtAt,
+                    };
                 }).ToList() ?? new List<AllegroOrderItem>()
             };
         }
@@ -519,7 +532,7 @@ namespace AllegroGaskaOrdersSyncService.Services
 
             // Skip the current courier and pick the first with final hour > now
             return couriers
-                .Where(c => c.Name != currentCourier && nowHour <= c.FinalHour)
+                .Where(c => c.Name != currentCourier && nowHour < c.FinalHour)
                 .Select(c => c.Name)
                 .FirstOrDefault() ?? currentCourier;
         }

@@ -192,9 +192,6 @@ namespace AllegroGaskaOrdersSyncService.DTOs.AllegroApi
 
             [JsonPropertyName("cancellation")]
             public Cancellation Cancellation { get; set; }
-
-            [JsonPropertyName("calculatedNumberOfPackages")]
-            public int CalculatedNumberOfPackages { get; set; }
         }
 
         public class Deposit
