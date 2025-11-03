@@ -374,6 +374,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                     p.DefaultAllegroCategory,
                     p.Archived,
                     p.CreatedDate,
+                    p.BuildCompatibilitySet,
                     p.UpdatedDate
                 FROM AllegroOffers o
                 INNER JOIN Products p ON p.CodeGaska = o.ExternalId

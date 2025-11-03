@@ -71,7 +71,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
                     ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
                 },
                 Parameters = BuildParameters(product.Parameters, false),
-                CompatibilityList = BuildCompatibilityList(product.DefaultAllegroCategory, product.Applications, allegroCategories)
+                CompatibilityList = product.BuildCompatibilitySet ? BuildCompatibilityList(product.DefaultAllegroCategory, product.Applications, allegroCategories) : null
             };
         }
 
@@ -121,7 +121,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
                     ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
                 },
                 Parameters = BuildParameters(offer.Product.Parameters, false),
-                CompatibilityList = BuildCompatibilityList(offer.Product.DefaultAllegroCategory == 0 ? offer.CategoryId : offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories)
+                CompatibilityList = offer.Product.BuildCompatibilitySet ? BuildCompatibilityList(offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories) : null
             };
         }
 

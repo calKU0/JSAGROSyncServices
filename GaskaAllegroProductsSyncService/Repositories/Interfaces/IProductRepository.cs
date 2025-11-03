@@ -28,5 +28,7 @@ namespace AllegroGaskaProductsSyncService.Repositories.Interfaces
         Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct);
 
         Task UpdateParameter(int id, int parameterId, string value, CancellationToken ct);
+
+        Task UpdateCompatibilitySet(int productId, bool value, CancellationToken ct);
     }
 }
