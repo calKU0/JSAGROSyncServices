@@ -90,55 +90,66 @@ namespace AllegroGaskaProductsSyncService.Repositories
             if (apiProducts == null || apiProducts.Count == 0)
                 return;
 
+            // Remove duplicates by Id
+            apiProducts = apiProducts
+                .GroupBy(p => p.Id)
+                .Select(g => g.First())
+                .ToList();
+
             using var conn = _context.CreateConnection();
             conn.Open();
             using var tran = conn.BeginTransaction();
 
-            // 1. Track fetched IDs
+            // Track fetched IDs
             foreach (var p in apiProducts)
                 fetchedProductIds.Add(p.Id);
 
-            // 2. Load existing products (with applications) in one query
             var productIds = apiProducts.Select(p => p.Id).ToList();
 
-            var sql = @"
-                SELECT p.*, a.*
-                FROM Products p
-                LEFT JOIN Applications a ON a.ProductId = p.Id
-                WHERE p.Id IN @Ids";
-
-            var productDictionary = new Dictionary<int, Product>();
-
-            var existingProductsQuery = await conn.QueryAsync<Product, Application, Product>(
-                sql,
-                (product, application) =>
-                {
-                    if (!productDictionary.TryGetValue(product.Id, out var productEntry))
-                    {
-                        productEntry = product;
-                        productEntry.Applications = new List<Application>();
-                        productDictionary.Add(productEntry.Id, productEntry);
-                    }
-
-                    if (application != null)
-                        productEntry.Applications.Add(application);
-
-                    return productEntry;
-                },
+            // 1. Load existing products
+            var existingProductsList = await conn.QueryAsync<Product>(
+                "SELECT * FROM Products WHERE Id IN @Ids",
                 new { Ids = productIds },
-                splitOn: "Id",  // Tells Dapper where Application columns start
                 transaction: tran,
                 commandTimeout: 900
             );
 
-            var existingProducts = productDictionary.ToDictionary(p => p.Key, p => p.Value);
+            var productDictionary = existingProductsList.ToDictionary(p => p.Id);
+
+            // 2. Load Applications
+            var applications = await conn.QueryAsync<Application>(
+                "SELECT * FROM Applications WHERE ProductId IN @Ids",
+                new { Ids = productIds },
+                transaction: tran,
+                commandTimeout: 900
+            );
+
+            // 3. Load CrossNumbers
+            var crossNumbers = await conn.QueryAsync<CrossNumber>(
+                "SELECT * FROM CrossNumbers WHERE ProductId IN @Ids",
+                new { Ids = productIds },
+                transaction: tran,
+                commandTimeout: 900
+            );
+
+            // 4. Merge Applications and CrossNumbers into products
+            foreach (var prod in productDictionary.Values)
+            {
+                prod.Applications = applications
+                    .Where(a => a.ProductId == prod.Id)
+                    .ToList();
+
+                prod.CrossNumbers = crossNumbers
+                    .Where(cn => cn.ProductId == prod.Id)
+                    .ToList();
+            }
 
             var toInsert = new List<Product>();
             var toUpdate = new List<Product>();
 
             foreach (var apiProduct in apiProducts)
             {
-                existingProducts.TryGetValue(apiProduct.Id, out var product);
+                productDictionary.TryGetValue(apiProduct.Id, out var product);
 
                 // Prepare root brands from existing applications
                 var rootBrands = product?.Applications?
@@ -149,16 +160,31 @@ namespace AllegroGaskaProductsSyncService.Repositories
 
                 if (product == null)
                 {
-                    product = new Product { Id = apiProduct.Id, CreatedDate = DateTime.UtcNow, UpdatedDate = DateTime.UtcNow };
+                    product = new Product
+                    {
+                        Id = apiProduct.Id,
+                        CreatedDate = DateTime.UtcNow,
+                        UpdatedDate = DateTime.UtcNow,
+                        Applications = new List<Application>(),
+                        CrossNumbers = new List<CrossNumber>()
+                    };
                     toInsert.Add(product);
                 }
                 else
                 {
                     toUpdate.Add(product);
+                    product.UpdatedDate = DateTime.UtcNow;
                 }
 
                 // Map fields
-                product.Name = FixName(apiProduct.Name, apiProduct.CodeGaska, apiProduct.CodeCustomer, rootBrands);
+                product.Name = FixName(
+                    apiProduct.Name,
+                    apiProduct.CodeGaska,
+                    apiProduct.CodeCustomer,
+                    rootBrands,
+                    product.CrossNumbers?.Select(cn => cn.CrossNumberValue).ToList() ?? new List<string>()
+                );
+
                 product.CodeGaska = apiProduct.CodeGaska;
                 product.CodeCustomer = apiProduct.CodeCustomer;
                 product.Description = apiProduct.Description;
@@ -177,7 +203,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                 product.Archived = false;
             }
 
-            // 3. Bulk insert and update
+            // 5. Bulk insert
             if (toInsert.Any())
             {
                 const string insertSql = @"
@@ -193,28 +219,30 @@ namespace AllegroGaskaProductsSyncService.Repositories
                 await conn.ExecuteAsync(insertSql, toInsert, tran, commandTimeout: 900);
             }
 
+            // 6. Bulk update
             if (toUpdate.Any())
             {
                 const string updateSql = @"
-                    UPDATE Products
-                    SET Name = @Name,
-                        CodeGaska = @CodeGaska,
-                        CodeCustomer = @CodeCustomer,
-                        Description = @Description,
-                        Ean = @Ean,
-                        TechnicalDetails = @TechnicalDetails,
-                        WeightGross = @WeightGross,
-                        WeightNet = @WeightNet,
-                        SupplierName = @SupplierName,
-                        SupplierLogo = @SupplierLogo,
-                        InStock = @InStock,
-                        Unit = @Unit,
-                        CurrencyPrice = @CurrencyPrice,
-                        PriceNet = @PriceNet,
-                        PriceGross = @PriceGross,
-                        DeliveryType = @DeliveryType,
-                        Archived = @Archived
-                    WHERE Id = @Id;";
+                UPDATE Products
+                SET Name = @Name,
+                    CodeGaska = @CodeGaska,
+                    CodeCustomer = @CodeCustomer,
+                    Description = @Description,
+                    Ean = @Ean,
+                    TechnicalDetails = @TechnicalDetails,
+                    WeightGross = @WeightGross,
+                    WeightNet = @WeightNet,
+                    SupplierName = @SupplierName,
+                    SupplierLogo = @SupplierLogo,
+                    InStock = @InStock,
+                    Unit = @Unit,
+                    CurrencyPrice = @CurrencyPrice,
+                    PriceNet = @PriceNet,
+                    PriceGross = @PriceGross,
+                    DeliveryType = @DeliveryType,
+                    Archived = @Archived,
+                    UpdatedDate = @UpdatedDate
+                WHERE Id = @Id;";
 
                 await conn.ExecuteAsync(updateSql, toUpdate, tran, commandTimeout: 900);
             }
@@ -443,6 +471,19 @@ namespace AllegroGaskaProductsSyncService.Repositories
                         Name = @Name
                     WHERE Id = @Id;";
 
+                var allCrossNumbers = updatedProduct.CrossNumbers?
+                    .SelectMany(c =>
+                        (c.CrossNumber ?? string.Empty)
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(x => x.Trim()) // remove extra spaces
+                            .Select(x => new ApiCrossNumber
+                            {
+                                CrossNumber = x,
+                                CrossManufacturer = c.CrossManufacturer
+                            })
+                    )
+                    .ToList() ?? new List<ApiCrossNumber>();
+
                 await conn.ExecuteAsync(updateSql, new
                 {
                     Id = productId,
@@ -456,7 +497,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
                     updatedProduct.PriceGross,
                     updatedProduct.DeliveryType,
                     UpdatedDate = DateTime.Now,
-                    Name = FixName(updatedProduct.Name, updatedProduct.CodeGaska, updatedProduct.CodeCustomer, rootBrands)
+                    Name = FixName(updatedProduct.Name, updatedProduct.CodeGaska, updatedProduct.CodeCustomer, rootBrands, allCrossNumbers?.Select(cn => cn.CrossNumber).ToList())
                 }, tran);
 
                 tran.Commit();
@@ -854,7 +895,7 @@ namespace AllegroGaskaProductsSyncService.Repositories
             );
         }
 
-        private string FixName(string name, string code, string supplierName, List<string> rootBrands = null)
+        private string FixName(string name, string code, string supplierName, List<string>? rootBrands = null, List<string>? crossNumbers = null)
         {
             if (!string.IsNullOrWhiteSpace(name))
             {
@@ -924,10 +965,39 @@ namespace AllegroGaskaProductsSyncService.Repositories
                 var nameParts = new List<string>();
                 if (descriptorWords.Any())
                     nameParts.Add(string.Join(" ", descriptorWords));
+
+                var jagRegex = new Regex(@"\bJAG(?=[0-9\-])[\w\-/]*", RegexOptions.IgnoreCase);
+
+                if (jagRemoved && jagRegex.IsMatch(code))
+                {
+                    // Filter out crossnumbers that match the JAG regex
+                    var validCrossNumbers = crossNumbers?
+                        .Where(cn => !string.IsNullOrWhiteSpace(cn) && !jagRegex.IsMatch(cn))
+                        .Take(2) // only consider up to 2
+                        .ToList() ?? new List<string>();
+
+                    if (validCrossNumbers.Any())
+                    {
+                        // Try adding both if possible, otherwise one, respecting 75-char limit
+                        var tempName = string.Join(" ", nameParts);
+                        string withTwo = $"{tempName} {string.Join(" ", validCrossNumbers)}".Trim();
+                        string withOne = $"{tempName} {validCrossNumbers.First()}".Trim();
+
+                        if (withTwo.Length <= 75)
+                            nameParts.AddRange(validCrossNumbers);
+                        else if (withOne.Length <= 75)
+                            nameParts.Add(validCrossNumbers.First());
+                        // else: don't add any
+                    }
+                }
+                else if (codeGaskaAppended)
+                {
+                    // Default behavior: add code
+                    nameParts.Add(code);
+                }
+
                 if (!string.IsNullOrWhiteSpace(extractedCode))
                     nameParts.Add(extractedCode);
-                if (codeGaskaAppended)
-                    nameParts.Add(code);
 
                 name = string.Join(" ", nameParts).Trim();
 
@@ -956,6 +1026,17 @@ namespace AllegroGaskaProductsSyncService.Repositories
                 }
             }
             return name;
+        }
+
+        public Task UpdateCompatibilitySet(int productId, bool value, CancellationToken ct)
+        {
+            var sql = @"
+                UPDATE Products
+                SET BuildCompatibilitySet = @Value
+                WHERE Id = @ProductId;";
+
+            using var conn = _context.CreateConnection();
+            return conn.ExecuteAsync(sql, new { Value = value, ProductId = productId });
         }
     }
 }

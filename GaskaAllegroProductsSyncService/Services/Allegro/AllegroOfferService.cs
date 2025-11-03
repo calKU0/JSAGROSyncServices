@@ -49,20 +49,40 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
 
                 var shippingRates = await _apiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
                 var shippingDict = shippingRates?.ShippingRates?.ToDictionary(s => s.Id, s => s.Name) ?? new Dictionary<string, string>();
-                var latestOffers = allOffers
-                    .Where(o => o?.External?.Id != null)
+
+                // Split offers into two sets
+                var offersWithExternalId = allOffers.Where(o => !string.IsNullOrEmpty(o?.External?.Id)).ToList();
+                var offersWithoutExternalId = allOffers.Where(o => string.IsNullOrEmpty(o?.External?.Id)).ToList();
+
+                // Group by External.Id when present
+                var latestOffers = offersWithExternalId
                     .GroupBy(o => o.External.Id)
-                    .Select(g => g.OrderByDescending(o => o.Id).FirstOrDefault())
+                    .Select(g => g.OrderByDescending(o => o.Id).First())
                     .ToList();
 
+                // Optionally group by Name for those without External.Id
+                var groupedByName = offersWithoutExternalId
+                    .Where(o => !string.IsNullOrWhiteSpace(o.Name))
+                    .GroupBy(o => o.Name)
+                    .Select(g => g.OrderByDescending(o => o.Id).First())
+                    .ToList();
+
+                // Merge both lists
+                latestOffers.AddRange(groupedByName);
+
+                // Update shipping info & categories
                 foreach (var offer in latestOffers)
                 {
-                    if (offer.Delivery?.ShippingRates?.Id != null && shippingDict.TryGetValue(offer.Delivery.ShippingRates.Id, out var name))
+                    if (offer.Delivery?.ShippingRates?.Id != null &&
+                        shippingDict.TryGetValue(offer.Delivery.ShippingRates.Id, out var name))
                     {
                         offer.Delivery.ShippingRates.Name = name;
                     }
 
-                    await _productRepo.UpdateProductAllegroCategory(offer.External.Id, offer.Category.Id, ct);
+                    if (offer.External?.Id != null)
+                    {
+                        await _productRepo.UpdateProductAllegroCategory(offer.External.Id, offer.Category.Id, ct);
+                    }
                 }
 
                 await _offerRepo.UpsertOffers(latestOffers, ct);
@@ -162,14 +182,12 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                         var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, offerDto, token);
 
                         var body = await response.Content.ReadAsStringAsync(token);
+
                         await LogAllegroResponse(offer.Product, response, body, true);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex,
-                            "Exception while updating offer for {Name} ({Code})",
-                            offer.Product.Name,
-                            offer.Product.CodeGaska);
+                        _logger.LogError(ex, "Exception while updating offer for {Name} ({Code})", offer.Product.Name, offer.Product.CodeGaska);
                     }
                 });
             }
@@ -212,7 +230,7 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                     }
                 });
 
-                _logger.LogInformation("Finished creating {Count} Allegro offers.", products.Count());
+                _logger.LogInformation("Finished creating Allegro offers.");
             }
             catch (Exception ex)
             {
@@ -306,6 +324,7 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                         }
                         else if (err.Message.Contains(@"The type of this ""Compatible with"" "))
                         {
+                            await _productRepo.UpdateCompatibilitySet(product.Id, false, CancellationToken.None);
                         }
                         else
                         {

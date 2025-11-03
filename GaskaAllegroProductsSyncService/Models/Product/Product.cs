@@ -22,6 +22,7 @@
         public decimal PriceNet { get; set; }
         public decimal PriceGross { get; set; }
         public int DefaultAllegroCategory { get; set; }
+        public bool BuildCompatibilitySet { get; set; } = true;
 
         public bool Archived { get; set; } = false;
 
