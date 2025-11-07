@@ -121,7 +121,7 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
 
         private string GetMatchingValue(Product product, CategoryParameter param)
         {
-            const string fallback = "inny";
+            const string fallback = "JAG";
 
             if (param?.Type?.Equals("dictionary", StringComparison.OrdinalIgnoreCase) == true
                 && param.Values?.Any() == true)
@@ -139,25 +139,6 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                     var supplier = Normalize(product.SupplierName);
                     var match = dict.FirstOrDefault(v => v.Normalized == supplier);
                     if (match != null) return match.Raw;
-                }
-
-                // 2. Words from Product.Name
-                if (!string.IsNullOrEmpty(product.Name))
-                {
-                    var words = product.Name
-                        .Split(new[] { ' ', '-', '/', '_' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(Normalize)
-                        .Where(w => !string.IsNullOrEmpty(w));
-
-                    foreach (var word in words)
-                    {
-                        if (dictSet.Contains(word))
-                            return dict.First(v => v.Normalized == word).Raw;
-
-                        var contains = dict.FirstOrDefault(v =>
-                            (" " + v.Normalized + " ").Contains(" " + word + " "));
-                        if (contains != null) return contains.Raw;
-                    }
                 }
 
                 return fallback;
