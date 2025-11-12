@@ -14,5 +14,7 @@ namespace AllegroGaskaProductsSyncService.Repositories.Interfaces
         Task<List<AllegroOffer>> GetOffersWithoutDetails(CancellationToken ct);
 
         Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct);
+
+        Task DeleteOffer(int productId, CancellationToken ct);
     }
 }

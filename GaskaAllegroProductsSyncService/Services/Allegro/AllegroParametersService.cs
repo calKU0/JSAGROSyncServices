@@ -121,7 +121,7 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
 
         private string GetMatchingValue(Product product, CategoryParameter param)
         {
-            const string fallback = "JAG";
+            const string fallback = "nieznany producent";
 
             if (param?.Type?.Equals("dictionary", StringComparison.OrdinalIgnoreCase) == true
                 && param.Values?.Any() == true)
