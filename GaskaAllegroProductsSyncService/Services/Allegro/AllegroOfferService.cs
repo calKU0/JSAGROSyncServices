@@ -303,6 +303,7 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                              err.Message.Contains("parameter for the offered product"))
                         )
                         {
+                            _logger.LogInformation("Offer {Action} error for {Name}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}", action, product.Name, err.Code, err.Message, err.UserMessage ?? "N/A", err.Path ?? "N/A", err.Details ?? "N/A");
                             // Try to extract from either UserMessage or Message
                             var sourceMessage = !string.IsNullOrEmpty(err.UserMessage) ? err.UserMessage : err.Message;
 
@@ -325,6 +326,11 @@ namespace AllegroGaskaProductsSyncService.Services.Allegro
                         else if (err.Message.Contains(@"The type of this ""Compatible with"" "))
                         {
                             await _productRepo.UpdateCompatibilitySet(product.Id, false, CancellationToken.None);
+                        }
+                        else if (err.Code == "OfferNotFoundException" && response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                        {
+                            _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
+                            await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
                         }
                         else
                         {

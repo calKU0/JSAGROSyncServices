@@ -458,5 +458,32 @@ namespace AllegroGaskaProductsSyncService.Repositories
             // 5️ Return only the offers
             return offersWithProducts.Select(op => op.Offer).ToList();
         }
+
+        public async Task DeleteOffer(int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            // First, get the product's CodeGaska
+            var codeGaska = await connection.QueryFirstOrDefaultAsync<string>(
+                @"SELECT CodeGaska FROM Products WHERE Id = @ProductId",
+                new { ProductId = productId }
+            );
+
+            if (codeGaska == null)
+            {
+                _logger.LogWarning("Product with Id {ProductId} not found. Cannot delete offer.", productId);
+                return;
+            }
+
+            // Delete AllegroOffers where ExternalId = CodeGaska
+            var sql = @"
+                DELETE FROM AllegroOffers
+                WHERE ExternalId = @CodeGaska";
+
+            var affectedRows = await connection.ExecuteAsync(sql, new { CodeGaska = codeGaska });
+
+            _logger.LogInformation("Deleted {Count} Allegro offer(s) for product {CodeGaska}.", affectedRows, codeGaska);
+        }
     }
 }

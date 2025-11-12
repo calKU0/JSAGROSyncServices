@@ -86,6 +86,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
                     Available = Convert.ToInt32(Math.Floor(offer.Product.InStock)),
                     Unit = MapAllegroUnit(offer.Product.Unit)
                 },
+                ProductSet = BuildProductSet(offer.Product, productQuantity, appSettings),
                 SellingMode = new SellingMode
                 {
                     Format = "BUY_NOW",
@@ -382,6 +383,7 @@ namespace AllegroGaskaProductsSyncService.Helpers
 
             // 0. Product header (Name + Producer + Code)
 
+            string originalHtml = string.IsNullOrEmpty(product.SupplierName) ? $"<h2>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode("PRODUKT JEST ZAMIENNIKIEM"))}</h2>" : string.Empty;
             string nameHtml = $"<p><b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Name))}</b></p>";
             string codeHtml = !string.IsNullOrWhiteSpace(product.CodeGaska)
                 ? $"<p><b>Kod produktu: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.CodeGaska))}</p>"
@@ -427,14 +429,15 @@ namespace AllegroGaskaProductsSyncService.Helpers
 
             // Build the content string for text fields
             var contentBuilder = new StringBuilder();
-            contentBuilder.Append(nameHtml)
-                          .Append(codeHtml)
-                          .Append(producerHtml)
-                          .Append(descriptionHtml)
-                          .Append(technicalHtml)
-                          .Append(parametersHtml)
-                          .Append(crossNumbersText)
-                          .Append(warning);
+            contentBuilder.Append(originalHtml)
+                        .Append(nameHtml)
+                        .Append(codeHtml)
+                        .Append(producerHtml)
+                        .Append(descriptionHtml)
+                        .Append(technicalHtml)
+                        .Append(parametersHtml)
+                        .Append(crossNumbersText)
+                        .Append(warning);
 
             // Build the section
             var sectionItems = new List<SectionItem>
