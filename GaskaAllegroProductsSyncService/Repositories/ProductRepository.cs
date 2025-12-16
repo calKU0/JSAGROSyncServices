@@ -1,12 +1,12 @@
-﻿using AllegroGaskaProductsSyncService.Data;
-using AllegroGaskaProductsSyncService.DTOs;
-using AllegroGaskaProductsSyncService.Models;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using Dapper;
+﻿using Dapper;
+using GaskaAllegroProductsSyncService.Data;
+using GaskaAllegroProductsSyncService.DTOs;
+using GaskaAllegroProductsSyncService.Models;
+using GaskaAllegroProductsSyncService.Models.Product;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
 using System.Text.RegularExpressions;
 
-namespace AllegroGaskaProductsSyncService.Repositories
+namespace GaskaAllegroProductsSyncService.Repositories
 {
     public class ProductRepository : IProductRepository
     {

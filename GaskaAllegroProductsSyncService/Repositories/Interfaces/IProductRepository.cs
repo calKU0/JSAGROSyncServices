@@ -1,7 +1,7 @@
-﻿using AllegroGaskaProductsSyncService.DTOs;
-using AllegroGaskaProductsSyncService.Models.Product;
+﻿using GaskaAllegroProductsSyncService.DTOs;
+using GaskaAllegroProductsSyncService.Models.Product;
 
-namespace AllegroGaskaProductsSyncService.Repositories.Interfaces
+namespace GaskaAllegroProductsSyncService.Repositories.Interfaces
 {
     public interface IProductRepository
     {

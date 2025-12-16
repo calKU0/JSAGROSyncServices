@@ -1,4 +1,4 @@
-﻿namespace AllegroGaskaProductsSyncService.Services.Gaska.Interfaces
+﻿namespace GaskaAllegroProductsSyncService.Services.Gaska.Interfaces
 {
     public interface IGaskaApiService
     {

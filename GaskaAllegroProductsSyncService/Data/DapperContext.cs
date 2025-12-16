@@ -1,7 +1,7 @@
 ﻿using Microsoft.Data.SqlClient;
 using System.Data;
 
-namespace AllegroGaskaProductsSyncService.Data
+namespace GaskaAllegroProductsSyncService.Data
 {
     public class DapperContext
     {

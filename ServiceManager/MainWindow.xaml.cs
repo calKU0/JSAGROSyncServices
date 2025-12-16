@@ -3,7 +3,6 @@ using ServiceManager.Enums;
 using ServiceManager.Helpers;
 using ServiceManager.Models;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.IO;
 using System.ServiceProcess;
 using System.Text.Json;

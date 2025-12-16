@@ -1,0 +1,27 @@
+﻿namespace RolmarAllegroProductsSyncService.Models
+{
+    public class RolmarProduct
+    {
+        public int Id { get; set; }
+        public string Code { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string Ean { get; set; }
+        public float Weight { get; set; }
+        public string Fits { get; set; }
+        public string SupplierName { get; set; }
+        public float InStock { get; set; }
+        public string Unit { get; set; }
+        public string CurrencyPrice { get; set; }
+        public decimal PriceNet { get; set; }
+        public decimal PriceGross { get; set; }
+        public int DefaultAllegroCategory { get; set; }
+        public decimal Package { get; set; }
+        public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
+
+        public DateTime UpdatedDate { get; set; } = DateTime.UtcNow;
+        public List<ProductSpecification> Specifications { get; set; }
+        public List<ProductParameter> Parameters { get; set; }
+        public List<OfferImage> Images { get; set; }
+    }
+}

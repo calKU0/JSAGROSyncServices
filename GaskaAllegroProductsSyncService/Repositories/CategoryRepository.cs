@@ -1,12 +1,12 @@
-﻿using AllegroGaskaProductsSyncService.Data;
-using AllegroGaskaProductsSyncService.DTOs.AllegroApiResponses;
-using AllegroGaskaProductsSyncService.Models;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using Dapper;
+﻿using Dapper;
+using GaskaAllegroProductsSyncService.Data;
+using GaskaAllegroProductsSyncService.Models;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Models;
 using System.Data;
 
-namespace AllegroGaskaProductsSyncService.Repositories
+namespace GaskaAllegroProductsSyncService.Repositories
 {
     public class CategoryRepository : ICategoryRepository
     {

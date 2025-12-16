@@ -1,11 +1,11 @@
-﻿//using AllegroGaskaProductsSyncService.DTOs.AllegroApi;
-using AllegroGaskaProductsSyncService.DTOs.AllegroApiResponses;
-using AllegroGaskaProductsSyncService.Models;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using AllegroGaskaProductsSyncService.Services.Allegro.Interfaces;
+﻿using GaskaAllegroProductsSyncService.Models;
+using GaskaAllegroProductsSyncService.Models.Product;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Services;
 
-namespace AllegroGaskaProductsSyncService.Services.Allegro
+namespace GaskaAllegroProductsSyncService.Services.Allegro
 {
     public class AllegroCategoryService : IAllegroCategoryService
     {
