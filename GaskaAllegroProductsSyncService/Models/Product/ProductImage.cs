@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
 
-namespace AllegroGaskaProductsSyncService.Models.Product
+namespace GaskaAllegroProductsSyncService.Models.Product
 {
     public class ProductImage
     {

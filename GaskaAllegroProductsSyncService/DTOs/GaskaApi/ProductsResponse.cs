@@ -1,4 +1,4 @@
-﻿namespace AllegroGaskaProductsSyncService.DTOs
+﻿namespace GaskaAllegroProductsSyncService.DTOs
 {
     public class ProductsResponse
     {

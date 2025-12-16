@@ -1,7 +1,7 @@
-﻿using AllegroGaskaProductsSyncService.DTOs.AllegroApi;
-using AllegroGaskaProductsSyncService.Models;
+﻿using GaskaAllegroProductsSyncService.Models;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
 
-namespace AllegroGaskaProductsSyncService.Repositories.Interfaces
+namespace GaskaAllegroProductsSyncService.Repositories.Interfaces
 {
     public interface IOfferRepository
     {

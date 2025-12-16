@@ -1,15 +1,16 @@
-﻿using AllegroGaskaProductsSyncService.DTOs.AllegroApi;
-using AllegroGaskaProductsSyncService.Helpers;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using AllegroGaskaProductsSyncService.Services.Allegro.Interfaces;
-using AllegroGaskaProductsSyncService.Settings;
+﻿using GaskaAllegroProductsSyncService.Helpers;
+using GaskaAllegroProductsSyncService.Models.Product;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
+using GaskaAllegroProductsSyncService.Settings;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
-namespace AllegroGaskaProductsSyncService.Services.Allegro
+namespace GaskaAllegroProductsSyncService.Services.Allegro
 {
     public class AllegroOfferService : IAllegroOfferService
     {

@@ -1,9 +1,9 @@
-﻿using AllegroGaskaProductsSyncService.Data;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using Dapper;
+﻿using Dapper;
+using GaskaAllegroProductsSyncService.Data;
+using GaskaAllegroProductsSyncService.Models.Product;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
 
-namespace AllegroGaskaProductsSyncService.Repositories
+namespace GaskaAllegroProductsSyncService.Repositories
 {
     public class ImageRepository : IImageRepository
     {

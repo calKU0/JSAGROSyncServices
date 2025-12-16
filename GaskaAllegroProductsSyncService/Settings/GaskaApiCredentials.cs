@@ -1,4 +1,4 @@
-﻿namespace AllegroGaskaProductsSyncService.Settings
+﻿namespace GaskaAllegroProductsSyncService.Settings
 {
     public class GaskaApiCredentials
     {

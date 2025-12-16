@@ -1,4 +1,4 @@
-﻿namespace AllegroGaskaProductsSyncService.Models
+﻿namespace GaskaAllegroProductsSyncService.Models
 {
     public class CategoryParameterValue
     {

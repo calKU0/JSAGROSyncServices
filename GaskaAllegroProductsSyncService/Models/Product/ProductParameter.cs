@@ -1,4 +1,4 @@
-﻿namespace AllegroGaskaProductsSyncService.Models.Product
+﻿namespace GaskaAllegroProductsSyncService.Models.Product
 {
     public class ProductParameter
     {
@@ -8,8 +8,6 @@
         public int CategoryParameterId { get; set; }
         public string Value { get; set; }
         public bool IsForProduct { get; set; }
-
-        public virtual Product Product { get; set; }
 
         public virtual CategoryParameter CategoryParameter { get; set; }
     }

@@ -1,6 +1,6 @@
-﻿using AllegroGaskaProductsSyncService.Models.Product;
+﻿using GaskaAllegroProductsSyncService.Models.Product;
 
-namespace AllegroGaskaProductsSyncService.Models
+namespace GaskaAllegroProductsSyncService.Models
 {
     public class CategoryParameter
     {

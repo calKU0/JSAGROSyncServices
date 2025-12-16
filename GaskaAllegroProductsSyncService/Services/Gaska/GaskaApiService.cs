@@ -1,12 +1,12 @@
-﻿using AllegroGaskaProductsSyncService.DTOs;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using AllegroGaskaProductsSyncService.Services.Gaska.Interfaces;
-using AllegroGaskaProductsSyncService.Settings;
+﻿using GaskaAllegroProductsSyncService.DTOs;
+using GaskaAllegroProductsSyncService.Models.Product;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
+using GaskaAllegroProductsSyncService.Services.Gaska.Interfaces;
+using GaskaAllegroProductsSyncService.Settings;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 
-namespace AllegroGaskaProductsSyncService.Services.GaskaApiService
+namespace GaskaAllegroProductsSyncService.Services.GaskaApiService
 {
     public class GaskaApiService : IGaskaApiService
     {

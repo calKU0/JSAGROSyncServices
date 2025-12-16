@@ -1,13 +1,14 @@
-﻿using AllegroGaskaProductsSyncService.DTOs.AllegroApi;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using AllegroGaskaProductsSyncService.Services.Allegro.Interfaces;
+﻿using GaskaAllegroProductsSyncService.Models.Product;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Services;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 using System.Collections.Concurrent;
 
-namespace AllegroGaskaProductsSyncService.Services.Allegro
+namespace GaskaAllegroProductsSyncService.Services.Allegro
 {
     public class AllegroImageService : IAllegroImageService
     {

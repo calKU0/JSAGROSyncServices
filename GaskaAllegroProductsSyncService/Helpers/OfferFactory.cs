@@ -1,11 +1,13 @@
-﻿using AllegroGaskaProductsSyncService.DTOs.AllegroApi;
-using AllegroGaskaProductsSyncService.Models;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Settings;
+﻿using GaskaAllegroProductsSyncService.Models;
+using GaskaAllegroProductsSyncService.Models.Product;
+using GaskaAllegroProductsSyncService.Settings;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Helpers;
+using JSAGROSyncServices.Shared.Models;
 using System.Globalization;
 using System.Text;
 
-namespace AllegroGaskaProductsSyncService.Helpers
+namespace GaskaAllegroProductsSyncService.Helpers
 {
     public static class OfferFactory
     {

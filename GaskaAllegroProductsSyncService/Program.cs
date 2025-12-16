@@ -1,11 +1,13 @@
-using AllegroGaskaProductsSyncService.Data;
-using AllegroGaskaProductsSyncService.Repositories;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using AllegroGaskaProductsSyncService.Services.Allegro;
-using AllegroGaskaProductsSyncService.Services.Allegro.Interfaces;
-using AllegroGaskaProductsSyncService.Services.Gaska.Interfaces;
-using AllegroGaskaProductsSyncService.Services.GaskaApiService;
-using AllegroGaskaProductsSyncService.Settings;
+using GaskaAllegroProductsSyncService.Data;
+using GaskaAllegroProductsSyncService.Repositories;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
+using GaskaAllegroProductsSyncService.Services.Allegro;
+using GaskaAllegroProductsSyncService.Services.Gaska.Interfaces;
+using GaskaAllegroProductsSyncService.Services.GaskaApiService;
+using GaskaAllegroProductsSyncService.Settings;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Services;
+using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
 using Serilog;
 using System.Net.Http.Headers;
@@ -15,7 +17,7 @@ using System.Text;
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "AllegroGaskaProductsSyncService";
+        options.ServiceName = "GaskaAllegroProductsSyncService";
     })
     .ConfigureServices((hostContext, services) =>
     {

@@ -1,4 +1,4 @@
-﻿namespace AllegroGaskaProductsSyncService.Models.Product
+﻿namespace GaskaAllegroProductsSyncService.Models
 {
     public class ProductCategory
     {

@@ -1,6 +1,6 @@
-﻿using AllegroGaskaProductsSyncService.Models.Product;
+﻿using GaskaAllegroProductsSyncService.Models.Product;
 
-namespace AllegroGaskaProductsSyncService.Repositories.Interfaces
+namespace GaskaAllegroProductsSyncService.Repositories.Interfaces
 {
     public interface IImageRepository
     {

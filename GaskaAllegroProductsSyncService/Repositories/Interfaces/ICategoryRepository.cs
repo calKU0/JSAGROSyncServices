@@ -1,7 +1,8 @@
-﻿using AllegroGaskaProductsSyncService.DTOs.AllegroApiResponses;
-using AllegroGaskaProductsSyncService.Models;
+﻿using GaskaAllegroProductsSyncService.Models;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Models;
 
-namespace AllegroGaskaProductsSyncService.Repositories.Interfaces
+namespace GaskaAllegroProductsSyncService.Repositories.Interfaces
 {
     public interface ICategoryRepository
     {

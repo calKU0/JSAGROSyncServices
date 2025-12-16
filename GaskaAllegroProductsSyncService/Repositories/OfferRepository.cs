@@ -1,14 +1,14 @@
-﻿using AllegroGaskaProductsSyncService.Data;
-using AllegroGaskaProductsSyncService.DTOs.AllegroApi;
-using AllegroGaskaProductsSyncService.Models;
-using AllegroGaskaProductsSyncService.Models.Product;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using AllegroGaskaProductsSyncService.Settings;
-using Dapper;
+﻿using Dapper;
+using GaskaAllegroProductsSyncService.Data;
+using GaskaAllegroProductsSyncService.Models;
+using GaskaAllegroProductsSyncService.Models.Product;
+using GaskaAllegroProductsSyncService.Repositories.Interfaces;
+using GaskaAllegroProductsSyncService.Settings;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
 using Microsoft.Extensions.Options;
 using System.Globalization;
 
-namespace AllegroGaskaProductsSyncService.Repositories
+namespace GaskaAllegroProductsSyncService.Repositories
 {
     public class OfferRepository : IOfferRepository
     {

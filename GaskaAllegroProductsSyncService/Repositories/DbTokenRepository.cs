@@ -1,12 +1,12 @@
-﻿using AllegroGaskaProductsSyncService.Data;
-using AllegroGaskaProductsSyncService.DTOs;
-using AllegroGaskaProductsSyncService.Models;
-using AllegroGaskaProductsSyncService.Repositories.Interfaces;
-using AllegroGaskaProductsSyncService.Settings;
-using Dapper;
+﻿using Dapper;
+using GaskaAllegroProductsSyncService.Data;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
 
-namespace AllegroGaskaProductsSyncService.Repositories
+namespace GaskaAllegroProductsSyncService.Repositories
 {
     public class DbTokenRepository : ITokenRepository
     {
