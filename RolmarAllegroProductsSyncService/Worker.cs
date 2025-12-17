@@ -1,3 +1,5 @@
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
 using RolmarAllegroProductsSyncService.Services.Interfaces;
 using RolmarAllegroProductsSyncService.Settings;
@@ -52,13 +54,12 @@ namespace RolmarAllegroProductsSyncService
         private async Task RunSyncCycleAsync(IServiceProvider services, CancellationToken ct)
         {
             var rolmarSyncService = services.GetRequiredService<IRolmarSyncService>();
-            //var allegroApiClient = services.GetRequiredService<AllegroApiClient>();
-            //var allegroAuthService = services.GetRequiredService<AllegroAuthService>();
+            var allegroApiClient = services.GetRequiredService<AllegroApiClient>();
+            var allegroAuthService = services.GetRequiredService<AllegroAuthService>();
 
-            //var offerService = services.GetRequiredService<IAllegroOfferService>();
-            //var categoryService = services.GetRequiredService<IAllegroCategoryService>();
+            var offerService = services.GetRequiredService<IAllegroOfferService>();
+            var categoryService = services.GetRequiredService<IAllegroCategoryService>();
             //var parametersService = services.GetRequiredService<IAllegroParametersService>();
-            //var imageService = services.GetRequiredService<IAllegroImageService>();
 
             _logger.LogInformation("=== Starting full synchronization cycle ===");
 
@@ -83,12 +84,10 @@ namespace RolmarAllegroProductsSyncService
                     await MeasureStepAsync("Images sync", () => rolmarSyncService.SyncImagesAsync());
                 }
 
-                //await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());
-                //await MeasureStepAsync("Allegro offers details", () => offerService.SyncAllegroOffersDetails());
-                //await MeasureStepAsync("Allegro categories update", () => categoryService.UpdateAllegroCategories());
-                //await MeasureStepAsync("Category parameters fetch", () => categoryService.FetchAndSaveCategoryParameters());
+                await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());
+                await MeasureStepAsync("Allegro categories update", () => categoryService.UpdateAllegroCategories());
+                await MeasureStepAsync("Category parameters fetch", () => categoryService.FetchAndSaveCategoryParameters());
                 //await MeasureStepAsync("Product parameters update", () => parametersService.UpdateParameters());
-                //await MeasureStepAsync("Images import", () => imageService.ImportImages());
                 //await MeasureStepAsync("Offers creation", () => offerService.CreateOffers());
                 //await MeasureStepAsync("Offers update", () => offerService.UpdateOffers());
 

@@ -1,9 +1,12 @@
+using DbUp;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Services;
 using JSAGROSyncServices.Shared.Settings;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RolmarAllegroProductsSyncService;
 using RolmarAllegroProductsSyncService.Data;
+using RolmarAllegroProductsSyncService.Logging;
 using RolmarAllegroProductsSyncService.Repositories;
 using RolmarAllegroProductsSyncService.Repositories.Interfaces;
 using RolmarAllegroProductsSyncService.Services.Allegro;
@@ -11,6 +14,7 @@ using RolmarAllegroProductsSyncService.Services.Interfaces;
 using RolmarAllegroProductsSyncService.Services.Rolmar;
 using RolmarAllegroProductsSyncService.Settings;
 using Serilog;
+using System.Net.Http.Headers;
 
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
@@ -38,6 +42,26 @@ var host = Host.CreateDefaultBuilder(args)
             .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
             .CreateLogger();
 
+        // ------------------ Database migration ------------------
+        var connectionString = configuration.GetConnectionString("MyDbContext");
+        EnsureDatabase.For.SqlDatabase(connectionString);
+
+        var upgrader = DeployChanges.To
+            .SqlDatabase(connectionString)
+            .LogTo(new SerilogUpgradeLog(Log.Logger))
+            .WithScriptsFromFileSystem(Path.Combine(AppContext.BaseDirectory, "Migrations"))
+            .Build();
+
+        var result = upgrader.PerformUpgrade();
+
+        if (!result.Successful)
+        {
+            Log.Error(result.Error.ToString());
+            throw result.Error;
+        }
+
+        Log.Information("Database migration completed successfully.");
+
         // Bind configuration
         services.Configure<RolmarApiCredentials>(configuration.GetSection("RolmarApiCredentials"));
         services.Configure<AllegroApiCredentials>(configuration.GetSection("AllegroApiCredentials"));
@@ -49,8 +73,23 @@ var host = Host.CreateDefaultBuilder(args)
             var rolmarSettings = sp.GetRequiredService<IOptions<RolmarApiCredentials>>().Value;
 
             client.BaseAddress = new Uri(rolmarSettings.BaseUrl); // assuming BaseUrl is in your settings
-            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {rolmarSettings.ApiKey}");
             client.DefaultRequestHeaders.Add("Accept", "application/json");
+        });
+
+        services.AddHttpClient<AllegroAuthService>((sp, client) =>
+        {
+            var allegroApiSettings = sp.GetRequiredService<IOptions<AllegroApiCredentials>>().Value;
+
+            client.BaseAddress = new Uri(allegroApiSettings.AuthBaseUrl);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-www-form-urlencoded"));
+        });
+
+        services.AddHttpClient<AllegroApiClient>((sp, client) =>
+        {
+            var allegroApiSettings = sp.GetRequiredService<IOptions<AllegroApiCredentials>>().Value;
+
+            client.BaseAddress = new Uri(allegroApiSettings.BaseUrl);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
         });
 
         // Repositories
@@ -61,10 +100,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IOfferRepository, OfferRepository>();
 
         // Services
-        services.AddScoped<AllegroAuthService>();
-        services.AddScoped<AllegroApiClient>();
         services.AddScoped<IAllegroOfferService, AllegroOfferService>();
-        services.AddScoped<IRolmarSyncService, RolmarSyncService>();
         services.AddScoped<RolmarAllegroProductsSyncService.Services.Interfaces.IAllegroImageService, AllegroImageService>();
         services.AddScoped<IAllegroCategoryService, AllegroCategoryService>();
         services.AddScoped<IAllegroParametersService, AllegroParametersService>();

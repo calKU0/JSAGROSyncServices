@@ -10,6 +10,7 @@
         public float Weight { get; set; }
         public string Fits { get; set; }
         public string SupplierName { get; set; }
+        public string Substitutes { get; set; }
         public float InStock { get; set; }
         public string Unit { get; set; }
         public string CurrencyPrice { get; set; }
@@ -23,5 +24,6 @@
         public List<ProductSpecification> Specifications { get; set; }
         public List<ProductParameter> Parameters { get; set; }
         public List<OfferImage> Images { get; set; }
+        public List<RolmarCategory> Categories { get; set; }
     }
 }

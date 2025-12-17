@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using static JSAGROSyncServices.Shared.Helpers.Converters;
 
 namespace RolmarAllegroProductsSyncService.DTOs
 {
@@ -53,7 +54,8 @@ namespace RolmarAllegroProductsSyncService.DTOs
         public string Cn { get; set; }
 
         [JsonPropertyName("specifications")]
-        public List<ProductSpecification> Specifications { get; set; }
+        [JsonConverter(typeof(EmptyStringToListConverter<ProductSpecification>))]
+        public List<ProductSpecification>? Specifications { get; set; }
 
         [JsonPropertyName("retailPrice")]
         public string RetailPrice { get; set; }
@@ -62,13 +64,11 @@ namespace RolmarAllegroProductsSyncService.DTOs
         public string Price { get; set; }
 
         [JsonPropertyName("categories")]
+        [JsonConverter(typeof(EmptyStringToListConverter<string>))]
         public List<string> Categories { get; set; }
 
         [JsonPropertyName("cubature")]
         public string Cubature { get; set; }
-
-        [JsonPropertyName("limitedOffer")]
-        public string LimitedOffer { get; set; }
 
         [JsonPropertyName("currency")]
         public string Currency { get; set; }

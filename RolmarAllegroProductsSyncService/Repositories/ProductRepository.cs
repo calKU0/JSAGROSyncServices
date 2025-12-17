@@ -53,7 +53,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
             ";
 
             using var connection = _context.CreateConnection();
-
+            connection.Open();
             var productDict = new Dictionary<int, RolmarProduct>();
 
             await connection.QueryAsync<
@@ -125,7 +125,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
             ORDER BY p.Id;";
 
             using var connection = _context.CreateConnection();
-
+            connection.Open();
             var productDict = new Dictionary<int, RolmarProduct>();
 
             await connection.QueryAsync<
@@ -194,7 +194,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
             ORDER BY p.Id;";
 
             using var connection = _context.CreateConnection();
-
+            connection.Open();
             var productDict = new Dictionary<int, RolmarProduct>();
 
             await connection.QueryAsync<
@@ -234,15 +234,12 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 ";
 
             using var connection = _context.CreateConnection();
-
+            connection.Open();
             var affectedRows = await connection.ExecuteAsync(sql, new
             {
                 ProductId = productId,
                 CategoryId = categoryId
             });
-
-            if (affectedRows == 0)
-                throw new InvalidOperationException($"Product with Id {productId} not found.");
         }
 
         public async Task UpdateProductAllegroCategory(string productId, string categoryId, CancellationToken ct)
@@ -255,15 +252,12 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 ";
 
             using var connection = _context.CreateConnection();
-
+            connection.Open();
             var affectedRows = await connection.ExecuteAsync(sql, new
             {
                 ProductId = productId,
                 CategoryId = categoryId
             });
-
-            if (affectedRows == 0)
-                throw new InvalidOperationException($"Product with Id {productId} not found.");
         }
 
         public async Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct)
@@ -277,7 +271,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 ";
 
             using var connection = _context.CreateConnection();
-
+            connection.Open();
             var affectedRows = await connection.ExecuteAsync(
                 sql,
                 new
@@ -302,7 +296,8 @@ namespace RolmarAllegroProductsSyncService.Repositories
                         Description = @Description,
                         Ean = @Ean,
                         Weight = @Weight,
-                        Fits = @Fits,
+                        Fits = NULLIF(@Fits,''),
+                        Substitutes = NULLIF(@Substitutes,''),
                         Unit = @Unit,
                         CurrencyPrice = @Currency,
                         PriceNet = @PriceNet,
@@ -310,9 +305,9 @@ namespace RolmarAllegroProductsSyncService.Repositories
                         Package = @Package,
                         UpdatedDate = SYSUTCDATETIME()
                 WHEN NOT MATCHED THEN
-                    INSERT (Code, Name, Description, Ean, Weight, Fits, Unit, CurrencyPrice,
+                    INSERT (Code, Name, Description, Ean, Weight, Fits, Substitutes, Unit, CurrencyPrice,
                             PriceNet, PriceGross, Package, CreatedDate, UpdatedDate)
-                    VALUES (@Code, @Name, @Description, @Ean, @Weight, @Fits, @Unit, @Currency,
+                    VALUES (@Code, @Name, @Description, @Ean, @Weight, NULLIF(@Fits,''), NULLIF(@Substitutes,''), @Unit, @Currency,
                             @PriceNet, @PriceGross, @Package, SYSUTCDATETIME(), SYSUTCDATETIME())
                 OUTPUT inserted.Id;
                 ";
@@ -326,7 +321,17 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 VALUES (@ProductId, @Name, @Value, @UnitName);
                 ";
 
+            const string deleteCategoriesSql = @"
+                DELETE FROM RolmarCategory WHERE ProductId = @ProductId;
+                ";
+
+            const string insertCategorySql = @"
+                INSERT INTO RolmarCategory (ProductId, Name)
+                VALUES (@ProductId, @Name);
+                ";
+
             using var connection = _context.CreateConnection();
+            connection.Open();
             using var transaction = connection.BeginTransaction();
 
             try
@@ -343,6 +348,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                         Fits = product.Fits,
                         Unit = product.Unit,
                         Currency = product.Currency,
+                        Substitutes = product.Substitutes,
                         PriceNet = decimal.TryParse(product.Price, out var pn) ? pn : 0,
                         PriceGross = decimal.TryParse(product.RetailPrice, out var pg) ? pg : 0,
                         Package = decimal.TryParse(product.ErpPackage, out var pkg) ? pkg : 0
@@ -370,6 +376,28 @@ namespace RolmarAllegroProductsSyncService.Repositories
                     await connection.ExecuteAsync(
                         insertSpecSql,
                         specs,
+                        transaction
+                    );
+                }
+
+                // Replace categories
+                await connection.ExecuteAsync(
+                    deleteCategoriesSql,
+                    new { ProductId = productId },
+                    transaction
+                );
+
+                if (product.Categories?.Any() == true)
+                {
+                    var categories = product.Categories.Select(c => new
+                    {
+                        ProductId = productId,
+                        Name = c
+                    });
+
+                    await connection.ExecuteAsync(
+                        insertCategorySql,
+                        categories,
                         transaction
                     );
                 }
