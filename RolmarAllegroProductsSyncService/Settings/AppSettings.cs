@@ -2,7 +2,7 @@
 {
     public class AppSettings
     {
-        public string CategoriesId { get; set; } = string.Empty;
+        public string CategoriesName { get; set; } = string.Empty;
         public int MinProductStock { get; set; }
         public int LogsExpirationDays { get; set; }
         public int FetchIntervalMinutes { get; set; }

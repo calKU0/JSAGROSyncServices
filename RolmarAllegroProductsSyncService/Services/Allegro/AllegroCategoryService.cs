@@ -87,47 +87,12 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
         {
             try
             {
-                string nextPreferredChildId = "252202"; // Default
-                //if (product.Applications?.Any(a => a.ParentID != 0) == true)
-                //{
-                //    if (product.Applications.Any(a =>
-                //        a.Name?.IndexOf("kombajn", StringComparison.OrdinalIgnoreCase) >= 0))
-                //        nextPreferredChildId = "319108";
-                //    else if (product.Applications.Any(a =>
-                //        a.Name?.IndexOf("Ciągnik", StringComparison.OrdinalIgnoreCase) >= 0))
-                //        nextPreferredChildId = "252204";
-                //}
-
                 var result = await _apiClient.GetAsync<MatchingCategoriesResponse>($"/sale/matching-categories?name={product.Name}", ct);
 
                 var categories = result?.MatchingCategories;
                 if (categories == null || !categories.Any()) return 0;
 
-                const string preferredRootId = "99022";
-                const string preferredRootChildId = "252182";
-
-                var candidatesUnderRoot = categories
-                    .Where(c => BuildCategoryIdPath(c).Split('/').Contains(preferredRootId))
-                    .ToList();
-                if (!candidatesUnderRoot.Any()) return 0;
-
-                var candidatesUnderRootChild = candidatesUnderRoot
-                    .Where(c => BuildCategoryIdPath(c).Split('/').Contains(preferredRootChildId))
-                    .ToList();
-                if (!candidatesUnderRootChild.Any()) return 0;
-
-                var selectedCategory = candidatesUnderRootChild.FirstOrDefault(c => BuildCategoryIdPath(c).Split('/').Contains(nextPreferredChildId));
-
-                if (selectedCategory == null && nextPreferredChildId == "319108")
-                {
-                    const string secondaryFallbackId = "319159";
-                    selectedCategory = candidatesUnderRootChild.FirstOrDefault(c => BuildCategoryIdPath(c).Split('/').Contains(secondaryFallbackId));
-                }
-
-                if (selectedCategory == null)
-                {
-                    selectedCategory = candidatesUnderRootChild.First();
-                }
+                var selectedCategory = categories.First();
 
                 await _categoryRepo.SaveCategoryTreeAsync(selectedCategory, ct);
 

@@ -27,6 +27,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
             ";
 
             using var connection = _context.CreateConnection();
+            connection.Open();
             using var transaction = connection.BeginTransaction();
 
             try
@@ -51,7 +52,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 ";
 
             using var connection = _context.CreateConnection();
-
+            connection.Open();
             var affectedRows = await connection.ExecuteAsync(sql, new
             {
                 Id = id,

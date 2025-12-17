@@ -127,6 +127,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
         public async Task<List<AllegroOffer>> GetAllOffers(CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
+            connection.Open();
             var sql = "SELECT * FROM AllegroOffers";
             return (await connection.QueryAsync<AllegroOffer>(sql)).ToList();
         }
