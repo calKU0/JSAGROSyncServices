@@ -1,16 +1,19 @@
 ﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Helpers;
 using JSAGROSyncServices.Shared.Models;
 using RolmarAllegroProductsSyncService.Models;
 using RolmarAllegroProductsSyncService.Settings;
+using System;
 using System.Globalization;
+using System.Text;
 
 namespace RolmarAllegroProductsSyncService.Helpers
 {
     public static class OfferFactory
     {
-        public static ProductOfferRequest BuildOffer(RolmarProduct product, List<AllegroCategory> allegroCategories, AppSettings appSettings)
+        public static ProductOfferRequest BuildOffer(RolmarProduct product, AppSettings appSettings)
         {
-            int productQuantity = 1;//product.Packages.Any(p => p.PackRequired == 1) ? Convert.ToInt32(product.Packages.Where(p => p.PackRequired == 1).Select(p => p.PackQty).FirstOrDefault()) : 1;
+            int productQuantity = (int)Math.Ceiling(product.Package);
             return new ProductOfferRequest
             {
                 Name = product.Name,
@@ -29,12 +32,12 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(product.PriceGross, productQuantity, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = (CalculatePrice(product.PriceGross, productQuantity, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN) * 10).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
-                //Images = GetOfferImages(product),
-                //Description = BuildDescription(product),
+                Images = product.AllegroImages.Select(i => i.Url).ToList(),
+                Description = BuildDescription(product),
                 External = new External
                 {
                     Id = product.Code
@@ -69,14 +72,28 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     ReturnPolicy = new ReturnPolicy { Name = appSettings.AllegroReturnPolicy },
                     ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
                 },
-                //Parameters = BuildParameters(product.Parameters, false),
+                Parameters = BuildParameters(product.Parameters, false),
                 //CompatibilityList = product.BuildCompatibilitySet ? BuildCompatibilityList(product.DefaultAllegroCategory, product.Applications, allegroCategories) : null
             };
         }
 
-        public static ProductOfferRequest PatchOffer(AllegroOffer offer, List<AllegroCategory> allegroCategories, AppSettings appSettings)
+        public static ProductOfferRequest PatchOffer(AllegroOffer offer, AppSettings appSettings)
         {
-            int productQuantity = 1;//offer.Product.Packages.Any(p => p.PackRequired == 1) ? Convert.ToInt32(offer.Product.Packages.Where(p => p.PackRequired == 1).Select(p => p.PackQty).FirstOrDefault()) : 1;
+            int productQuantity = (int)Math.Ceiling(offer.Product.Package);
+
+            var connectedImages = offer.Product.AllegroImages?
+                .Where(i => i.Connected)
+                .Select(i => i.Url)
+                .ToList();
+
+            var images = connectedImages != null && connectedImages.Any()
+                ? connectedImages
+                : null;
+
+            var description = images != null
+                ? BuildDescription(offer.Product)
+                : null;
+
             return new ProductOfferRequest
             {
                 //Name = offer.Product.Name,
@@ -85,18 +102,17 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     Available = Convert.ToInt32(Math.Floor(offer.Product.InStock)),
                     Unit = MapAllegroUnit(offer.Product.Unit)
                 },
-                ProductSet = BuildProductSet(offer.Product, productQuantity, appSettings),
                 SellingMode = new SellingMode
                 {
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(offer.Product.PriceGross, productQuantity, appSettings.OwnMarginPercent, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = (CalculatePrice(offer.Product.PriceGross, productQuantity, appSettings.OwnMarginPercent, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN) * 10).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
-                //Images = GetOfferImages(offer.Product),
-                // Description = BuildDescription(offer.Product),
+                Images = images,
+                Description = description,
                 External = new External
                 {
                     Id = offer.Product.Code
@@ -120,21 +136,17 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     ReturnPolicy = new ReturnPolicy { Name = appSettings.AllegroReturnPolicy },
                     ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
                 },
-                //Parameters = BuildParameters(offer.Product.Parameters, false),
-                //CompatibilityList = offer.Product.BuildCompatibilitySet ? BuildCompatibilityList(offer.Product.DefaultAllegroCategory, offer.Product.Applications, allegroCategories) : null
             };
         }
 
-        private static List<ProductSet> BuildProductSet(RolmarProduct product, int quantity, AppSettings appSettings, string fallbackCat = "319123")
+        private static List<ProductSet> BuildProductSet(RolmarProduct product, int quantity, AppSettings appSettings)
         {
             var ProductSets = new List<ProductSet>();
 
             var Product = new ProductObject
             {
-                Name = product.Name,
-                Category = new Category { Id = product.DefaultAllegroCategory.ToString() == "0" ? fallbackCat : product.DefaultAllegroCategory.ToString() },
-                //Images = product.Images.Select(i => i.AllegroUrl).ToList(),
-                //Parameters = BuildParameters(product.Parameters, true),
+                Id = product.AllegroId,
+                Images = product.AllegroImages.Select(i => i.Url).ToList(),
             };
 
             ProductSets.Add(new ProductSet
@@ -180,367 +192,240 @@ namespace RolmarAllegroProductsSyncService.Helpers
                 return "UNIT"; // fallback for unknown units
         }
 
-        //private static List<Parameter> BuildParameters(ICollection<ProductParameter> parameters, bool isForProduct)
-        //{
-        //    var result = new List<Parameter>();
+        private static List<Parameter> BuildParameters(ICollection<ProductParameter> parameters, bool isForProduct)
+        {
+            var result = new List<Parameter>();
 
-        //    // parameters that should support multiple values
-        //    var multiValueParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        //    {
-        //        "numery katalogowe zamienników", "marka",
-        //    };
+            // parameters that should support multiple values
+            var multiValueParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "numery katalogowe zamienników", "marka",
+            };
 
-        //    foreach (var param in parameters.Where(p => p.IsForProduct == isForProduct))
-        //    {
-        //        if (string.IsNullOrWhiteSpace(param.Value))
-        //            continue;
+            foreach (var param in parameters.Where(p => p.IsForProduct == isForProduct))
+            {
+                if (string.IsNullOrWhiteSpace(param.Value))
+                    continue;
 
-        //        // 1. Remove all control characters (ASCII < 0x20 or 0x7F–0x9F) except space
-        //        var cleaned = new string(param.Value
-        //            .Where(ch => !char.IsControl(ch) || ch == ' ')
-        //            .ToArray())
-        //            .Trim();
+                // 1. Remove all control characters (ASCII < 0x20 or 0x7F–0x9F) except space
+                var cleaned = new string(param.Value
+                    .Where(ch => !char.IsControl(ch) || ch == ' ')
+                    .ToArray())
+                    .Trim();
 
-        //        List<string> values;
+                List<string> values;
 
-        //        if (multiValueParams.Contains(param.CategoryParameter.Name))
-        //        {
-        //            // 2. Split by comma OR whitespace
-        //            values = cleaned
-        //                .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
-        //                .Select(v => v.Trim())
-        //                .Where(v => !string.IsNullOrWhiteSpace(v))
-        //                .Distinct(StringComparer.OrdinalIgnoreCase)
-        //                .ToList();
+                if (multiValueParams.Contains(param.Name))
+                {
+                    // 2. Split by comma OR whitespace
+                    values = cleaned
+                        .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(v => v.Trim())
+                        .Where(v => !string.IsNullOrWhiteSpace(v))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
 
-        //            // 3. Apply max=9 for parameter id 215941
-        //            if (param.CategoryParameter.Name == "Numery katalogowe zamienników")
-        //            {
-        //                values = values.Take(15).ToList();
-        //            }
-        //        }
-        //        else
-        //        {
-        //            values = new List<string> { cleaned };
-        //        }
+                    // 3. Apply max=9 for parameter id 215941
+                    if (param.Name == "Numery katalogowe zamienników")
+                    {
+                        values = values.Take(15).ToList();
+                    }
+                }
+                else
+                {
+                    values = new List<string> { cleaned };
+                }
 
-        //        if (values.Count > 0)
-        //        {
-        //            result.Add(new Parameter
-        //            {
-        //                Name = param.CategoryParameter.Name,
-        //                Values = values
-        //            });
-        //        }
-        //    }
+                if (values.Count > 0)
+                {
+                    result.Add(new Parameter
+                    {
+                        Name = param.Name,
+                        Values = values
+                    });
+                }
+            }
 
-        //    return result;
-        //}
+            return result;
+        }
 
-        //public static CompatibilityList BuildCompatibilityList(int categoryId, IEnumerable<Application> applications, IEnumerable<AllegroCategory> categories)
-        //{
-        //    if (applications == null || !applications.Any())
-        //        return null;
+        private static Description BuildDescription(RolmarProduct product)
+        {
+            var description = new Description
+            {
+                Sections = new List<Section>()
+            };
 
-        //    var categoryExists = categories.Any(c => c.Id == categoryId || c.CategoryId == categoryId.ToString());
-        //    if (!categoryExists)
-        //        return null;
+            int imageIndex = 0;
 
-        //    bool IsCategoryOrParent(int catId, string targetCategoryId)
-        //    {
-        //        var category = categories.FirstOrDefault(c => c.CategoryId == catId.ToString() || c.Id == catId);
-        //        while (category != null)
-        //        {
-        //            if (category.CategoryId == targetCategoryId)
-        //                return true;
+            // 0. First image full-width on top
+            if (product.AllegroImages.Any())
+            {
+                description.Sections.Add(new Section
+                {
+                    SectionItems = new List<SectionItem>
+                    {
+                        new SectionItem
+                        {
+                            Type = "IMAGE",
+                            Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                        }
+                    }
+                });
+            }
 
-        //            if (category.ParentId == null)
-        //                break;
+            // 0. Product header (Name + Producer + Code)
+            string nameHtml = $"<p><b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Name))}</b></p>";
 
-        //            category = categories.FirstOrDefault(c => c.Id == category.ParentId.Value);
-        //        }
-        //        return false;
-        //    }
+            string codeHtml = !string.IsNullOrWhiteSpace(product.Code)
+                ? $"<p><b>Kod produktu: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Code))}</p>"
+                : string.Empty;
 
-        //    var leafApps = applications
-        //        .Where(a => !applications.Any(child => child.ParentID == a.ApplicationId))
-        //        .OrderBy(a => a.ApplicationId)
-        //        .ToList();
+            string producerHtml = !string.IsNullOrWhiteSpace(product.SupplierName)
+                ? $"<p><b>Producent: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.SupplierName))}</p>"
+                : string.Empty;
 
-        //    List<Item> items = new List<Item>();
+            string descriptionHtml = !string.IsNullOrWhiteSpace(product.Description) && product.Description != product.Name
+                ? $"<p><b>Opis: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Description))}</p>"
+                : string.Empty;
 
-        //    if (IsCategoryOrParent(categoryId, "252204"))
-        //    {
-        //    }
-        //    else
-        //    {
-        //        var prohibitedWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        //        {
-        //            "marka"
-        //        };
+            string warning = string.Empty;
 
-        //        foreach (var leaf in leafApps)
-        //        {
-        //            var path = new List<string>();
-        //            var current = leaf;
+            if (string.Equals(product.Unit, "MB", StringComparison.OrdinalIgnoreCase) || string.Equals(product.Unit, "M", StringComparison.OrdinalIgnoreCase) || string.Equals(product.Unit, "METR", StringComparison.OrdinalIgnoreCase))
+            {
+                warning = $"<p><b>UWAGA:</b> {System.Net.WebUtility.HtmlEncode($"PODANA CENA KUP TERAZ TO CENA ZA 1 METR BIEŻĄCY")}</p>";
+            }
 
-        //            // Traverse up to root
-        //            var fullPath = new List<Application>();
-        //            while (current != null)
-        //            {
-        //                fullPath.Insert(0, current); // root -> leaf
-        //                if (current.ParentID == 0) break;
-        //                current = applications.FirstOrDefault(a => a.ApplicationId == current.ParentID);
-        //            }
+            if (product.Package > 1)
+            {
+                warning = $"<p><b>UWAGA:</b> {System.Net.WebUtility.HtmlEncode($"PODANA CENA KUP TERAZ TO CENA ZA 1 KOMPLET = {product.Package} {ConjugationHelper.Unit(Convert.ToInt32(product.Package), product.Unit).ToUpper()}")}</p>";
+            }
 
-        //            if (fullPath.Count == 0) continue;
+            string fitsText = string.Empty;
+            if (!string.IsNullOrEmpty(product.Fits))
+            {
+                var fits = System.Net.WebUtility.HtmlEncode(product.Fits);
+                fitsText = $"<p><b>Pasuje do: </b>{fits}</p>";
+            }
 
-        //            // Always include root
-        //            path.Add(fullPath.First().Name);
+            string crossNumbersText = string.Empty;
+            if (!string.IsNullOrEmpty(product.Substitutes))
+            {
+                var crossNumbers = System.Net.WebUtility.HtmlEncode(product.Substitutes);
+                crossNumbersText = $"<p><b>Symbol zamiennika: </b>{crossNumbers}</p>";
+            }
 
-        //            // Decide whether to include parent of leaf
-        //            var leafName = fullPath.Last().Name;
-        //            bool leafIsNumber = int.TryParse(leafName, out _);
-        //            if (leafIsNumber && fullPath.Count > 2)
-        //            {
-        //                var parentOfLeaf = fullPath[fullPath.Count - 2];
-        //                if (parentOfLeaf.ParentID != fullPath.First().ApplicationId) // skip if 2nd level
-        //                {
-        //                    path.Add(parentOfLeaf.Name);
-        //                }
-        //            }
+            // Build the content string for text fields
+            var contentBuilder = new StringBuilder();
+            contentBuilder.Append(nameHtml)
+                          .Append(codeHtml)
+                          .Append(descriptionHtml)
+                          .Append(producerHtml)
+                          .Append(crossNumbersText)
+                          .Append(warning);
 
-        //            // Always include leaf
-        //            path.Add(leafName);
+            // Build the section
+            var mainSectionItems = new List<SectionItem>
+            {
+                new SectionItem
+                {
+                    Type = "TEXT",
+                    Content = contentBuilder.ToString()
+                }
+            };
 
-        //            string text = string.Join(" ", path);
+            // Add image
+            if (imageIndex < product.AllegroImages.Count)
+            {
+                mainSectionItems.Add(new SectionItem
+                {
+                    Type = "IMAGE",
+                    Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                });
+            }
 
-        //            if (prohibitedWords.Any(word => text.IndexOf(word, StringComparison.OrdinalIgnoreCase) >= 0))
-        //                continue;
+            description.Sections.Add(new Section
+            {
+                SectionItems = mainSectionItems
+            });
 
-        //            // Avoid duplicates
-        //            if (!items.Any(i => i.Text == text))
-        //            {
-        //                items.Add(new Item { Type = "TEXT", Text = text });
-        //            }
-        //        }
-        //    }
+            string parametersHtml = string.Empty;
 
-        //    if (!items.Any())
-        //        return null;
+            if (product.Specifications != null && product.Specifications.Any())
+            {
+                var attributesList = string.Join("",
+                    product.Specifications
+                        .Where(p => !((p.Name == "Opakowanie" && p.Value == "1") || (p.Name == "Opakowanie zbiorcze" && p.Value == "1")))
+                        .Select(p =>
+                            $"<li><b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.Name))}</b>: " +
+                            $"{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.Value))} " +
+                            $"{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.UnitName))}</li>"
+                        )
+                );
 
-        //    var cappedItems = items.Take(99).ToList();
+                if (!string.IsNullOrWhiteSpace(attributesList))
+                {
+                    parametersHtml = $"<p><b>Parametry/Wymiary:</b></p><ul>{attributesList}</ul>";
+                }
+            }
 
-        //    return new CompatibilityList { Items = cappedItems };
-        //}
+            if (!string.IsNullOrWhiteSpace(parametersHtml))
+            {
+                var parametersSectionItems = new List<SectionItem>();
 
-        //private static Description BuildDescription(RolmarProduct product)
-        //{
-        //    var description = new Description
-        //    {
-        //        Sections = new List<Section>()
-        //    };
+                // Add image to parameters section
+                if (imageIndex < product.AllegroImages.Count)
+                {
+                    parametersSectionItems.Add(new SectionItem
+                    {
+                        Type = "IMAGE",
+                        Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                    });
+                }
 
-        //    //var images = GetOfferImages(product);
-        //    int imageIndex = 0;
+                parametersSectionItems.Add(
+                    new SectionItem
+                    {
+                        Type = "TEXT",
+                        Content = parametersHtml
+                    }
+                );
 
-        //    // 0. First image full-width on top
-        //    if (images.Any())
-        //    {
-        //        description.Sections.Add(new Section
-        //        {
-        //            SectionItems = new List<SectionItem>
-        //            {
-        //                new SectionItem
-        //                {
-        //                    Type = "IMAGE",
-        //                    Url = images[imageIndex++]
-        //                }
-        //            }
-        //        });
-        //    }
+                description.Sections.Add(new Section
+                {
+                    SectionItems = parametersSectionItems
+                });
+            }
 
-        //    // 0. Product header (Name + Producer + Code)
+            while (imageIndex < product.AllegroImages.Count)
+            {
+                var sectionImageItems = new List<SectionItem>();
 
-        //    string originalHtml = string.IsNullOrEmpty(product.SupplierName) ? $"<h2>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode("PRODUKT JEST ZAMIENNIKIEM"))}</h2>" : string.Empty;
-        //    string nameHtml = $"<p><b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Name))}</b></p>";
-        //    string codeHtml = !string.IsNullOrWhiteSpace(product.CodeGaska)
-        //        ? $"<p><b>Kod produktu: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.CodeGaska))}</p>"
-        //        : string.Empty;
-        //    string producerHtml = !string.IsNullOrWhiteSpace(product.SupplierName)
-        //        ? $"<p><b>Producent: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.SupplierName))}</p>"
-        //        : string.Empty;
-        //    string descriptionHtml = !string.IsNullOrWhiteSpace(product.Description)
-        //        ? $"<p><b>Opis: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Description))}</p>"
-        //        : string.Empty;
-        //    string technicalHtml = !string.IsNullOrWhiteSpace(product.TechnicalDetails)
-        //        ? $"<p><b>Porady techniczne: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.TechnicalDetails))}</p>"
-        //        : string.Empty;
+                // First image
+                sectionImageItems.Add(new SectionItem
+                {
+                    Type = "IMAGE",
+                    Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                });
 
-        //    string parametersHtml = string.Empty;
-        //    if (product.Atributes != null && product.Atributes.Any())
-        //    {
-        //        var attributesList = string.Join("", product.Atributes.Select(p =>
-        //            $"<li>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.AttributeName))}: {RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.AttributeValue))}</li>"
-        //        ));
-        //        parametersHtml = $"<p><b>Parametry/Wymiary:</b></p><ul>{attributesList}</ul>";
-        //    }
+                // Add second image if available
+                if (imageIndex < product.AllegroImages.Count)
+                {
+                    sectionImageItems.Add(new SectionItem
+                    {
+                        Type = "IMAGE",
+                        Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                    });
+                }
 
-        //    var package = product.Packages?.FirstOrDefault(p => p.PackRequired == 1);
-        //    string warning = string.Empty;
+                description.Sections.Add(new Section
+                {
+                    SectionItems = sectionImageItems
+                });
+            }
 
-        //    if (string.Equals(product.Unit, "MB", StringComparison.OrdinalIgnoreCase))
-        //    {
-        //        warning = $"<p><b>UWAGA:</b> {System.Net.WebUtility.HtmlEncode($"PODANA CENA KUP TERAZ TO CENA ZA 1 METR BIEŻĄCY")}</p>";
-        //    }
-
-        //    if (package != null)
-        //    {
-        //        warning = $"<p><b>UWAGA:</b> {System.Net.WebUtility.HtmlEncode($"PODANA CENA KUP TERAZ TO CENA ZA 1 KOMPLET = {package.PackQty} {ConjugationHelper.Unit(Convert.ToInt32(package.PackQty), product.Unit).ToUpper()}")}</p>";
-        //    }
-
-        //    string crossNumbersText = string.Empty;
-        //    if (product.CrossNumbers != null && product.CrossNumbers.Any())
-        //    {
-        //        var crossNumbers = string.Join(", ", product.CrossNumbers.Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
-        //        crossNumbersText = $"<p><b>Numery referencyjne: </b>{crossNumbers}</p>";
-        //    }
-
-        //    // Build the content string for text fields
-        //    var contentBuilder = new StringBuilder();
-        //    contentBuilder.Append(originalHtml)
-        //                .Append(nameHtml)
-        //                .Append(codeHtml)
-        //                .Append(producerHtml)
-        //                .Append(descriptionHtml)
-        //                .Append(technicalHtml)
-        //                .Append(parametersHtml)
-        //                .Append(crossNumbersText)
-        //                .Append(warning);
-
-        //    // Build the section
-        //    var sectionItems = new List<SectionItem>
-        //    {
-        //        new SectionItem
-        //        {
-        //            Type = "TEXT",
-        //            Content = contentBuilder.ToString()
-        //        }
-        //    };
-
-        //    // Add image
-        //    if (imageIndex < images.Count - 1)
-        //    {
-        //        sectionItems.Add(new SectionItem
-        //        {
-        //            Type = "IMAGE",
-        //            Url = images[imageIndex++]
-        //        });
-        //    }
-
-        //    description.Sections.Add(new Section
-        //    {
-        //        SectionItems = sectionItems
-        //    });
-
-        //    // 6. Applications section
-        //    if (product.Applications != null && product.Applications.Any())
-        //    {
-        //        var applicationsByParent = product.Applications
-        //            .GroupBy(a => a.ParentID)
-        //            .ToDictionary(g => g.Key, g => g.ToList());
-
-        //        if (applicationsByParent.ContainsKey(0))
-        //        {
-        //            var rootApps = applicationsByParent[0];
-
-        //            string GetLeafNames(int parentId)
-        //            {
-        //                if (!applicationsByParent.ContainsKey(parentId))
-        //                    return string.Empty;
-
-        //                var leafNames = new List<string>();
-
-        //                foreach (var child in applicationsByParent[parentId])
-        //                {
-        //                    if (applicationsByParent.ContainsKey(child.ApplicationId))
-        //                    {
-        //                        // Recurse into grandchildren
-        //                        leafNames.AddRange(GetLeafNames(child.ApplicationId).Split(new string[] { ", " }, StringSplitOptions.RemoveEmptyEntries));
-        //                    }
-        //                    else
-        //                    {
-        //                        leafNames.Add(RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(child.Name)));
-        //                    }
-        //                }
-
-        //                return string.Join(", ", leafNames);
-        //            }
-
-        //            var listItems = new List<string>();
-
-        //            foreach (var rootApp in rootApps)
-        //            {
-        //                if (!applicationsByParent.ContainsKey(rootApp.ApplicationId)) continue;
-        //                foreach (var secondLevel in applicationsByParent[rootApp.ApplicationId])
-        //                {
-        //                    string leafs = GetLeafNames(secondLevel.ApplicationId);
-        //                    string li = $"<li><b>{System.Net.WebUtility.HtmlEncode(rootApp.Name)} - {System.Net.WebUtility.HtmlEncode(secondLevel.Name)}</b>: {leafs}</li>";
-        //                    listItems.Add(li);
-        //                }
-        //            }
-
-        //            string appsText = $"<ul>{string.Join("", listItems)}</ul>";
-
-        //            var appSectionItems = new List<SectionItem>();
-        //            if (imageIndex < images.Count - 1)
-        //            {
-        //                appSectionItems.Add(new SectionItem
-        //                {
-        //                    Type = "IMAGE",
-        //                    Url = images[imageIndex++]
-        //                });
-        //            }
-
-        //            appSectionItems.Add(new SectionItem
-        //            {
-        //                Type = "TEXT",
-        //                Content = $"<p><b>Zastosowanie: </b></p>{appsText}"
-        //            });
-
-        //            description.Sections.Add(new Section { SectionItems = appSectionItems });
-        //        }
-        //    }
-
-        //    while (imageIndex < images.Count)
-        //    {
-        //        var sectionImageItems = new List<SectionItem>();
-
-        //        // First image
-        //        sectionImageItems.Add(new SectionItem
-        //        {
-        //            Type = "IMAGE",
-        //            Url = images[imageIndex++]
-        //        });
-
-        //        // Add second image if available
-        //        if (imageIndex < images.Count)
-        //        {
-        //            sectionImageItems.Add(new SectionItem
-        //            {
-        //                Type = "IMAGE",
-        //                Url = images[imageIndex++]
-        //            });
-        //        }
-
-        //        description.Sections.Add(new Section
-        //        {
-        //            SectionItems = sectionImageItems
-        //        });
-        //    }
-
-        //    return description;
-        //}
+            return description;
+        }
 
         private static decimal CalculatePrice(
             decimal initialPrice,

@@ -1,5 +1,6 @@
 ﻿using Dapper;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Models;
 using Microsoft.Extensions.Options;
 using RolmarAllegroProductsSyncService.Data;
 using RolmarAllegroProductsSyncService.Models;
@@ -134,7 +135,80 @@ namespace RolmarAllegroProductsSyncService.Repositories
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
         {
-            throw new NotImplementedException();
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            // Step 1: Get offers with products
+            const string offersSql = @"
+                SELECT
+                    ao.Id, ao.ExternalId, ao.Name, ao.CategoryId, ao.Status, ao.StartingAt,
+                    p.Id, p.AllegroId, p.Code, p.Name, p.Description,
+                    p.Ean, p.Weight, p.Fits, p.SupplierName, p.Substitutes, p.InStock, p.Unit,
+                    p.CurrencyPrice, p.PriceNet, p.PriceGross, p.DefaultAllegroCategory, p.Package,
+                    p.CreatedDate, p.UpdatedDate
+                FROM AllegroOffers ao
+                INNER JOIN RolmarProducts p ON p.Code = ao.ExternalId AND p.IntegrationCompany = 'Rolmar'
+                WHERE ao.Status IN ('ACTIVE', 'ENDED')";
+
+            var offerDict = new Dictionary<string, AllegroOffer>();
+
+            var offers = (await connection.QueryAsync<AllegroOffer, RolmarProduct, AllegroOffer>(
+                offersSql,
+                (offer, product) =>
+                {
+                    offer.Product = product;
+                    offerDict[offer.Id] = offer;
+                    return offer;
+                },
+                splitOn: "Id",
+                commandTimeout: 900
+            )).ToList();
+
+            if (!offers.Any())
+                return offers;
+
+            offers = offers
+                .GroupBy(o => o.Product.Id)
+                .Select(g => g.OrderByDescending(o => o.StartingAt).First())
+                .ToList();
+
+            var productIds = offers.Select(o => o.Product.Id).ToList();
+            const int batchSize = 1000;
+
+            var allImages = new List<AllegroImages>();
+            var allSpecs = new List<ProductSpecification>();
+
+            // Step 2: Load related collections in batches
+            for (int i = 0; i < productIds.Count; i += batchSize)
+            {
+                var batchIds = productIds.Skip(i).Take(batchSize).ToList();
+
+                var imagesTask = connection.QueryAsync<AllegroImages>(
+                    "SELECT * FROM AllegroImages WHERE ProductId IN @Ids AND Connected = 1",
+                    new { Ids = batchIds });
+
+                var specsTask = connection.QueryAsync<ProductSpecification>(
+                    "SELECT * FROM ProductSpecifications WHERE ProductId IN @Ids",
+                    new { Ids = batchIds });
+
+                await Task.WhenAll(imagesTask, specsTask);
+
+                allImages.AddRange(imagesTask.Result);
+                allSpecs.AddRange(specsTask.Result);
+            }
+
+            // Step 3: Aggregate into product collections
+            var imagesLookup = allImages.ToLookup(i => i.ProductId);
+            var specsLookup = allSpecs.ToLookup(s => s.ProductId);
+
+            foreach (var offer in offers)
+            {
+                var product = offer.Product;
+                product.AllegroImages = imagesLookup[product.Id].ToList();
+                product.Specifications = specsLookup[product.Id].ToList();
+            }
+
+            return offers;
         }
 
         public async Task DeleteOffer(int productId, CancellationToken ct)

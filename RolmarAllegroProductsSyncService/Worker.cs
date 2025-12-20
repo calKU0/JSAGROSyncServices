@@ -59,7 +59,8 @@ namespace RolmarAllegroProductsSyncService
 
             var offerService = services.GetRequiredService<IAllegroOfferService>();
             var categoryService = services.GetRequiredService<IAllegroCategoryService>();
-            //var parametersService = services.GetRequiredService<IAllegroParametersService>();
+            var parameterService = services.GetRequiredService<IAllegroParametersService>();
+            var productService = services.GetRequiredService<IAllegroProductService>();
 
             _logger.LogInformation("=== Starting full synchronization cycle ===");
 
@@ -70,6 +71,7 @@ namespace RolmarAllegroProductsSyncService
             {
                 async Task MeasureStepAsync(string stepName, Func<Task> action)
                 {
+                    _logger.LogInformation($"Starting {stepName}...");
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     await action();
                     sw.Stop();
@@ -85,11 +87,11 @@ namespace RolmarAllegroProductsSyncService
                 }
 
                 await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());
-                await MeasureStepAsync("Allegro categories update", () => categoryService.UpdateAllegroCategories());
+                await MeasureStepAsync("Products search", () => productService.SearchProducts());
                 await MeasureStepAsync("Category parameters fetch", () => categoryService.FetchAndSaveCategoryParameters());
-                //await MeasureStepAsync("Product parameters update", () => parametersService.UpdateParameters());
+                await MeasureStepAsync("Product parameters update", () => parameterService.UpdateParameters());
                 //await MeasureStepAsync("Offers creation", () => offerService.CreateOffers());
-                //await MeasureStepAsync("Offers update", () => offerService.UpdateOffers());
+                await MeasureStepAsync("Offers update", () => offerService.UpdateOffers());
 
                 totalStopwatch.Stop();
 

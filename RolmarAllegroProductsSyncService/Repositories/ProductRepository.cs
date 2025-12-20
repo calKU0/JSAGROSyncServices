@@ -15,6 +15,30 @@ namespace RolmarAllegroProductsSyncService.Repositories
             _context = dbContext;
         }
 
+        public async Task<List<RolmarProduct>> GetAllProducts(CancellationToken ct)
+        {
+            const string sql = @"SELECT * FROM RolmarProducts";
+
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            var products = await connection.QueryAsync<RolmarProduct>(sql, commandTimeout: 900);
+
+            return products.ToList();
+        }
+
+        public async Task<List<RolmarProduct>> GetNotExistingProductsInAllegro(CancellationToken ct)
+        {
+            const string sql = @"SELECT * FROM RolmarProducts WHERE AllegroId is null";
+
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            var products = await connection.QueryAsync<RolmarProduct>(sql, commandTimeout: 900);
+
+            return products.ToList();
+        }
+
         public async Task<List<RolmarProduct>> GetProductsToUpdateParameters(CancellationToken ct)
         {
             const string sql = @"SELECT
@@ -48,7 +72,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 SELECT 1
                 FROM RolmarProductParameters pp
                 WHERE pp.ProductId = p.Id
-            )
+            ) AND IntegrationCompany = 'Rolmar'
             ORDER BY p.Id;
             ";
 
@@ -77,7 +101,8 @@ namespace RolmarAllegroProductsSyncService.Repositories
 
                     return existing;
                 },
-                splitOn: "Id"
+                splitOn: "Id",
+                commandTimeout: 900
             );
 
             return productDict.Values.ToList();
@@ -103,6 +128,8 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 p.Package,
                 p.CreatedDate,
                 p.UpdatedDate,
+                p.Substitutes,
+                p.AllegroId,
 
                 ps.Id,
                 ps.ProductId,
@@ -113,15 +140,17 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 pp.Id,
                 pp.ProductId,
                 pp.CategoryParameterId,
+                cp.Name,
                 pp.Value,
                 pp.IsForProduct
 
             FROM RolmarProducts p
             LEFT JOIN ProductSpecifications ps ON ps.ProductId = p.Id
             JOIN RolmarProductParameters pp ON pp.ProductId = p.Id
-            WHERE p.InStock >= @MinProductStock
-              AND p.DefaultAllegroCategory IS NOT NULL
-              AND p.DefaultAllegroCategory <> 0
+            JOIN CategoryParameters cp ON cp.Id = pp.CategoryParameterId
+            LEFT JOIN AllegroOffers ao ON ao.ExternalId = p.Code
+            WHERE p.InStock >= @MinProductStock AND NULLIF(p.DefaultAllegroCategory, 0) IS NOT NULL AND ao.Id IS NULL
+            AND IntegrationCompany = 'Rolmar'
             ORDER BY p.Id;";
 
             using var connection = _context.CreateConnection();
@@ -154,7 +183,8 @@ namespace RolmarAllegroProductsSyncService.Repositories
                     return existing;
                 },
                 new { MinProductStock = minProductStock },
-                splitOn: "Id,Id"
+                splitOn: "Id,Id",
+                commandTimeout: 900
             );
 
             return productDict.Values.ToList();
@@ -189,8 +219,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
 
             FROM RolmarProducts p
             LEFT JOIN ProductSpecifications ps ON ps.ProductId = p.Id
-            WHERE p.DefaultAllegroCategory IS NULL
-               OR p.DefaultAllegroCategory = 0
+            WHERE NULLIF(p.DefaultAllegroCategory, 0) IS NULL AND IntegrationCompany = 'Rolmar'
             ORDER BY p.Id;";
 
             using var connection = _context.CreateConnection();
@@ -218,7 +247,8 @@ namespace RolmarAllegroProductsSyncService.Repositories
 
                     return existing;
                 },
-                splitOn: "Id"
+                splitOn: "Id",
+                commandTimeout: 900
             );
 
             return productDict.Values.ToList();
@@ -242,22 +272,32 @@ namespace RolmarAllegroProductsSyncService.Repositories
             });
         }
 
-        public async Task UpdateProductAllegroCategory(string productId, string categoryId, CancellationToken ct)
+        public async Task UpdateProductAllegroCategory(string productCode, string categoryId, CancellationToken ct)
         {
             const string sql = @"
                 UPDATE RolmarProducts
                 SET DefaultAllegroCategory = @CategoryId,
                     UpdatedDate = SYSUTCDATETIME()
-                WHERE Code = @ProductId;
+                WHERE Code = @ProductCode;
                 ";
 
             using var connection = _context.CreateConnection();
             connection.Open();
             var affectedRows = await connection.ExecuteAsync(sql, new
             {
-                ProductId = productId,
+                ProductCode = productCode,
                 CategoryId = categoryId
             });
+        }
+
+        public async Task UpdateProductAllegroId(int productId, string allegroProductId, string allegroCategoryId, CancellationToken ct)
+        {
+            const string sql = @"UPDATE RolmarProducts SET AllegroId = @AllegroId, DefaultAllegroCategory = @CategoryId WHERE Id = @ProductId";
+
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            var products = await connection.QueryAsync(sql, new { AllegroId = allegroProductId, ProductId = productId, CategoryId = allegroCategoryId });
         }
 
         public async Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct)
@@ -267,7 +307,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 SET
                     InStock = @Stock,
                     UpdatedDate = SYSUTCDATETIME()
-                WHERE Code = @ProductCode;
+                WHERE Code = @ProductCode AND IntegrationCompany = 'Rolmar';
                 ";
 
             using var connection = _context.CreateConnection();
@@ -292,8 +332,13 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 ON target.Code = source.Code
                 WHEN MATCHED THEN
                     UPDATE SET
-                        Name = @Name,
+                        Name = LEFT(@Name,
+                            CASE
+                                WHEN LEN(@Name) <= 75 THEN LEN(@Name)
+                                ELSE 75 - CHARINDEX(' ', REVERSE(LEFT(@Name, 75))) + 1
+                            END),
                         Description = @Description,
+                        IntegrationCompany = 'Rolmar',
                         Ean = @Ean,
                         Weight = @Weight,
                         Fits = NULLIF(@Fits,''),
@@ -306,9 +351,9 @@ namespace RolmarAllegroProductsSyncService.Repositories
                         UpdatedDate = SYSUTCDATETIME()
                 WHEN NOT MATCHED THEN
                     INSERT (Code, Name, Description, Ean, Weight, Fits, Substitutes, Unit, CurrencyPrice,
-                            PriceNet, PriceGross, Package, CreatedDate, UpdatedDate)
+                            PriceNet, PriceGross, Package, CreatedDate, UpdatedDate, IntegrationCompany)
                     VALUES (@Code, @Name, @Description, @Ean, @Weight, NULLIF(@Fits,''), NULLIF(@Substitutes,''), @Unit, @Currency,
-                            @PriceNet, @PriceGross, @Package, SYSUTCDATETIME(), SYSUTCDATETIME())
+                            @PriceNet, @PriceGross, @Package, SYSUTCDATETIME(), SYSUTCDATETIME(), @IntegrationCompany)
                 OUTPUT inserted.Id;
                 ";
 
@@ -349,6 +394,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                         Unit = product.Unit,
                         Currency = product.Currency,
                         Substitutes = product.Substitutes,
+                        IntegrationCompany = "Rolmar",
                         PriceNet = decimal.TryParse(product.Price, out var pn) ? pn : 0,
                         PriceGross = decimal.TryParse(product.RetailPrice, out var pg) ? pg : 0,
                         Package = decimal.TryParse(product.ErpPackage, out var pkg) ? pkg : 0

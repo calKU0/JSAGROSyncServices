@@ -1,8 +1,11 @@
-﻿namespace RolmarAllegroProductsSyncService.Models
+﻿using JSAGROSyncServices.Shared.Models;
+
+namespace RolmarAllegroProductsSyncService.Models
 {
     public class RolmarProduct
     {
         public int Id { get; set; }
+        public string AllegroId { get; set; }
         public string Code { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
@@ -23,7 +26,7 @@
         public DateTime UpdatedDate { get; set; } = DateTime.UtcNow;
         public List<ProductSpecification> Specifications { get; set; }
         public List<ProductParameter> Parameters { get; set; }
-        public List<OfferImage> Images { get; set; }
         public List<RolmarCategory> Categories { get; set; }
+        public List<AllegroImages> AllegroImages { get; set; }
     }
 }

@@ -6,6 +6,7 @@ using RolmarAllegroProductsSyncService.Services.Interfaces;
 using RolmarAllegroProductsSyncService.Settings;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 
 namespace RolmarAllegroProductsSyncService.Services.Rolmar
@@ -29,6 +30,9 @@ namespace RolmarAllegroProductsSyncService.Services.Rolmar
 
         public async Task SyncProductsAsync(CancellationToken ct = default)
         {
+            int upsertedCount = 0;
+            int failedCount = 0;
+
             try
             {
                 var body = new RolmarProductsRequest
@@ -39,10 +43,7 @@ namespace RolmarAllegroProductsSyncService.Services.Rolmar
                         {
                             Param = new List<ParamItem>
                             {
-                                new ParamItem
-                                {
-                                    CategorySeparator = ">"
-                                }
+                                new ParamItem { CategorySeparator = ">" }
                             }
                         }
                     }
@@ -52,12 +53,15 @@ namespace RolmarAllegroProductsSyncService.Services.Rolmar
 
                 var options = new JsonSerializerOptions
                 {
-                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 };
 
-                var response = await _httpClient.PostAsJsonAsync(requestUri, body, options);
+                var response = await _httpClient.PostAsJsonAsync(requestUri, body, options, ct);
                 response.EnsureSuccessStatusCode();
-                var rolmarResponseArray = await response.Content.ReadFromJsonAsync<List<RolmarProductReponse>>(ct);
+
+                var rolmarResponseArray =
+                    await response.Content.ReadFromJsonAsync<List<RolmarProductReponse>>(ct);
+
                 if (rolmarResponseArray == null || !rolmarResponseArray.Any())
                 {
                     _logger.LogWarning("No products found in Rolmar response.");
@@ -74,20 +78,35 @@ namespace RolmarAllegroProductsSyncService.Services.Rolmar
                 {
                     try
                     {
-                        if (product.Categories == null || !product.Categories.Any(c => allowedCategories.Any(ac => c.StartsWith(ac, StringComparison.OrdinalIgnoreCase))))
+                        if (product.Categories == null ||
+                            !product.Categories.Any(c =>
+                                allowedCategories.Any(ac =>
+                                    c.StartsWith(ac, StringComparison.OrdinalIgnoreCase))))
                             continue;
 
                         bool success = await _productRepository.UpsertProductAsync(product, ct);
-                        if (!success)
-                            _logger.LogWarning($"Failed to upsert product with Code: {product.ProductIndex}");
+
+                        if (success)
+                        {
+                            upsertedCount++;
+                        }
                         else
-                            _logger.LogInformation($"Upserted product with Code: {product.ProductIndex} successfully.");
+                        {
+                            failedCount++;
+                            _logger.LogWarning("Failed to upsert product with Code: {Code}", product.ProductIndex);
+                        }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, $"Error occurred while upserting product with Code: {product.ProductIndex}");
+                        failedCount++;
+                        _logger.LogError(ex, "Error occurred while upserting product with Code: {Code}", product.ProductIndex);
                     }
                 }
+
+                _logger.LogInformation(
+                    "Product sync completed. Upserted: {Upserted}, Failed: {Failed}",
+                    upsertedCount,
+                    failedCount);
             }
             catch (Exception ex)
             {
@@ -97,18 +116,26 @@ namespace RolmarAllegroProductsSyncService.Services.Rolmar
 
         public async Task SyncStockAsync(CancellationToken ct = default)
         {
+            int updatedCount = 0;
+            int failedCount = 0;
+
             try
             {
+                var products = await _productRepository.GetAllProducts(ct);
+                var productCodes = products.Select(p => p.Code).ToHashSet();
+
                 var body = new RolmarStockRequest();
                 var requestUri = $"v1/stock/stock.php?m=getStock&lang=pl&wsKey={_rolmarSettings.ApiKey}";
 
-                var response = await _httpClient.PostAsJsonAsync(requestUri, body);
+                var response = await _httpClient.PostAsJsonAsync(requestUri, body, ct);
                 response.EnsureSuccessStatusCode();
-                var rolmarResponseArray = await response.Content.ReadFromJsonAsync<List<RolmarStockResponse>>();
+
+                var rolmarResponseArray =
+                    await response.Content.ReadFromJsonAsync<List<RolmarStockResponse>>(ct);
 
                 if (rolmarResponseArray == null || !rolmarResponseArray.Any())
                 {
-                    _logger.LogWarning("No products found in Rolmar response.");
+                    _logger.LogWarning("No stock data found in Rolmar response.");
                     return;
                 }
 
@@ -118,18 +145,32 @@ namespace RolmarAllegroProductsSyncService.Services.Rolmar
                 {
                     try
                     {
-                        bool success = await _productRepository.UpdateProductStockAsync(stock.Index, stock.Stock, ct);
+                        if (!productCodes.Contains(stock.Index))
+                            continue;
 
-                        //if (!success)
-                        //    _logger.LogWarning($"Failed to update stock for product with Code: {stock.Index}");
-                        //else
-                        _logger.LogInformation($"Updated stock for product with Code: {stock.Index} successfully.");
+                        bool success =
+                            await _productRepository.UpdateProductStockAsync(
+                                stock.Index,
+                                stock.Stock,
+                                ct);
+
+                        if (success)
+                        {
+                            updatedCount++;
+                        }
+                        else
+                        {
+                            failedCount++;
+                            _logger.LogWarning("Failed to update stock for product with Code: {Code}", stock.Index);
+                        }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, $"Error occurred while updating stock for product with Code: {stock.Index}");
+                        failedCount++; _logger.LogError(ex, "Error occurred while updating stock for product with Code: {Code}", stock.Index);
                     }
                 }
+
+                _logger.LogInformation("Stock sync completed. Updated: {Updated}, Failed: {Failed}", updatedCount, failedCount);
             }
             catch (Exception ex)
             {
@@ -139,58 +180,73 @@ namespace RolmarAllegroProductsSyncService.Services.Rolmar
 
         public async Task SyncImagesAsync(CancellationToken ct = default)
         {
+            int savedCount = 0;
+            int failedCount = 0;
+
             try
             {
+                var products = await _productRepository.GetAllProducts(ct);
                 var body = new RolmarImagesRequest();
                 var requestUri = $"v1/photo/photo.php?m=getPhotos&lang=pl&wsKey={_rolmarSettings.ApiKey}";
 
-                var response = await _httpClient.PostAsJsonAsync(requestUri, body);
+                var response = await _httpClient.PostAsJsonAsync(requestUri, body, ct);
                 response.EnsureSuccessStatusCode();
 
-                var rolmarResponseArray = await response.Content.ReadFromJsonAsync<List<RolmarImagesResponse>>();
+                var rolmarResponseArray =
+                    await response.Content.ReadFromJsonAsync<List<RolmarImagesResponse>>(ct);
 
-                if (rolmarResponseArray == null || rolmarResponseArray.Any())
+                if (rolmarResponseArray == null || !rolmarResponseArray.Any())
                 {
-                    _logger.LogWarning("No products found in Rolmar response.");
+                    _logger.LogWarning("No images found in Rolmar response.");
                     return;
                 }
 
                 var rolmarResponse = rolmarResponseArray[0];
 
-                string saveDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
+                string baseDirectory =
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
 
-                if (!Directory.Exists(saveDirectory))
-                    Directory.CreateDirectory(saveDirectory);
+                Directory.CreateDirectory(baseDirectory);
 
                 foreach (var item in rolmarResponse.PhotoItems)
                 {
-                    if (string.IsNullOrWhiteSpace(item.Url))
+                    if (string.IsNullOrWhiteSpace(item.Url) || string.IsNullOrWhiteSpace(item.Index))
                         continue;
 
-                    byte[] imgBytes = await _httpClient.GetByteArrayAsync(item.Url);
+                    if (!products.Any(p => p.Code == item.Index))
+                        continue;
 
-                    string extension = Path.GetExtension(item.Url);
-
-                    // fallback if URL has no extension
-                    if (string.IsNullOrWhiteSpace(extension))
-                        extension = ".jpg";
-
-                    int counter = 1;
-                    string filePath;
-
-                    // Find the next available file name
-                    do
+                    try
                     {
-                        string fileName = $"{item.Index}_{counter}{extension}";
-                        filePath = Path.Combine(saveDirectory, fileName);
-                        counter++;
-                    }
-                    while (File.Exists(filePath));
+                        byte[] imgBytes = await _httpClient.GetByteArrayAsync(item.Url, ct);
 
-                    // Save file
-                    await File.WriteAllBytesAsync(filePath, imgBytes);
-                    _logger.LogInformation($"Saved image for Index: {item.Index} at {filePath}");
+                        string extension = Path.GetExtension(item.Url);
+                        if (string.IsNullOrWhiteSpace(extension))
+                            extension = ".jpg";
+
+                        int counter = 1;
+                        string filePath;
+
+                        do
+                        {
+                            string safeIndex = item.Index.Replace("/", "_").Replace("\\", "_");
+                            string fileName = $"{safeIndex}_{counter}{extension}";
+                            filePath = Path.Combine(baseDirectory, fileName);
+                            counter++;
+                        }
+                        while (File.Exists(filePath));
+
+                        await File.WriteAllBytesAsync(filePath, imgBytes, ct);
+                        savedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failedCount++;
+                        _logger.LogWarning(ex, "Failed to save image for Index: {Index}, Url: {Url}", item.Index, item.Url);
+                    }
                 }
+
+                _logger.LogInformation("Image sync completed. Saved: {Saved}, Failed: {Failed}", savedCount, failedCount);
             }
             catch (Exception ex)
             {

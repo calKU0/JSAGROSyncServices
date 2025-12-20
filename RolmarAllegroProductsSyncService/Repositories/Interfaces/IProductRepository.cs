@@ -11,6 +11,8 @@ namespace RolmarAllegroProductsSyncService.Repositories.Interfaces
 
         Task<List<RolmarProduct>> GetProductsToUpload(int minProductStock, CancellationToken ct);
 
+        Task<List<RolmarProduct>> GetAllProducts(CancellationToken ct);
+
         Task<List<RolmarProduct>> GetProductsWithoutDefaultCategory(CancellationToken ct);
 
         Task<List<RolmarProduct>> GetProductsToUpdateParameters(CancellationToken ct);
@@ -18,5 +20,9 @@ namespace RolmarAllegroProductsSyncService.Repositories.Interfaces
         Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct);
 
         Task UpdateProductAllegroCategory(string code, string categoryId, CancellationToken ct);
+
+        Task<List<RolmarProduct>> GetNotExistingProductsInAllegro(CancellationToken ct);
+
+        Task UpdateProductAllegroId(int productId, string allegroProductId, string allegroCategoryId, CancellationToken ct);
     }
 }
