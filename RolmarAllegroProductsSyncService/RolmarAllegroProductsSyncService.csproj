@@ -41,6 +41,15 @@
     <None Update="Migrations\20251217_01_AddRolmarCategoryTable.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Migrations\20251220_02_AddAllegroImagesTable.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Migrations\20251220_01_AddAllegroIdColumn.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Migrations\20251220_03_AddSupplierColumns.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\Images\jsagro-logo.jpg">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

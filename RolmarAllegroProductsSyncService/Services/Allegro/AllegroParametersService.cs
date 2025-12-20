@@ -92,10 +92,13 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
             if (param == null) return null;
 
             var name = param.Name?.ToLowerInvariant();
-
+            var length = product.Specifications?.FirstOrDefault(s => s.Name.Equals("Długość", StringComparison.OrdinalIgnoreCase))?.Value;
             var directMappings = new Dictionary<string, Func<RolmarProduct, string>>(StringComparer.OrdinalIgnoreCase)
             {
                 ["stan"] = _ => "Nowy",
+                ["Długość"] = _ => length,
+                ["Długość bitu"] = _ => length,
+                ["ean"] = p => p.Ean,
                 ["waga produktu z opakowaniem jednostkowym"] = p => p.Weight.ToString(),
                 ["numer katalogowy części"] = p => p.Code,
                 ["typ maszyny"] = _ => "Inny",

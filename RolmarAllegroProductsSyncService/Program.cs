@@ -98,10 +98,11 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IParameterRepository, ParameterRepository>();
         services.AddScoped<ITokenRepository, DbTokenRepository>();
         services.AddScoped<IOfferRepository, OfferRepository>();
+        services.AddScoped<IImageRespository, ImageRepository>();
 
         // Services
+        services.AddScoped<IAllegroProductService, AllegroProductService>();
         services.AddScoped<IAllegroOfferService, AllegroOfferService>();
-        services.AddScoped<RolmarAllegroProductsSyncService.Services.Interfaces.IAllegroImageService, AllegroImageService>();
         services.AddScoped<IAllegroCategoryService, AllegroCategoryService>();
         services.AddScoped<IAllegroParametersService, AllegroParametersService>();
 

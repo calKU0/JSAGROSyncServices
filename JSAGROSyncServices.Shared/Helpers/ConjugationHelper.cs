@@ -8,6 +8,7 @@
                 return string.Empty;
 
             unit = unit.Trim().ToLower().Replace(".", "");
+            unit = unit == "opak" ? "szt" : unit;
 
             switch (unit)
             {
@@ -28,7 +29,7 @@
                         return "sztuk";
 
                 case "kpl":
-                    return packQty == 1 ? "Komplet" : "Komplety";
+                    return packQty == 1 ? "komplet" : "komplety";
 
                 case "para":
                     return packQty == 1 ? "para" : "par";

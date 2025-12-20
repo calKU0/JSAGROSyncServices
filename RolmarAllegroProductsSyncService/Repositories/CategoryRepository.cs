@@ -72,7 +72,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                     cpv.Id AS ValueId, cpv.Value, cpv.CategoryParameterId
                 FROM CategoryParameters cp
                 LEFT JOIN CategoryParameterValues cpv ON cp.Id = cpv.CategoryParameterId
-                WHERE cp.CategoryId = @CategoryId";
+                WHERE cp.CategoryId = @CategoryId AND DescribesProduct = 0";
 
             using var conn = _context.CreateConnection();
 
