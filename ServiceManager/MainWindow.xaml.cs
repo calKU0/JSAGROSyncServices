@@ -1,16 +1,19 @@
-﻿using ServiceManager.Enums;
+﻿using Microsoft.Extensions.Configuration;
+using ServiceManager.Enums;
+using ServiceManager.Helpers;
 using ServiceManager.Models;
 using System.Collections.ObjectModel;
-using System.Configuration;
 using System.Globalization;
 using System.IO;
 using System.ServiceProcess;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using System.Collections.Specialized;
-using ServiceManager.Helpers;
+using ConfigurationManager = System.Configuration.ConfigurationManager;
 
 namespace ServiceManager
 {
@@ -26,12 +29,16 @@ namespace ServiceManager
         private const int PageLines = 1000;
 
         private readonly BulkObservableCollection<LogLine> _currentLogLines = new();
+        private BulkObservableCollection<LogLine> _filteredLogLines = new();
         private string? _currentPath;
         private long _loadedStartOffset = 0;
         private bool _isLoadingMore = false;
         private bool _reachedFileStart = false;
         private long _lastReadOffset = 0;
         private object _lastSelectedLog;
+        private bool _isAtBottom = true;
+        private readonly List<(TextBox Min, TextBox Max, TextBox Name)> _deliveryTextBoxes = new();
+        private List<Delivery> _deliveries = new();
 
         public MainWindow()
         {
@@ -159,7 +166,9 @@ namespace ServiceManager
             ConfigViewContainer.Visibility = Visibility.Collapsed;
 
             LvLogFiles.ItemsSource = logFiles;
-            IcLogLines.ItemsSource = _currentLogLines;
+            IcLogLines.ItemsSource = _filteredLogLines;
+
+            HookLogLinesScrollViewer();
 
             if (refreshTimer != null)
             {
@@ -207,6 +216,7 @@ namespace ServiceManager
                 {
                     // update in-memory log lines
                     _currentLogLines.AddRange(newLines.Select(ParseLogLine));
+                    ApplyFilter();
 
                     // update warning/error counters
                     int newWarnings = newLines.Count(l => l.Contains("WRN]", StringComparison.Ordinal));
@@ -231,14 +241,59 @@ namespace ServiceManager
             }
         }
 
+        private IConfigurationRoot LoadAppSettings(string path)
+        {
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(Path.GetDirectoryName(path) ?? ".")
+                .AddJsonFile(Path.GetFileName(path), optional: false, reloadOnChange: true);
+
+            return builder.Build();
+        }
+
+        private void SaveAppSettings(string path, Dictionary<string, string> values)
+        {
+            var json = File.ReadAllText(path);
+            var jsonObject = JsonNode.Parse(json)?.AsObject() ?? new JsonObject();
+
+            foreach (var kvp in values)
+            {
+                var parts = kvp.Key.Split(':');
+                JsonObject current = jsonObject;
+
+                for (int i = 0; i < parts.Length - 1; i++)
+                {
+                    if (current[parts[i]] == null || current[parts[i]].GetType() != typeof(JsonObject))
+                        current[parts[i]] = new JsonObject();
+                    current = current[parts[i]].AsObject();
+                }
+
+                current.Remove(parts[^1]);
+
+                if (kvp.Value.StartsWith("{") || kvp.Value.StartsWith("["))
+                {
+                    current[parts[^1]] = JsonNode.Parse(kvp.Value);
+                }
+                else
+                {
+                    current[parts[^1]] = JsonValue.Create(kvp.Value);
+                }
+            }
+
+            var options = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+            File.WriteAllText(path, jsonObject.ToJsonString(options));
+        }
+
         private void LoadConfig()
         {
             if (_selectedService == null) return;
 
             try
             {
-                var map = new ExeConfigurationFileMap { ExeConfigFilename = _selectedService.ExternalConfigPath };
-                var config = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
+                var config = LoadAppSettings(_selectedService.ExternalConfigPath);
 
                 ConfigStackPanel.Children.Clear();
 
@@ -246,18 +301,20 @@ namespace ServiceManager
 
                 foreach (var group in groupedFields)
                 {
-                    // Keep only fields that exist in config
-                    var existingFields = group.Where(f => config.AppSettings.Settings.AllKeys.Contains(f.Key)).ToList();
+                    // Keep only fields that exist in JSON
+                    var existingFields = group
+                        .Where(f => config.GetSection(f.Key).Exists())
+                        .ToList();
 
                     if (!existingFields.Any())
-                        continue; // skip empty groups
+                        continue;
 
                     var groupBox = new GroupBox { Header = group.Key, Margin = new Thickness(0, 6, 0, 6) };
                     var groupPanel = new StackPanel { Margin = new Thickness(6) };
 
                     foreach (var field in existingFields)
                     {
-                        string value = config.AppSettings.Settings[field.Key]?.Value ?? "";
+                        string value = config[field.Key] ?? "";
 
                         var label = new TextBlock
                         {
@@ -279,7 +336,7 @@ namespace ServiceManager
                         };
 
                         var grid = new Grid();
-                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });
+                        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(295) });
                         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
                         Grid.SetColumn(label, 0);
@@ -294,7 +351,9 @@ namespace ServiceManager
                     groupBox.Content = groupPanel;
                     ConfigStackPanel.Children.Add(groupBox);
                 }
+                LoadDeliveries(config);
 
+                // Save button
                 var saveButton = new Button
                 {
                     Content = "Zapisz",
@@ -310,7 +369,6 @@ namespace ServiceManager
                 };
 
                 saveButton.Click += BtnSaveConfig_Click;
-
                 ConfigStackPanel.Children.Add(saveButton);
 
                 ConfigViewContainer.Visibility = Visibility.Visible;
@@ -320,6 +378,98 @@ namespace ServiceManager
                 MessageBox.Show($"Nie udało się załadować konfiguracji: {ex.Message}");
             }
         }
+
+        private void LoadDeliveries(IConfiguration config)
+        {
+            _deliveryTextBoxes.Clear();
+            var section = config.GetSection("AppSettings:Deliveries");
+
+            if (!section.Exists())
+                return;
+
+            _deliveries = section.Get<List<Delivery>>() ?? new List<Delivery>();
+
+            var groupBox = new GroupBox
+            {
+                Header = "Dostawy",
+                Margin = new Thickness(0, 6, 0, 6)
+            };
+
+            var panel = new StackPanel { Margin = new Thickness(6) };
+
+            // Header
+            var header = new Grid();
+            header.ColumnDefinitions.Add(new ColumnDefinition());
+            header.ColumnDefinitions.Add(new ColumnDefinition());
+            header.ColumnDefinitions.Add(new ColumnDefinition());
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            header.Children.Add(new TextBlock { Text = "Od", FontWeight = FontWeights.Bold });
+            Grid.SetColumn(header.Children[^1], 0);
+            header.Children.Add(new TextBlock { Text = "Do", FontWeight = FontWeights.Bold });
+            Grid.SetColumn(header.Children[^1], 1);
+            header.Children.Add(new TextBlock { Text = "Nazwa dostawy", FontWeight = FontWeights.Bold });
+            Grid.SetColumn(header.Children[^1], 2);
+
+            panel.Children.Add(header);
+
+            foreach (var d in _deliveries)
+                AddDeliveryRow(panel, d.Min, d.Max, d.DeliveryName);
+
+            var addBtn = new Button
+            {
+                Content = "Dodaj dostawę",
+                Margin = new Thickness(0, 6, 0, 0)
+            };
+            addBtn.Click += (_, _) => AddDeliveryRow(panel, 0, 0, "");
+
+            panel.Children.Add(addBtn);
+            groupBox.Content = panel;
+            ConfigStackPanel.Children.Add(groupBox);
+        }
+
+        private void AddDeliveryRow(StackPanel panel, decimal min, decimal max, string name)
+        {
+            var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.ColumnDefinitions.Add(new ColumnDefinition());
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var minBox = new TextBox { Text = min.ToString(), Margin = new Thickness(2) };
+            var maxBox = new TextBox { Text = max.ToString(), Margin = new Thickness(2) };
+            var nameBox = new TextBox { Text = name, Margin = new Thickness(2) };
+
+            Grid.SetColumn(minBox, 0);
+            Grid.SetColumn(maxBox, 1);
+            Grid.SetColumn(nameBox, 2);
+
+            var removeBtn = new Button
+            {
+                Content = "✖",
+                Foreground = Brushes.Red,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand
+            };
+
+            removeBtn.Click += (_, _) =>
+            {
+                panel.Children.Remove(grid);
+                _deliveryTextBoxes.Remove((minBox, maxBox, nameBox));
+            };
+
+            Grid.SetColumn(removeBtn, 3);
+
+            grid.Children.Add(minBox);
+            grid.Children.Add(maxBox);
+            grid.Children.Add(nameBox);
+            grid.Children.Add(removeBtn);
+
+            panel.Children.Add(grid);
+            _deliveryTextBoxes.Add((minBox, maxBox, nameBox));
+        }
+
 
         private void BtnReloadConfig_Click(object sender, RoutedEventArgs e)
         {
@@ -332,32 +482,101 @@ namespace ServiceManager
 
             try
             {
-                var map = new ExeConfigurationFileMap { ExeConfigFilename = _selectedService.ExternalConfigPath };
-                var config = ConfigurationManager.OpenMappedExeConfiguration(map, ConfigurationUserLevel.None);
+                var valuesToSave = new Dictionary<string, string>();
+                var errors = new List<string>();
 
+                // ---- normal fields ----
                 foreach (var grid in ConfigStackPanel.Children.OfType<GroupBox>()
                              .SelectMany(gb => ((StackPanel)gb.Content).Children.OfType<Grid>()))
                 {
                     var tb = grid.Children.OfType<TextBox>().FirstOrDefault();
                     if (tb != null && tb.Tag is string key)
                     {
-                        string value = tb.Text;
-                        if (config.AppSettings.Settings[key] != null)
-                            config.AppSettings.Settings[key].Value = value;
-                        else
-                            config.AppSettings.Settings.Add(key, value);
+                        var fieldDef = ConfigFieldDefinitions.AllFields.FirstOrDefault(f => f.Key == key);
+                        var value = tb.Text.Trim();
+
+                        if (fieldDef != null)
+                        {
+                            switch (fieldDef.FieldType)
+                            {
+                                case ConfigFieldType.Int:
+                                    if (!int.TryParse(value, out _))
+                                        errors.Add($"Pole „{fieldDef.Label}” wymaga liczby całkowitej.");
+                                    break;
+
+                                case ConfigFieldType.Decimal:
+                                    if (!decimal.TryParse(
+                                            value,
+                                            NumberStyles.Any,
+                                            CultureInfo.InvariantCulture,
+                                            out _))
+                                        errors.Add($"Pole „{fieldDef.Label}” wymaga liczby dziesiętnej (np. 12.5).");
+                                    break;
+                            }
+                        }
+
+                        valuesToSave[key] = value;
                     }
                 }
 
-                config.Save(ConfigurationSaveMode.Modified);
-                ConfigurationManager.RefreshSection("appSettings");
-                MessageBox.Show("Konfiguracja zapisana.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                // ---- deliveries validation & build ----
+                var deliveries = new List<Delivery>();
+
+                foreach (var t in _deliveryTextBoxes)
+                {
+                    if (!decimal.TryParse(t.Min.Text, CultureInfo.InvariantCulture, out var min) ||
+                        !decimal.TryParse(t.Max.Text, CultureInfo.InvariantCulture, out var max))
+                    {
+                        errors.Add("Zakres dostawy musi zawierać poprawne wartości liczbowe.");
+                        continue;
+                    }
+
+                    if (min >= max)
+                        errors.Add($"Zakres dostawy niepoprawny: {min} >= {max}");
+
+                    if (string.IsNullOrWhiteSpace(t.Name.Text))
+                        errors.Add("Nazwa dostawy nie może być pusta.");
+
+                    deliveries.Add(new Delivery
+                    {
+                        Min = min,
+                        Max = max,
+                        DeliveryName = t.Name.Text.Trim()
+                    });
+                }
+
+                if (errors.Any())
+                {
+                    MessageBox.Show(
+                        string.Join("\n", errors),
+                        "Błąd walidacji",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                // ---- save everything ONCE ----
+                valuesToSave["AppSettings:Deliveries"] =
+                    JsonSerializer.Serialize(deliveries);
+
+                SaveAppSettings(_selectedService.ExternalConfigPath, valuesToSave);
+
+                MessageBox.Show(
+                    "Konfiguracja zapisana.",
+                    "Info",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Nie udało się zapisać konfiguracji: {ex.Message}", "Błąd", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(
+                    $"Nie udało się zapisać konfiguracji: {ex.Message}",
+                    "Błąd",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
+
 
         private void LoadLogFiles()
         {
@@ -429,11 +648,107 @@ namespace ServiceManager
             }
         }
 
+        private async Task LoadEntireFileWithFilterAsync()
+        {
+            if (LvLogFiles.SelectedItem is not LogFileItem item || !File.Exists(item.Path))
+                return;
+
+            _currentLogLines.Clear();
+
+            // Inicjalizujemy zmienną
+            string[] allLines = Array.Empty<string>();
+
+            // Czytamy plik w tle
+            await Task.Run(() =>
+            {
+                using var fs = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(fs);
+
+                var lines = new List<string>();
+                string? line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    lines.Add(line);
+                }
+
+                allLines = lines.ToArray();
+            });
+
+            // Filtrujemy linie
+            var filteredLines = allLines.Select(ParseLogLine)
+                                        .Where(l => l.Level == LogLevel.Error || l.Level == LogLevel.Warning);
+
+            _currentLogLines.AddRange(filteredLines);
+
+            ApplyFilter(); // Aktualizujemy widok
+        }
+
+        private void ApplyFilter()
+        {
+            _filteredLogLines.Clear();
+
+            bool filter = ChkShowOnlyWarningsAndErrors.IsChecked == true;
+
+            foreach (var line in _currentLogLines)
+            {
+                if (!filter || line.Level == LogLevel.Warning || line.Level == LogLevel.Error)
+                    _filteredLogLines.Add(line);
+            }
+
+            if (_filteredLogLines.Count > 0 && _isAtBottom)
+                IcLogLines.ScrollIntoView(_filteredLogLines[^1]);
+        }
+
+        private async void ChkShowOnlyWarningsAndErrors_Changed(object sender, RoutedEventArgs e)
+        {
+            if (ChkShowOnlyWarningsAndErrors.IsChecked == true)
+            {
+                await LoadEntireFileWithFilterAsync();
+            }
+            else
+            {
+                LoadSelectedFileContent();
+            }
+        }
+
         private void IcLogLines_ScrollChanged(object sender, ScrollChangedEventArgs e)
         {
-            // np. doładowywanie przy dojściu do góry
-            if (e.VerticalOffset <= 0)
+            var sv = e.OriginalSource as ScrollViewer;
+            if (sv != null)
+            {
+                _isAtBottom = sv.VerticalOffset >= sv.ScrollableHeight - 1;
+            }
+
+            if (e.VerticalOffset <= 2)
                 _ = LoadMoreAsync();
+        }
+
+        private void HookLogLinesScrollViewer()
+        {
+            // Use Dispatcher to ensure layout is ready
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var sv = GetScrollViewer(IcLogLines);
+                if (sv != null)
+                {
+                    sv.ScrollChanged -= IcLogLines_ScrollChanged; // prevent double hook
+                    sv.ScrollChanged += IcLogLines_ScrollChanged;
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        private ScrollViewer? GetScrollViewer(DependencyObject dep)
+        {
+            if (dep is ScrollViewer viewer)
+                return viewer;
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(dep); i++)
+            {
+                var child = VisualTreeHelper.GetChild(dep, i);
+                var result = GetScrollViewer(child);
+                if (result != null) return result;
+            }
+            return null;
         }
 
         private async void LoadSelectedFileContent()
@@ -454,13 +769,14 @@ namespace ServiceManager
                 _reachedFileStart = reachedStart;
 
                 _currentLogLines.AddRange(lines.Select(ParseLogLine));
+                ApplyFilter();
 
                 await Dispatcher.BeginInvoke(() =>
                 {
-                    if (IcLogLines.Items.Count > 0)
+                    if (IcLogLines.Items.Count > 0 && _isAtBottom)
                     {
                         IcLogLines.UpdateLayout();
-                        IcLogLines.ScrollIntoView(IcLogLines.Items[^1]); // bottom
+                        IcLogLines.ScrollIntoView(IcLogLines.Items[^1]);
                     }
                 }, DispatcherPriority.Background);
             }
@@ -485,6 +801,7 @@ namespace ServiceManager
                 if (older.Count > 0)
                 {
                     _currentLogLines.InsertRange(0, older.Select(ParseLogLine));
+                    ApplyFilter();
                     _loadedStartOffset = newStart;
                     _reachedFileStart = reachedStart;
 

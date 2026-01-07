@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using ServiceManager.Enums;
 
 namespace ServiceManager.Models
 {
@@ -13,5 +9,6 @@ namespace ServiceManager.Models
         public string Description { get; set; } = "";
         public string Group { get; set; } = "Other";
         public bool IsEnabled { get; set; } = true;
+        public ConfigFieldType FieldType { get; set; } = ConfigFieldType.String;
     }
 }
