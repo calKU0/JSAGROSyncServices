@@ -235,3 +235,5 @@ _Pvt_Extensions
 
 # Project
 App.config
+appsettings.json
+appsettings.development.json
