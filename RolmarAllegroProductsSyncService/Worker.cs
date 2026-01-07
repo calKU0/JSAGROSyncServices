@@ -87,11 +87,11 @@ namespace RolmarAllegroProductsSyncService
                 }
 
                 await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());
-                //await MeasureStepAsync("Products search", () => productService.SearchProducts());
-                //await MeasureStepAsync("Category parameters fetch", () => categoryService.FetchAndSaveCategoryParameters());
-                //await MeasureStepAsync("Product parameters update", () => parameterService.UpdateParameters());
-                //await MeasureStepAsync("Offers creation", () => offerService.CreateOffers());
-                //await MeasureStepAsync("Offers update", () => offerService.UpdateOffers());
+                await MeasureStepAsync("Products search", () => productService.SearchProducts());
+                await MeasureStepAsync("Category parameters fetch", () => categoryService.FetchAndSaveCategoryParameters());
+                await MeasureStepAsync("Product parameters update", () => parameterService.UpdateParameters());
+                await MeasureStepAsync("Offers creation", () => offerService.CreateOffers());
+                await MeasureStepAsync("Offers update", () => offerService.UpdateOffers());
 
                 totalStopwatch.Stop();
 

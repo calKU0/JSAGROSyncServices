@@ -496,7 +496,14 @@ namespace RolmarAllegroProductsSyncService.Helpers
 
         private static string GetDelivery(RolmarProduct product, List<Settings.Delivery> deliveries)
         {
-            return deliveries.First().DeliveryName;
+            var delivery = deliveries
+                .Where(d => d.Weight >= product.Weight)
+                .OrderBy(d => d.Weight)
+                .FirstOrDefault();
+
+            // fallback if no delivery can handle the weight
+            return delivery?.DeliveryName
+                   ?? deliveries.OrderBy(d => d.Weight).Last().DeliveryName;
         }
 
         private static string RemoveHiddenAscii(string input)
