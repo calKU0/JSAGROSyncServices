@@ -396,7 +396,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                         Substitutes = product.Substitutes,
                         IntegrationCompany = "Rolmar",
                         PriceNet = decimal.TryParse(product.Price, out var pn) ? pn : 0,
-                        PriceGross = decimal.TryParse(product.RetailPrice, out var pg) ? pg : 0,
+                        PriceGross = decimal.TryParse(product.Price, out var pg) ? pg * 1.23m : 0,
                         Package = decimal.TryParse(product.ErpPackage, out var pkg) ? pkg : 0
                     },
                     transaction

@@ -391,7 +391,8 @@ namespace GaskaAllegroProductsSyncService.Repositories
                     return (offer, product);
                 },
                 new { DeliveryName = _deliveryName },
-                splitOn: "Id"
+                splitOn: "Id",
+                commandTimeout: 900
             )).ToList();
 
             if (!offersWithProducts.Any())
@@ -472,6 +473,11 @@ namespace GaskaAllegroProductsSyncService.Repositories
                 new { ProductId = productId }
             );
 
+            var offerId = await connection.QueryFirstOrDefaultAsync<string>(
+                @"SELECT Id FROM AllegroOffers WHERE ExternalId = @CodeGaska",
+                new { CodeGaska = codeGaska }
+            );
+
             if (codeGaska == null)
             {
                 _logger.LogWarning("Product with Id {ProductId} not found. Cannot delete offer.", productId);
@@ -480,12 +486,18 @@ namespace GaskaAllegroProductsSyncService.Repositories
 
             // Delete AllegroOffers where ExternalId = CodeGaska
             var sql = @"
+                DELETE FROM AllegroOfferAttributes
+                WHERE OfferId = @OfferId
+
+                DELETE FROM AllegroOfferDescriptions
+                WHERE OfferId = @OfferId
+
                 DELETE FROM AllegroOffers
-                WHERE ExternalId = @CodeGaska";
+                WHERE Id = @OfferId";
 
-            var affectedRows = await connection.ExecuteAsync(sql, new { CodeGaska = codeGaska });
+            var affectedRows = await connection.ExecuteAsync(sql, new { OfferId = offerId });
 
-            _logger.LogInformation("Deleted {Count} Allegro offer(s) for product {CodeGaska}.", affectedRows, codeGaska);
+            _logger.LogInformation("Deleted Allegro offer for product {CodeGaska}.", codeGaska);
         }
     }
 }

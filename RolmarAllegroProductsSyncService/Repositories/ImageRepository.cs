@@ -37,6 +37,22 @@ namespace RolmarAllegroProductsSyncService.Repositories
             );
         }
 
+        public async Task DeleteNotConnectedImages(int productId, CancellationToken ct)
+        {
+            const string sql = @"
+                DELETE FROM dbo.AllegroImages
+                WHERE ProductId = @ProductId
+                  AND Connected = 0;
+                ";
+
+            using var connection = _context.CreateConnection();
+            connection.Open();
+            await connection.ExecuteScalarAsync<int>(
+                sql,
+                new { ProductId = productId }
+            );
+        }
+
         public async Task MarkImagesAsConnectedAsync(int productId, CancellationToken ct)
         {
             const string sql = @"

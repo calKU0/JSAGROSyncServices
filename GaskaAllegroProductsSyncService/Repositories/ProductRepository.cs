@@ -1006,14 +1006,21 @@ namespace GaskaAllegroProductsSyncService.Repositories
                 // 4. If CodeGaska is in the name AND <3 words → add SupplierName or 'a'
                 if (codeGaskaAppended && newWords.Length < 3)
                 {
+                    var firstCross = crossNumbers?.FirstOrDefault() ?? "";
                     if (!string.IsNullOrWhiteSpace(supplierName))
                     {
                         name = $"{name} {supplierName}".Trim();
                     }
                     else
                     {
-                        name = $"{name} a".Trim();
+                        name = $"{name} {firstCross}".Trim();
                     }
+                }
+
+                newWords = name.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToArray();
+                if (newWords.Length < 3)
+                {
+                    name = $"{name} a".Trim();
                 }
 
                 // 5. If longer than 75 chars → remove last words until < 75

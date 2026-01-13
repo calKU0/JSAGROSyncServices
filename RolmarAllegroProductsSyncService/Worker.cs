@@ -53,6 +53,8 @@ namespace RolmarAllegroProductsSyncService
 
         private async Task RunSyncCycleAsync(IServiceProvider services, CancellationToken ct)
         {
+            var syncStateService = services.GetRequiredService<ISyncStateService>();
+
             var rolmarSyncService = services.GetRequiredService<IRolmarSyncService>();
             var allegroApiClient = services.GetRequiredService<AllegroApiClient>();
             var allegroAuthService = services.GetRequiredService<AllegroAuthService>();
@@ -81,9 +83,28 @@ namespace RolmarAllegroProductsSyncService
 
                 await MeasureStepAsync("Basic product sync", () => rolmarSyncService.SyncProductsAsync());
                 await MeasureStepAsync("Stock sync", () => rolmarSyncService.SyncStockAsync());
-                if (DateTime.Now.DayOfYear % 31 == 0) // once a month
+
+                var previousCategoriesName = await syncStateService.GetLastCategoriesNameAsync();
+                var currentCategoriesName = _appSettings.CategoriesName;
+
+                bool categoriesChanged =
+                    string.IsNullOrWhiteSpace(previousCategoriesName) ||
+                    !string.Equals(previousCategoriesName, currentCategoriesName, StringComparison.OrdinalIgnoreCase);
+
+                if (categoriesChanged)
                 {
                     await MeasureStepAsync("Images sync", () => rolmarSyncService.SyncImagesAsync());
+
+                    await syncStateService.SetLastCategoriesNameAsync(currentCategoriesName);
+
+                    _logger.LogInformation(
+                        "CategoriesName changed (old: '{Old}', new: '{New}'), images synced.",
+                        previousCategoriesName,
+                        currentCategoriesName);
+                }
+                else
+                {
+                    _logger.LogInformation("CategoriesName unchanged. Skipping image sync.");
                 }
 
                 await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());

@@ -36,6 +36,7 @@ namespace ServiceManager.Helpers
 
             // AppSettings
             new ConfigField { Key = "AppSettings:CategoriesId", Label = "ID synchronizowanych kategorii", Group = "Inne ustawienia" },
+            new ConfigField { Key = "AppSettings:CategoriesName", Label = "Nazwy synchronizowanych kategorii", Group = "Inne ustawienia" },
             new ConfigField { Key = "AppSettings:MinProductStock", Label = "Minimalny stan produktu", Group = "Inne ustawienia", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:LogsExpirationDays", Label = "Ilość dni zachowania logów", Group = "Inne ustawienia", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:FetchIntervalMinutes", Label = "Co ile wywoływać synchronizację (min)", Group = "Inne ustawienia", FieldType = ConfigFieldType.Int },

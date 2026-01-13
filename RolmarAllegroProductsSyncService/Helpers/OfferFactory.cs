@@ -107,7 +107,7 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = (CalculatePrice(offer.Product.PriceGross, productQuantity, appSettings.OwnMarginPercent, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN) * 10).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = (CalculatePrice(offer.Product.PriceGross, productQuantity, appSettings.OwnMarginPercent, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN)).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -443,7 +443,7 @@ namespace RolmarAllegroProductsSyncService.Helpers
             if (initialPrice < 10m)
                 effectiveMargin = ownMarginPercentLessThan10PLN;
 
-            calculatedPrice = initialPrice * quantity * (1 + (effectiveMargin / 100m));
+            calculatedPrice = initialPrice * (1 + (effectiveMargin / 100m));
 
             // Tiered pricing rules
             if (calculatedPrice < 5m)
@@ -496,14 +496,57 @@ namespace RolmarAllegroProductsSyncService.Helpers
 
         private static string GetDelivery(RolmarProduct product, List<Settings.Delivery> deliveries)
         {
-            var delivery = deliveries
-                .Where(d => d.Weight >= product.Weight)
+            if (deliveries == null || deliveries.Count == 0)
+                return null;
+
+            var productWeight = (decimal)product.Weight;
+
+            var length = GetDimensionCm(product, "Długość");
+            var width = GetDimensionCm(product, "Szerokość");
+            var height = GetDimensionCm(product, "Wysokość");
+
+            var matchingDelivery = deliveries
+                .Where(d =>
+                    d.Weight >= productWeight &&
+                    (length == null || d.Length >= length) &&
+                    (width == null || d.Width >= width) &&
+                    (height == null || d.Height >= height))
                 .OrderBy(d => d.Weight)
+                .ThenBy(d => d.Length * d.Width * d.Height) // smallest volume wins
                 .FirstOrDefault();
 
-            // fallback if no delivery can handle the weight
-            return delivery?.DeliveryName
-                   ?? deliveries.OrderBy(d => d.Weight).Last().DeliveryName;
+            // Fallback: biggest delivery
+            return matchingDelivery?.DeliveryName
+                ?? deliveries
+                    .OrderByDescending(d => d.Weight)
+                    .ThenByDescending(d => d.Length * d.Width * d.Height)
+                    .First()
+                    .DeliveryName;
+        }
+
+        private static decimal? GetDimensionCm(RolmarProduct product, string dimensionName)
+        {
+            var spec = product.Specifications?
+                .FirstOrDefault(s =>
+                    string.Equals(s.Name, dimensionName, StringComparison.OrdinalIgnoreCase));
+
+            if (spec == null)
+                return null;
+
+            if (!decimal.TryParse(
+                    spec.Value.Replace(",", "."),
+                    NumberStyles.Any,
+                    CultureInfo.InvariantCulture,
+                    out var value))
+                return null;
+
+            return spec.UnitName?.ToLower() switch
+            {
+                "mm" => value / 10m,
+                "cm" => value,
+                "m" => value * 100m,
+                _ => null
+            };
         }
 
         private static string RemoveHiddenAscii(string input)
