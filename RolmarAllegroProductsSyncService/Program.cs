@@ -101,6 +101,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IImageRespository, ImageRepository>();
 
         // Services
+        services.AddSingleton<ISyncStateService, FileSyncStateService>();
         services.AddScoped<IAllegroProductService, AllegroProductService>();
         services.AddScoped<IAllegroOfferService, AllegroOfferService>();
         services.AddScoped<IAllegroCategoryService, AllegroCategoryService>();

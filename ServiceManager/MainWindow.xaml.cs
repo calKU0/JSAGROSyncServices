@@ -37,7 +37,7 @@ namespace ServiceManager
         private long _lastReadOffset = 0;
         private object _lastSelectedLog;
         private bool _isAtBottom = true;
-        private readonly List<(TextBox Min, TextBox Max, TextBox Name)> _deliveryTextBoxes = new();
+        private readonly List<(TextBox Length, TextBox Width, TextBox Height, TextBox Weight, TextBox Name)> _deliveryTextBoxes = new();
         private List<Delivery> _deliveries = new();
 
         public MainWindow()
@@ -382,8 +382,8 @@ namespace ServiceManager
         private void LoadDeliveries(IConfiguration config)
         {
             _deliveryTextBoxes.Clear();
-            var section = config.GetSection("AppSettings:Deliveries");
 
+            var section = config.GetSection("AppSettings:Deliveries");
             if (!section.Exists())
                 return;
 
@@ -399,50 +399,69 @@ namespace ServiceManager
 
             // Header
             var header = new Grid();
-            header.ColumnDefinitions.Add(new ColumnDefinition());
-            header.ColumnDefinitions.Add(new ColumnDefinition());
-            header.ColumnDefinitions.Add(new ColumnDefinition());
-            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            for (int i = 0; i < 6; i++)
+                header.ColumnDefinitions.Add(new ColumnDefinition());
 
-            header.Children.Add(new TextBlock { Text = "Od", FontWeight = FontWeights.Bold });
-            Grid.SetColumn(header.Children[^1], 0);
-            header.Children.Add(new TextBlock { Text = "Do", FontWeight = FontWeights.Bold });
-            Grid.SetColumn(header.Children[^1], 1);
-            header.Children.Add(new TextBlock { Text = "Nazwa dostawy", FontWeight = FontWeights.Bold });
-            Grid.SetColumn(header.Children[^1], 2);
+            AddHeader(header, "Długość", 0);
+            AddHeader(header, "Szerokość", 1);
+            AddHeader(header, "Wysokość", 2);
+            AddHeader(header, "Waga", 3);
+            AddHeader(header, "Nazwa", 4);
 
             panel.Children.Add(header);
 
             foreach (var d in _deliveries)
-                AddDeliveryRow(panel, d.Min, d.Max, d.DeliveryName);
+                AddDeliveryRow(panel, d);
 
             var addBtn = new Button
             {
                 Content = "Dodaj dostawę",
                 Margin = new Thickness(0, 6, 0, 0)
             };
-            addBtn.Click += (_, _) => AddDeliveryRow(panel, 0, 0, "");
+
+            addBtn.Click += (_, _) =>
+            {
+                // insert before the "Add" button (which is last child)
+                int insertIndex = panel.Children.Count - 1;
+                AddDeliveryRow(panel, new Delivery(), insertIndex);
+            };
 
             panel.Children.Add(addBtn);
+
             groupBox.Content = panel;
             ConfigStackPanel.Children.Add(groupBox);
         }
 
-        private void AddDeliveryRow(StackPanel panel, decimal min, decimal max, string name)
+        private static void AddHeader(Grid grid, string text, int col)
+        {
+            var tb = new TextBlock
+            {
+                Text = text,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(2)
+            };
+            Grid.SetColumn(tb, col);
+            grid.Children.Add(tb);
+        }
+
+        private void AddDeliveryRow(StackPanel panel, Delivery d, int? insertIndex = null)
         {
             var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition());
-            grid.ColumnDefinitions.Add(new ColumnDefinition());
-            grid.ColumnDefinitions.Add(new ColumnDefinition());
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var minBox = new TextBox { Text = min.ToString(), Margin = new Thickness(2) };
-            var maxBox = new TextBox { Text = max.ToString(), Margin = new Thickness(2) };
-            var nameBox = new TextBox { Text = name, Margin = new Thickness(2) };
+            for (int i = 0; i < 6; i++)
+                grid.ColumnDefinitions.Add(new ColumnDefinition());
 
-            Grid.SetColumn(minBox, 0);
-            Grid.SetColumn(maxBox, 1);
-            Grid.SetColumn(nameBox, 2);
+            var lengthBox = new TextBox { Text = d.Length.ToString(), Margin = new Thickness(2) };
+            var widthBox = new TextBox { Text = d.Width.ToString(), Margin = new Thickness(2) };
+            var heightBox = new TextBox { Text = d.Height.ToString(), Margin = new Thickness(2) };
+            var weightBox = new TextBox { Text = d.Weight.ToString(CultureInfo.InvariantCulture), Margin = new Thickness(2) };
+            var nameBox = new TextBox { Text = d.DeliveryName, Margin = new Thickness(2) };
+
+            Grid.SetColumn(lengthBox, 0);
+            Grid.SetColumn(widthBox, 1);
+            Grid.SetColumn(heightBox, 2);
+            Grid.SetColumn(weightBox, 3);
+            Grid.SetColumn(nameBox, 4);
 
             var removeBtn = new Button
             {
@@ -456,20 +475,25 @@ namespace ServiceManager
             removeBtn.Click += (_, _) =>
             {
                 panel.Children.Remove(grid);
-                _deliveryTextBoxes.Remove((minBox, maxBox, nameBox));
+                _deliveryTextBoxes.Remove((lengthBox, widthBox, heightBox, weightBox, nameBox));
             };
 
-            Grid.SetColumn(removeBtn, 3);
+            Grid.SetColumn(removeBtn, 5);
 
-            grid.Children.Add(minBox);
-            grid.Children.Add(maxBox);
+            grid.Children.Add(lengthBox);
+            grid.Children.Add(widthBox);
+            grid.Children.Add(heightBox);
+            grid.Children.Add(weightBox);
             grid.Children.Add(nameBox);
             grid.Children.Add(removeBtn);
 
-            panel.Children.Add(grid);
-            _deliveryTextBoxes.Add((minBox, maxBox, nameBox));
-        }
+            if (insertIndex.HasValue)
+                panel.Children.Insert(insertIndex.Value, grid);
+            else
+                panel.Children.Add(grid);
 
+            _deliveryTextBoxes.Add((lengthBox, widthBox, heightBox, weightBox, nameBox));
+        }
 
         private void BtnReloadConfig_Click(object sender, RoutedEventArgs e)
         {
@@ -524,23 +548,27 @@ namespace ServiceManager
 
                 foreach (var t in _deliveryTextBoxes)
                 {
-                    if (!decimal.TryParse(t.Min.Text, CultureInfo.InvariantCulture, out var min) ||
-                        !decimal.TryParse(t.Max.Text, CultureInfo.InvariantCulture, out var max))
+                    if (!int.TryParse(t.Length.Text, out var length) ||
+                        !int.TryParse(t.Width.Text, out var width) ||
+                        !int.TryParse(t.Height.Text, out var height) ||
+                        !decimal.TryParse(t.Weight.Text, CultureInfo.InvariantCulture, out var weight))
                     {
-                        errors.Add("Zakres dostawy musi zawierać poprawne wartości liczbowe.");
+                        errors.Add("Wymiary i waga muszą być poprawnymi liczbami.");
                         continue;
                     }
 
-                    if (min >= max)
-                        errors.Add($"Zakres dostawy niepoprawny: {min} >= {max}");
+                    if (length <= 0 || width <= 0 || height <= 0 || weight <= 0)
+                        errors.Add("Wymiary i waga muszą być większe od zera.");
 
                     if (string.IsNullOrWhiteSpace(t.Name.Text))
                         errors.Add("Nazwa dostawy nie może być pusta.");
 
                     deliveries.Add(new Delivery
                     {
-                        Min = min,
-                        Max = max,
+                        Length = length,
+                        Width = width,
+                        Height = height,
+                        Weight = weight,
                         DeliveryName = t.Name.Text.Trim()
                     });
                 }
@@ -576,7 +604,6 @@ namespace ServiceManager
                     MessageBoxImage.Error);
             }
         }
-
 
         private void LoadLogFiles()
         {

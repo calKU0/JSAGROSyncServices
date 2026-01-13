@@ -148,8 +148,35 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
                 {
                     try
                     {
+                        // 🔹 Import images if missing
+                        if (offer.Product.AllegroImages == null || !offer.Product.AllegroImages.Any())
+                        {
+                            _logger.LogInformation(
+                                "No images for product {Name} ({Code}), importing...",
+                                offer.Product.Name,
+                                offer.Product.Code);
+
+                            var images = await ImportImages(offer.Product, token);
+
+                            if (images == null || !images.Any())
+                            {
+                                _logger.LogWarning(
+                                    "Skipping offer update for {Name} ({Code}) due to no images.",
+                                    offer.Product.Name,
+                                    offer.Product.Code);
+                                return;
+                            }
+
+                            offer.Product.AllegroImages = images;
+                        }
+
                         var offerDto = OfferFactory.PatchOffer(offer, _appSettings);
-                        var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, offerDto, token);
+
+                        var response = await _apiClient.SendWithResponseAsync(
+                            $"/sale/product-offers/{offer.Id}",
+                            HttpMethod.Patch,
+                            offerDto,
+                            token);
 
                         var body = await response.Content.ReadAsStringAsync(token);
 
@@ -157,7 +184,11 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Exception while updating offer for {Name} ({Code})", offer.Product.Name, offer.Product.Code);
+                        _logger.LogError(
+                            ex,
+                            "Exception while updating offer for {Name} ({Code})",
+                            offer.Product.Name,
+                            offer.Product.Code);
                     }
                 });
             }
@@ -237,18 +268,22 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
                 case 400:
                 case 422:
                 case 433:
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     await LogAllegroErrors(product, response, body, isUpdate);
                     break;
 
                 case 401:
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     _logger.LogError($"Unauthorized (401). Check token for product {product.Code} when {action} offer.");
                     break;
 
                 case 403:
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     _logger.LogError($"Forbidden (403). No permission for {action} offer for {product.Code}.");
                     break;
 
                 default:
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     _logger.LogError($"Unexpected status {(int)response.StatusCode} ({response.StatusCode}) while {action} offer for {product.Code}. Response: {body}");
                     break;
             }
