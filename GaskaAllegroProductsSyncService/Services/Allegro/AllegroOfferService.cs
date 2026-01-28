@@ -21,6 +21,8 @@ namespace GaskaAllegroProductsSyncService.Services.Allegro
         private readonly ICategoryRepository _categoryRepo;
         private readonly AllegroApiClient _apiClient;
         private readonly AppSettings _appSettings;
+        private readonly PriceSettings _priceSettings;
+        private readonly AllegroSettings _allegroSettings;
 
         private readonly JsonSerializerOptions _options = new JsonSerializerOptions
         {
@@ -31,13 +33,15 @@ namespace GaskaAllegroProductsSyncService.Services.Allegro
             WriteIndented = true
         };
 
-        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, ICategoryRepository categoryRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, ILogger<AllegroOfferService> logger, IImageRepository imageRepo)
+        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, ICategoryRepository categoryRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<AllegroSettings> allegroSettings, IOptions<PriceSettings> priceSettings, ILogger<AllegroOfferService> logger, IImageRepository imageRepo)
         {
             _productRepo = productRepo;
             _offerRepo = offerRepo;
             _categoryRepo = categoryRepo;
             _apiClient = apiClient;
             _appSettings = appsettings.Value;
+            _allegroSettings = allegroSettings.Value;
+            _priceSettings = priceSettings.Value;
             _logger = logger;
             _imageRepo = imageRepo;
         }
@@ -179,7 +183,7 @@ namespace GaskaAllegroProductsSyncService.Services.Allegro
                 {
                     try
                     {
-                        var offerDto = OfferFactory.PatchOffer(offer, allegroCategories, _appSettings);
+                        var offerDto = OfferFactory.PatchOffer(offer, allegroCategories, _appSettings, _allegroSettings, _priceSettings);
                         var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, offerDto, token);
 
                         var body = await response.Content.ReadAsStringAsync(token);
@@ -202,7 +206,7 @@ namespace GaskaAllegroProductsSyncService.Services.Allegro
         {
             try
             {
-                var products = await _productRepo.GetProductsToUpload(_appSettings.MinProductStock, ct);
+                var products = await _productRepo.GetProductsToUpload(_appSettings.MinProductStock, _appSettings.MinProductPriceNet, ct);
                 var allegroCategories = (await _categoryRepo.GetAllegroCategories(ct)).ToList();
 
                 if (products == null || !products.Any())
@@ -220,7 +224,7 @@ namespace GaskaAllegroProductsSyncService.Services.Allegro
                 {
                     try
                     {
-                        var offer = OfferFactory.BuildOffer(product, allegroCategories, _appSettings);
+                        var offer = OfferFactory.BuildOffer(product, allegroCategories, _appSettings, _allegroSettings, _priceSettings);
                         var response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, offer, token);
                         var body = await response.Content.ReadAsStringAsync();
                         await LogAllegroResponse(product, response, body);

@@ -10,13 +10,14 @@ using System.Globalization;
 
 namespace GaskaAllegroProductsSyncService.Repositories
 {
+    // TODO: BundleProducts Under X Price handling
     public class OfferRepository : IOfferRepository
     {
         private readonly DapperContext _context;
         private readonly string _deliveryName;
         private readonly ILogger<OfferRepository> _logger;
 
-        public OfferRepository(ILogger<OfferRepository> logger, DapperContext context, IOptions<AppSettings> options)
+        public OfferRepository(ILogger<OfferRepository> logger, DapperContext context, IOptions<AllegroSettings> options)
         {
             _logger = logger;
             _context = context;

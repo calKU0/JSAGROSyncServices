@@ -9,7 +9,7 @@ namespace GaskaAllegroProductsSyncService.Repositories.Interfaces
 
         Task<List<Product>> GetProductsForDetailUpdate(int limit, CancellationToken ct);
 
-        Task<List<Product>> GetProductsToUpload(int minProductStock, CancellationToken ct);
+        Task<List<Product>> GetProductsToUpload(int minProductStock, decimal minPrice, CancellationToken ct);
 
         Task<int> ArchiveProductsNotIn(HashSet<int> fetchedProductIds, CancellationToken ct);
 
