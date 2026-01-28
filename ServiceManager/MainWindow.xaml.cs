@@ -22,7 +22,9 @@ namespace ServiceManager
         private ObservableCollection<LogFileItem> logFiles = new ObservableCollection<LogFileItem>();
         private DispatcherTimer refreshTimer;
         private ServiceController _serviceController;
+        private readonly object _serviceLock = new();
         private FileSystemWatcher _logWatcher;
+        private readonly DispatcherTimer _logReloadDebounce;
         public ObservableCollection<ServiceItem> AvailableServices { get; } = new ObservableCollection<ServiceItem>();
         private ServiceItem? _selectedService;
         private const int InitialTailLines = 2000;
@@ -44,6 +46,17 @@ namespace ServiceManager
         {
             InitializeComponent();
             IcAvailableServices.ItemsSource = AvailableServices;
+
+            _logReloadDebounce = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(300)
+            };
+
+            _logReloadDebounce.Tick += async (_, _) =>
+            {
+                _logReloadDebounce.Stop();
+                await LoadLogFilesAsync();
+            };
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -69,8 +82,6 @@ namespace ServiceManager
             if (_logWatcher != null)
             {
                 _logWatcher.EnableRaisingEvents = false;
-                _logWatcher.Created -= (s, e) => Dispatcher.Invoke(LoadLogFiles);
-                _logWatcher.Deleted -= (s, e) => Dispatcher.Invoke(LoadLogFiles);
                 _logWatcher.Dispose();
                 _logWatcher = null;
             }
@@ -83,8 +94,14 @@ namespace ServiceManager
                 EnableRaisingEvents = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
             };
-            _logWatcher.Created += (s, e) => Dispatcher.Invoke(LoadLogFiles);
-            _logWatcher.Deleted += (s, e) => Dispatcher.Invoke(LoadLogFiles);
+            _logWatcher.Created += (_, _) => Dispatcher.InvokeAsync(TriggerLogReloadDebounced);
+            _logWatcher.Deleted += (_, _) => Dispatcher.InvokeAsync(TriggerLogReloadDebounced);
+        }
+
+        private void TriggerLogReloadDebounced()
+        {
+            _logReloadDebounce.Stop();
+            _logReloadDebounce.Start();
         }
 
         private void LoadAvailableServices()
@@ -118,11 +135,13 @@ namespace ServiceManager
             if (service == null) return;
 
             _selectedService = service;
+            _serviceController?.Close();
+            _serviceController?.Dispose();
             _serviceController = new ServiceController(service.ServiceName);
 
             InitLogWatcher();
-            RefreshServiceStatus();
-            LoadLogFiles();
+            _ = RefreshServiceStatusAsync();
+            _ = LoadLogFilesAsync();
             LoadConfig();
             _currentLogLines.Clear();
             ServiceNameTextBox.Text = service.Name;
@@ -159,7 +178,7 @@ namespace ServiceManager
             }
         }
 
-        private void BtnShowLogs_Click(object sender, RoutedEventArgs e)
+        private async void BtnShowLogs_Click(object sender, RoutedEventArgs e)
         {
             MainContentArea.Visibility = Visibility.Visible;
             LogsViewContainer.Visibility = Visibility.Visible;
@@ -182,7 +201,7 @@ namespace ServiceManager
             refreshTimer.Tick += RefreshTimer_Tick;
             refreshTimer.Start();
 
-            LoadLogFiles();
+            await LoadLogFilesAsync();
         }
 
         private void BtnShowConfig_Click(object sender, RoutedEventArgs e)
@@ -195,7 +214,7 @@ namespace ServiceManager
 
         private async void RefreshTimer_Tick(object sender, EventArgs e)
         {
-            RefreshServiceStatus();
+            await RefreshServiceStatusAsync();
 
             if (LogsViewContainer.Visibility != Visibility.Visible ||
                 LvLogFiles.SelectedItem is not LogFileItem item ||
@@ -605,66 +624,70 @@ namespace ServiceManager
             }
         }
 
-        private void LoadLogFiles()
+        private async Task LoadLogFilesAsync()
         {
             logFiles.Clear();
-            if (!Directory.Exists(_selectedService.LogFolderPath)) return;
+            if (_selectedService == null || !Directory.Exists(_selectedService.LogFolderPath)) return;
 
             try
             {
-                var files = Directory.GetFiles(_selectedService.LogFolderPath, "*.txt")
-                    .Select(filePath =>
-                    {
-                        int warnings = 0;
-                        int errors = 0;
-
-                        try
+                var files = await Task.Run(() =>
+                {
+                    return Directory.GetFiles(_selectedService.LogFolderPath, "*.txt")
+                        .Select(filePath =>
                         {
-                            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                            using (var sr = new StreamReader(fs))
+                            int warnings = 0;
+                            int errors = 0;
+
+                            try
                             {
-                                string line;
-                                while ((line = sr.ReadLine()) != null)
+                                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                                using (var sr = new StreamReader(fs))
                                 {
-                                    if (line.Contains("WRN]", StringComparison.Ordinal)) warnings++;
-                                    if (line.Contains("ERR]", StringComparison.Ordinal)) errors++;
+                                    string? line;
+                                    while ((line = sr.ReadLine()) != null)
+                                    {
+                                        if (line.Contains("WRN]", StringComparison.Ordinal)) warnings++;
+                                        if (line.Contains("ERR]", StringComparison.Ordinal)) errors++;
+                                    }
                                 }
+
+                                string fileName = Path.GetFileNameWithoutExtension(filePath);
+                                string datePart = fileName.Replace("log-", "");
+
+                                string formattedDate = fileName;
+                                DateTime? parsedDate = null;
+                                if (DateTime.TryParseExact(datePart, "yyyyMMdd", null, DateTimeStyles.None, out DateTime dt))
+                                {
+                                    formattedDate = dt.ToString("dd.MM.yyyy");
+                                    parsedDate = dt;
+                                }
+
+                                return new LogFileItem
+                                {
+                                    Name = formattedDate,
+                                    Path = filePath,
+                                    WarningsCount = warnings,
+                                    ErrorsCount = errors,
+                                    Date = parsedDate ?? DateTime.MinValue
+                                };
                             }
-
-                            string fileName = Path.GetFileNameWithoutExtension(filePath);
-                            string datePart = fileName.Replace("log-", "");
-
-                            string formattedDate = fileName;
-                            DateTime? parsedDate = null;
-                            if (DateTime.TryParseExact(datePart, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out DateTime dt))
+                            catch
                             {
-                                formattedDate = dt.ToString("dd.MM.yyyy");
-                                parsedDate = dt;
+                                return null;
                             }
+                        })
+                        .Where(f => f != null)
+                        .OrderByDescending(f => f!.Date)
+                        .ToList();
+                });
 
-                            return new LogFileItem
-                            {
-                                Name = formattedDate,
-                                Path = filePath,
-                                WarningsCount = warnings,
-                                ErrorsCount = errors,
-                                Date = parsedDate ?? DateTime.MinValue // add Date property in LogFileItem
-                            };
-                        }
-                        catch
-                        {
-                            return null;
-                        }
-                    })
-                    .Where(f => f != null)
-                    .OrderByDescending(f => f.Date) // latest first
-                    .ToList();
-
+                logFiles.Clear();
                 foreach (var f in files)
                     logFiles.Add(f);
 
-                // Auto-select latest file
-                if (logFiles.Count > 0)
+                // Auto-select latest file when none chosen
+                if (logFiles.Count > 0 && LvLogFiles.SelectedItem == null)
                 {
                     LvLogFiles.SelectedItem = logFiles[0];
                 }
@@ -675,17 +698,19 @@ namespace ServiceManager
             }
         }
 
-        private async Task LoadEntireFileWithFilterAsync()
+        private async Task LoadEntireFileWithFilterAsync(LogFileItem item)
         {
-            if (LvLogFiles.SelectedItem is not LogFileItem item || !File.Exists(item.Path))
-                return;
-
             _currentLogLines.Clear();
+            _isAtBottom = true;
+            _currentPath = item.Path;
 
-            // Inicjalizujemy zmienną
+            var info = new FileInfo(item.Path);
+            _lastReadOffset = info.Length;
+            _loadedStartOffset = 0;
+            _reachedFileStart = true;
+
             string[] allLines = Array.Empty<string>();
 
-            // Czytamy plik w tle
             await Task.Run(() =>
             {
                 using var fs = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -701,13 +726,23 @@ namespace ServiceManager
                 allLines = lines.ToArray();
             });
 
-            // Filtrujemy linie
-            var filteredLines = allLines.Select(ParseLogLine)
-                                        .Where(l => l.Level == LogLevel.Error || l.Level == LogLevel.Warning);
+            var filteredLines = allLines
+                .Select(ParseLogLine)
+                .Where(l => l.Level == LogLevel.Error || l.Level == LogLevel.Warning)
+                .ToList();
 
             _currentLogLines.AddRange(filteredLines);
 
-            ApplyFilter(); // Aktualizujemy widok
+            ApplyFilter();
+
+            await Dispatcher.BeginInvoke(() =>
+            {
+                if (IcLogLines.Items.Count > 0)
+                {
+                    IcLogLines.UpdateLayout();
+                    IcLogLines.ScrollIntoView(IcLogLines.Items[^1]);
+                }
+            }, DispatcherPriority.Background);
         }
 
         private void ApplyFilter()
@@ -730,11 +765,14 @@ namespace ServiceManager
         {
             if (ChkShowOnlyWarningsAndErrors.IsChecked == true)
             {
-                await LoadEntireFileWithFilterAsync();
+                if (LvLogFiles.SelectedItem is LogFileItem item)
+                {
+                    await LoadEntireFileWithFilterAsync(item);
+                }
             }
             else
             {
-                LoadSelectedFileContent();
+                await LoadSelectedFileContentAsync();
             }
         }
 
@@ -778,13 +816,22 @@ namespace ServiceManager
             return null;
         }
 
-        private async void LoadSelectedFileContent()
+        private async Task LoadSelectedFileContentAsync()
         {
             _currentLogLines.Clear();
+            _isAtBottom = true;
+
             if (LvLogFiles.SelectedItem is not LogFileItem item || !File.Exists(item.Path))
                 return;
 
             _currentPath = item.Path;
+
+            if (ChkShowOnlyWarningsAndErrors.IsChecked == true)
+            {
+                await LoadEntireFileWithFilterAsync(item);
+                return;
+            }
+
             try
             {
                 _lastReadOffset = new FileInfo(item.Path).Length;
@@ -853,7 +900,7 @@ namespace ServiceManager
             return new LogLine { Level = level, Message = line };
         }
 
-        private void LvLogFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void LvLogFiles_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (LvLogFiles.SelectedItem == null)
             {
@@ -867,102 +914,145 @@ namespace ServiceManager
             _lastSelectedLog = LvLogFiles.SelectedItem;
 
             TxtSelectedFileName.Text = ((LogFileItem)LvLogFiles.SelectedItem).Name;
-            LoadSelectedFileContent();
+            await LoadSelectedFileContentAsync();
         }
 
-        private void RefreshServiceStatus()
+        private async Task RefreshServiceStatusAsync()
         {
+            if (_serviceController == null) return;
+
             try
             {
-                _serviceController.Refresh();
-
-                switch (_serviceController.Status)
+                var status = await Task.Run(() =>
                 {
-                    case ServiceControllerStatus.Running:
-                        ServiceStatusDot.Fill = Brushes.Green;
-                        ServiceStatusText.Text = "Online";
-                        BtnStartService.IsEnabled = false;
-                        BtnStopService.IsEnabled = true;
-                        BtnRestartService.IsEnabled = true;
-                        break;
+                    lock (_serviceLock)
+                    {
+                        _serviceController.Refresh();
+                        return _serviceController.Status;
+                    }
+                });
 
-                    case ServiceControllerStatus.Stopped:
-                        ServiceStatusDot.Fill = Brushes.Red;
-                        ServiceStatusText.Text = "Offline";
-                        BtnStartService.IsEnabled = true;
-                        BtnStopService.IsEnabled = false;
-                        BtnRestartService.IsEnabled = false;
-                        break;
-
-                    case ServiceControllerStatus.Paused:
-                        ServiceStatusDot.Fill = Brushes.Orange;
-                        ServiceStatusText.Text = "Paused";
-                        BtnStartService.IsEnabled = true;
-                        BtnStopService.IsEnabled = true;
-                        BtnRestartService.IsEnabled = true;
-                        break;
-
-                    default: // Pending states
-                        ServiceStatusDot.Fill = Brushes.Gray;
-                        ServiceStatusText.Text = _serviceController.Status.ToString();
-                        BtnStartService.IsEnabled = false;
-                        BtnStopService.IsEnabled = false;
-                        BtnRestartService.IsEnabled = false;
-                        break;
-                }
+                ApplyServiceStatus(status);
             }
             catch (Exception ex)
             {
-                ServiceStatusDot.Fill = Brushes.Gray;
-                ServiceStatusText.Text = "Error";
-                BtnStartService.IsEnabled = BtnStopService.IsEnabled = BtnRestartService.IsEnabled = false;
-                MessageBox.Show($"Nie udało się sprawdzić statusu usługi: {ex.Message}");
+                ApplyServiceError(ex);
             }
         }
 
-        private void BtnStartService_Click(object sender, RoutedEventArgs e)
+        private void ApplyServiceStatus(ServiceControllerStatus status)
         {
-            try
+            switch (status)
             {
-                _serviceController.Start();
-                _serviceController.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
+                case ServiceControllerStatus.Running:
+                    ServiceStatusDot.Fill = Brushes.Green;
+                    ServiceStatusText.Text = "Online";
+                    BtnStartService.IsEnabled = false;
+                    BtnStopService.IsEnabled = true;
+                    BtnRestartService.IsEnabled = true;
+                    break;
+
+                case ServiceControllerStatus.Stopped:
+                    ServiceStatusDot.Fill = Brushes.Red;
+                    ServiceStatusText.Text = "Offline";
+                    BtnStartService.IsEnabled = true;
+                    BtnStopService.IsEnabled = false;
+                    BtnRestartService.IsEnabled = false;
+                    break;
+
+                case ServiceControllerStatus.Paused:
+                    ServiceStatusDot.Fill = Brushes.Orange;
+                    ServiceStatusText.Text = "Paused";
+                    BtnStartService.IsEnabled = true;
+                    BtnStopService.IsEnabled = true;
+                    BtnRestartService.IsEnabled = true;
+                    break;
+
+                default: // Pending states
+                    ServiceStatusDot.Fill = Brushes.Gray;
+                    ServiceStatusText.Text = status.ToString();
+                    BtnStartService.IsEnabled = false;
+                    BtnStopService.IsEnabled = false;
+                    BtnRestartService.IsEnabled = false;
+                    break;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Błąd przy uruchamianiu usługi: {ex.Message}");
-            }
-            RefreshServiceStatus();
         }
 
-        private void BtnStopService_Click(object sender, RoutedEventArgs e)
+        private void ApplyServiceError(Exception ex)
         {
-            try
-            {
-                _serviceController.Stop();
-                _serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Błąd przy zatrzymywaniu usługi: {ex.Message}");
-            }
-            RefreshServiceStatus();
+            ServiceStatusDot.Fill = Brushes.Gray;
+            ServiceStatusText.Text = "Error";
+            BtnStartService.IsEnabled = BtnStopService.IsEnabled = BtnRestartService.IsEnabled = false;
+            MessageBox.Show($"Nie udało się sprawdzić statusu usługi: {ex.Message}");
         }
 
-        private void BtnRestartService_Click(object sender, RoutedEventArgs e)
+        private void SetServiceButtonsTemporarilyEnabled(bool isEnabled)
         {
+            BtnStartService.IsEnabled = isEnabled;
+            BtnStopService.IsEnabled = isEnabled;
+            BtnRestartService.IsEnabled = isEnabled;
+        }
+
+        private async Task RunServiceOperationAsync(Action<ServiceController> operation)
+        {
+            if (_serviceController == null) return;
+
+            SetServiceButtonsTemporarilyEnabled(false);
+
             try
             {
-                _serviceController.Stop();
-                _serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
-
-                _serviceController.Start();
-                _serviceController.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
+                await Task.Run(() =>
+                {
+                    lock (_serviceLock)
+                    {
+                        operation(_serviceController);
+                    }
+                });
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Błąd przy restartowaniu usługi: {ex.Message}");
+                MessageBox.Show(ex.Message, "Błąd usługi", MessageBoxButton.OK, MessageBoxImage.Error);
             }
-            RefreshServiceStatus();
+            finally
+            {
+                await RefreshServiceStatusAsync();
+            }
+        }
+
+        private async void BtnStartService_Click(object sender, RoutedEventArgs e)
+        {
+            if (_serviceController == null) return;
+
+            await RunServiceOperationAsync(sc =>
+            {
+                sc.Start();
+                sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
+            });
+        }
+
+        private async void BtnStopService_Click(object sender, RoutedEventArgs e)
+        {
+            if (_serviceController == null) return;
+
+            await RunServiceOperationAsync(sc =>
+            {
+                sc.Stop();
+                sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
+            });
+        }
+
+        private async void BtnRestartService_Click(object sender, RoutedEventArgs e)
+        {
+            if (_serviceController == null) return;
+
+            await RunServiceOperationAsync(sc =>
+            {
+                sc.Stop();
+                sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
+
+                sc.Start();
+                sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
+            });
         }
     }
 }
