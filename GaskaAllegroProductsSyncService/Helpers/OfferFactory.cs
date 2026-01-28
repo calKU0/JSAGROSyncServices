@@ -86,12 +86,14 @@ namespace GaskaAllegroProductsSyncService.Helpers
                 priceSettings.AllegroMarginBetween5and1000PLNPercent,
                 priceSettings.AllegroMarginMoreThan1000PLN);
 
+            var available = CalculateAvailableStock(stockOverride, product.InStock, quantity);
+
             var offer = new ProductOfferRequest
             {
                 ProductSet = BuildProductSet(product, quantity, allegroSettings),
                 Stock = new Stock
                 {
-                    Available = stockOverride ?? Convert.ToInt32(Math.Floor(product.InStock)),
+                    Available = available,
                     Unit = MapAllegroUnit(product.Unit)
                 },
                 SellingMode = new SellingMode
@@ -106,7 +108,7 @@ namespace GaskaAllegroProductsSyncService.Helpers
                 Images = GetOfferImages(product),
                 Description = BuildDescription(product),
                 External = new External { Id = product.CodeGaska },
-                Publication = new Publication { Status = publicationStatus, StartingAt = startingAt },
+                Publication = new Publication { Status = available < 1 ? "ENDED" : publicationStatus, StartingAt = startingAt },
                 Delivery = new Delivery
                 {
                     ShippingRates = new ShippingRates { Name = allegroSettings.AllegroDeliveryName },
@@ -157,6 +159,13 @@ namespace GaskaAllegroProductsSyncService.Helpers
 
             var multiplier = (int)Math.Ceiling(minBundleNetValue / netValueForBase);
             return baseQty * multiplier;
+        }
+
+        private static int CalculateAvailableStock(int? stockOverride, float inStock, int quantity)
+        {
+            var baseAvailable = stockOverride ?? Convert.ToInt32(Math.Floor(inStock));
+            var safeQuantity = Math.Max(1, quantity);
+            return Math.Max(0, baseAvailable / safeQuantity);
         }
 
         private static List<string> GetOfferImages(Product product)
@@ -546,12 +555,12 @@ namespace GaskaAllegroProductsSyncService.Helpers
 
             calculatedPrice += productType switch
             {
-                0 => (priceNet <= minProductPriceNetForFreeDelivery ? standardDeliveryFeeNet * 1.23m : 0m),
                 1 => bulkyDeliveryPriceNet * 1.23m,  // bulky
                 2 => customDeliveryPriceNet * 1.23m, // custom
                 _ => 0m
             };
 
+            calculatedPrice += (priceNet <= minProductPriceNetForFreeDelivery ? standardDeliveryFeeNet * 1.23m : 0m);
             calculatedPrice += dropshippingFeeNet * 1.23m;
 
             if (calculatedPrice < 5m)
