@@ -18,7 +18,7 @@ namespace GaskaAllegroProductsSyncService.Helpers
             AllegroSettings allegroSettings,
             PriceSettings priceSettings)
         {
-            var quantity = GetPackageQuantity(product);
+            var quantity = GetPackageQuantity(product, appSettings.BundleProductsUnderPriceNet);
 
             return CreateOffer(
                 product,
@@ -42,7 +42,7 @@ namespace GaskaAllegroProductsSyncService.Helpers
             PriceSettings priceSettings)
         {
             var product = offer.Product;
-            var quantity = GetPackageQuantity(product);
+            var quantity = GetPackageQuantity(product, appSettings.BundleProductsUnderPriceNet);
 
             return CreateOffer(
                 product,
@@ -139,10 +139,25 @@ namespace GaskaAllegroProductsSyncService.Helpers
             return offer;
         }
 
-        private static int GetPackageQuantity(Product product) =>
-            product.Packages.Any(p => p.PackRequired == 1)
+        private static int GetPackageQuantity(Product product, decimal minBundleNetValue)
+        {
+            var baseQty = product.Packages.Any(p => p.PackRequired == 1)
                 ? Convert.ToInt32(product.Packages.First(p => p.PackRequired == 1).PackQty)
                 : 1;
+
+            if (baseQty < 1)
+                baseQty = 1;
+
+            if (product.PriceNet <= 0m || product.PriceNet >= 100m)
+                return baseQty;
+
+            var netValueForBase = product.PriceNet * baseQty;
+            if (netValueForBase >= minBundleNetValue)
+                return baseQty;
+
+            var multiplier = (int)Math.Ceiling(minBundleNetValue / netValueForBase);
+            return baseQty * multiplier;
+        }
 
         private static List<string> GetOfferImages(Product product)
         {
@@ -529,17 +544,15 @@ namespace GaskaAllegroProductsSyncService.Helpers
             var effectiveMargin = ownMarginPercent;
             calculatedPrice = priceGross * quantity * (1 + effectiveMargin / 100m);
 
-            if (priceNet <= minProductPriceNetForFreeDelivery)
-                calculatedPrice += standardDeliveryFeeNet * 1.23m;
-
-            calculatedPrice += standardDeliveryFeeNet * 1.23m;
-
             calculatedPrice += productType switch
             {
+                0 => (priceNet <= minProductPriceNetForFreeDelivery ? standardDeliveryFeeNet * 1.23m : 0m),
                 1 => bulkyDeliveryPriceNet * 1.23m,  // bulky
                 2 => customDeliveryPriceNet * 1.23m, // custom
                 _ => 0m
             };
+
+            calculatedPrice += dropshippingFeeNet * 1.23m;
 
             if (calculatedPrice < 5m)
             {
