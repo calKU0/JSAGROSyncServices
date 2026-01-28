@@ -675,7 +675,7 @@ namespace GaskaAllegroProductsSyncService.Repositories
             }
         }
 
-        public async Task<List<Product>> GetProductsToUpload(int minProductStock, CancellationToken ct)
+        public async Task<List<Product>> GetProductsToUpload(int minProductStock, decimal minPrice, CancellationToken ct)
         {
             using var conn = _context.CreateConnection();
             conn.Open();
@@ -697,12 +697,13 @@ namespace GaskaAllegroProductsSyncService.Repositories
                       AND p.DefaultAllegroCategory <> 0
                       AND p.PriceGross >= 1
                       AND p.InStock >= @MinProductStock
+                      AND p.PriceNet >= @MinPrice
                       AND NOT EXISTS (SELECT 1 FROM AllegroOffers ao WHERE ao.ExternalId = p.CodeGaska)
                       AND pi.AllegroUrl IS NOT NULL
                       AND pi.AllegroExpirationDate >= @Cutoff
                     ORDER BY p.Id
                     OFFSET @Offset ROWS FETCH NEXT @PageSize ROWS ONLY;",
-                    new { Cutoff = cutoff, Offset = offset, PageSize = pageSize, MinProductStock = minProductStock }
+                    new { Cutoff = cutoff, Offset = offset, PageSize = pageSize, MinProductStock = minProductStock, MinPrice = minPrice }
                 )).ToList();
 
                 if (!products.Any())

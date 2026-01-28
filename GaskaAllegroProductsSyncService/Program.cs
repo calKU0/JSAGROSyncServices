@@ -44,6 +44,8 @@ var host = Host.CreateDefaultBuilder(args)
         services.Configure<GaskaApiCredentials>(configuration.GetSection("GaskaApiCredentials"));
         services.Configure<AllegroApiCredentials>(configuration.GetSection("AllegroApiCredentials"));
         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
+        services.Configure<PriceSettings>(configuration.GetSection("PriceSettings"));
+        services.Configure<AllegroSettings>(configuration.GetSection("AllegroSettings"));
 
         // HttpClients
         services.AddHttpClient<AllegroAuthService>(client =>
