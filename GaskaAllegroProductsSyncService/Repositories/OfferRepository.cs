@@ -500,5 +500,12 @@ namespace GaskaAllegroProductsSyncService.Repositories
 
             _logger.LogInformation("Deleted Allegro offer for product {CodeGaska}.", codeGaska);
         }
+
+        private static bool TryParseDecimal(string input, out decimal result)
+        {
+            // akceptuj zarówno kropkę, jak i przecinek przy wprowadzaniu; zapisuj zawsze w formacie InvariantCulture
+            return decimal.TryParse(input, NumberStyles.Any, CultureInfo.InvariantCulture, out result) ||
+            decimal.TryParse(input, NumberStyles.Any, CultureInfo.CurrentCulture, out result);
+        }
     }
 }

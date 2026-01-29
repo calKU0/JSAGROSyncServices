@@ -27,6 +27,8 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
         private readonly IImageRespository _imageRepo;
         private readonly AllegroApiClient _apiClient;
         private readonly AppSettings _appSettings;
+        private readonly PriceSettings _priceSettings;
+        private readonly AllegroSettings _allegroSettings;
 
         private readonly JsonSerializerOptions _options = new JsonSerializerOptions
         {
@@ -37,13 +39,15 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
             WriteIndented = true
         };
 
-        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, ICategoryRepository categoryRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, ILogger<AllegroOfferService> logger, IParameterRepository parameterRepo, IImageRespository imageRepo)
+        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, ICategoryRepository categoryRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<PriceSettings> priceSettings, IOptions<AllegroSettings> allegroSettings, ILogger<AllegroOfferService> logger, IParameterRepository parameterRepo, IImageRespository imageRepo)
         {
             _productRepo = productRepo;
             _offerRepo = offerRepo;
             _categoryRepo = categoryRepo;
             _apiClient = apiClient;
             _appSettings = appsettings.Value;
+            _priceSettings = priceSettings.Value;
+            _allegroSettings = allegroSettings.Value;
             _logger = logger;
             _parameterRepo = parameterRepo;
             _imageRepo = imageRepo;
@@ -170,7 +174,7 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
                             offer.Product.AllegroImages = images;
                         }
 
-                        var offerDto = OfferFactory.PatchOffer(offer, _appSettings);
+                        var offerDto = OfferFactory.PatchOffer(offer, _appSettings, _allegroSettings, _priceSettings);
 
                         var response = await _apiClient.SendWithResponseAsync(
                             $"/sale/product-offers/{offer.Id}",
@@ -225,7 +229,7 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
                             _logger.LogWarning("Skipping product {Name} ({Code}) due to no images.", product.Name, product.Code);
                             return;
                         }
-                        var offer = OfferFactory.BuildOffer(product, _appSettings);
+                        var offer = OfferFactory.BuildOffer(product, _appSettings, _allegroSettings, _priceSettings);
                         var response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, offer, token);
                         var body = await response.Content.ReadAsStringAsync();
                         await LogAllegroResponse(product, response, body);
@@ -280,6 +284,11 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
                 case 403:
                     await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     _logger.LogError($"Forbidden (403). No permission for {action} offer for {product.Code}.");
+                    break;
+
+                case 404:
+                    _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
+                    await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
                     break;
 
                 default:

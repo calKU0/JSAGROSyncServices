@@ -1,9 +1,7 @@
 ﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Helpers;
-using JSAGROSyncServices.Shared.Models;
 using RolmarAllegroProductsSyncService.Models;
 using RolmarAllegroProductsSyncService.Settings;
-using System;
 using System.Globalization;
 using System.Text;
 
@@ -11,13 +9,13 @@ namespace RolmarAllegroProductsSyncService.Helpers
 {
     public static class OfferFactory
     {
-        public static ProductOfferRequest BuildOffer(RolmarProduct product, AppSettings appSettings)
+        public static ProductOfferRequest BuildOffer(RolmarProduct product, AppSettings appSettings, AllegroSettings allegroSettings, PriceSettings priceSettings)
         {
             int productQuantity = (int)Math.Ceiling(product.Package);
             return new ProductOfferRequest
             {
                 Name = product.Name,
-                ProductSet = BuildProductSet(product, productQuantity, appSettings),
+                ProductSet = BuildProductSet(product, productQuantity, allegroSettings),
                 Category = new Category
                 {
                     Id = product.DefaultAllegroCategory.ToString()
@@ -32,7 +30,7 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = (CalculatePrice(product.PriceGross, productQuantity, appSettings.OwnMarginPercent, appSettings.AllegroMarginUnder5PLN, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN)).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = (CalculatePrice(product.PriceGross, productQuantity, priceSettings.OwnMarginPercent, priceSettings.AllegroMarginUnder5PLN, priceSettings.OwnMarginPercentUnder10PLN, priceSettings.AllegroMarginBetween5and1000PLNPercent, priceSettings.AllegroMarginMoreThan1000PLN)).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -53,7 +51,7 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     {
                         Name = GetDelivery(product, appSettings.Deliveries)
                     },
-                    HandlingTime = appSettings.AllegroHandlingTime
+                    HandlingTime = allegroSettings.AllegroHandlingTime
                 },
                 Location = new Location
                 {
@@ -68,16 +66,16 @@ namespace RolmarAllegroProductsSyncService.Helpers
                 },
                 AfterSalesServices = new AfterSalesServices
                 {
-                    Warranty = new Warranty { Name = appSettings.AllegroWarranty },
-                    ReturnPolicy = new ReturnPolicy { Name = appSettings.AllegroReturnPolicy },
-                    ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
+                    Warranty = new Warranty { Name = allegroSettings.AllegroWarranty },
+                    ReturnPolicy = new ReturnPolicy { Name = allegroSettings.AllegroReturnPolicy },
+                    ImpliedWarranty = new ImpliedWarranty { Name = allegroSettings.AllegroImpliedWarranty }
                 },
                 Parameters = BuildParameters(product.Parameters, false),
                 //CompatibilityList = product.BuildCompatibilitySet ? BuildCompatibilityList(product.DefaultAllegroCategory, product.Applications, allegroCategories) : null
             };
         }
 
-        public static ProductOfferRequest PatchOffer(AllegroOffer offer, AppSettings appSettings)
+        public static ProductOfferRequest PatchOffer(AllegroOffer offer, AppSettings appSettings, AllegroSettings allegroSettings, PriceSettings priceSettings)
         {
             int productQuantity = (int)Math.Ceiling(offer.Product.Package);
 
@@ -107,7 +105,7 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = (CalculatePrice(offer.Product.PriceGross, productQuantity, appSettings.OwnMarginPercent, appSettings.OwnMarginPercentUnder10PLN, appSettings.AllegroMarginUnder5PLN, appSettings.AllegroMarginBetween5and1000PLNPercent, appSettings.AllegroMarginMoreThan1000PLN)).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = (CalculatePrice(offer.Product.PriceGross, productQuantity, priceSettings.OwnMarginPercent, priceSettings.OwnMarginPercentUnder10PLN, priceSettings.AllegroMarginUnder5PLN, priceSettings.AllegroMarginBetween5and1000PLNPercent, priceSettings.AllegroMarginMoreThan1000PLN)).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -128,18 +126,18 @@ namespace RolmarAllegroProductsSyncService.Helpers
                     {
                         Name = GetDelivery(offer.Product, appSettings.Deliveries)
                     },
-                    HandlingTime = appSettings.AllegroHandlingTime
+                    HandlingTime = allegroSettings.AllegroHandlingTime
                 },
                 AfterSalesServices = new AfterSalesServices
                 {
-                    Warranty = new Warranty { Name = appSettings.AllegroWarranty },
-                    ReturnPolicy = new ReturnPolicy { Name = appSettings.AllegroReturnPolicy },
-                    ImpliedWarranty = new ImpliedWarranty { Name = appSettings.AllegroImpliedWarranty }
+                    Warranty = new Warranty { Name = allegroSettings.AllegroWarranty },
+                    ReturnPolicy = new ReturnPolicy { Name = allegroSettings.AllegroReturnPolicy },
+                    ImpliedWarranty = new ImpliedWarranty { Name = allegroSettings.AllegroImpliedWarranty }
                 },
             };
         }
 
-        private static List<ProductSet> BuildProductSet(RolmarProduct product, int quantity, AppSettings appSettings)
+        private static List<ProductSet> BuildProductSet(RolmarProduct product, int quantity, AllegroSettings allegroSettings)
         {
             var ProductSets = new List<ProductSet>();
 
@@ -158,17 +156,17 @@ namespace RolmarAllegroProductsSyncService.Helpers
                 },
                 ResponsiblePerson = new ResponsiblePerson
                 {
-                    Name = appSettings.AllegroResponsiblePerson,
+                    Name = allegroSettings.AllegroResponsiblePerson,
                 },
                 ResponsibleProducer = new ResponsibleProducer
                 {
                     Type = "NAME",
-                    Name = appSettings.AllegroResponsibleProducer,
+                    Name = allegroSettings.AllegroResponsibleProducer,
                 },
                 SafetyInformation = new SafetyInformation
                 {
                     Type = "TEXT",
-                    Description = appSettings.AllegroSafetyMeasures
+                    Description = allegroSettings.AllegroSafetyMeasures
                 },
             });
 
