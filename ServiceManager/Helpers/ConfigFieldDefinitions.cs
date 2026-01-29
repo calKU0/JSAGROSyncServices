@@ -40,8 +40,6 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "PriceSettings:AllegroMarginUnder5PLN", Label = "Prowizja allegro poniżej 5 PLN", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:AllegroMarginBetween5and1000PLNPercent", Label = "Prowizja allegro 5-1000 PLN (%)", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:AllegroMarginMoreThan1000PLN", Label = "Prowizja allegro powyżej 1000 PLN", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
-            new ConfigField { Key = "PriceSettings:MinProductPriceNetForFreeDelivery", Label = "Min. cena netto darmowej wysyłki", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
-            new ConfigField { Key = "PriceSettings:StandardDeliveryPriceNet", Label = "Cena netto wysyłki", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:BulkyDeliveryPriceNet", Label = "Cena netto wysyłki gabarytowej", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:CustomDeliveryPriceNet", Label = "Cena netto wysyłki niestandardowej", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:DropshippingPriceNet", Label = "Cena netto dropshippingu", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },

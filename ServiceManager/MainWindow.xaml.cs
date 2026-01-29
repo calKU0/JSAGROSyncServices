@@ -548,12 +548,10 @@ namespace ServiceManager
                                     break;
 
                                 case ConfigFieldType.Decimal:
-                                    if (!decimal.TryParse(
-                                            value,
-                                            NumberStyles.Any,
-                                            CultureInfo.InvariantCulture,
-                                            out _))
+                                    if (!TryParseDecimal(value, out var decValue))
                                         errors.Add($"Pole „{fieldDef.Label}” wymaga liczby dziesiętnej (np. 12.5).");
+                                    else
+                                        value = decValue.ToString(CultureInfo.InvariantCulture);
                                     break;
                             }
                         }
@@ -570,7 +568,7 @@ namespace ServiceManager
                     if (!int.TryParse(t.Length.Text, out var length) ||
                         !int.TryParse(t.Width.Text, out var width) ||
                         !int.TryParse(t.Height.Text, out var height) ||
-                        !decimal.TryParse(t.Weight.Text, CultureInfo.InvariantCulture, out var weight))
+                        !TryParseDecimal(t.Weight.Text, out var weight))
                     {
                         errors.Add("Wymiary i waga muszą być poprawnymi liczbami.");
                         continue;
@@ -1053,6 +1051,16 @@ namespace ServiceManager
                 sc.Start();
                 sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
             });
+        }
+        private static bool TryParseDecimal(string input, out decimal result)
+        {
+
+            var normalized = input.Replace(',', '.');
+            return decimal.TryParse(
+                normalized,
+                NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign,
+                CultureInfo.InvariantCulture,
+                out result);
         }
     }
 }
