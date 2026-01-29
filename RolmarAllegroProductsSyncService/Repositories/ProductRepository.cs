@@ -1,18 +1,21 @@
 ﻿using Dapper;
+using Microsoft.Extensions.Options;
 using RolmarAllegroProductsSyncService.Data;
 using RolmarAllegroProductsSyncService.DTOs;
 using RolmarAllegroProductsSyncService.Models;
 using RolmarAllegroProductsSyncService.Repositories.Interfaces;
+using RolmarAllegroProductsSyncService.Settings;
 
 namespace RolmarAllegroProductsSyncService.Repositories
 {
     public class ProductRepository : IProductRepository
     {
         private readonly DapperContext _context;
-
-        public ProductRepository(DapperContext dbContext)
+        private readonly List<Settings.Delivery> _deliveries;
+        public ProductRepository(DapperContext dbContext, IOptions<AppSettings> options)
         {
             _context = dbContext;
+            _deliveries = options.Value.Deliveries;
         }
 
         public async Task<List<RolmarProduct>> GetAllProducts(CancellationToken ct)

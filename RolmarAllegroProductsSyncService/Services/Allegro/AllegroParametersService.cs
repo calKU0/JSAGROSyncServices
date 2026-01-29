@@ -106,7 +106,7 @@ namespace RolmarAllegroProductsSyncService.Services.Allegro
                 ["typ samochodu"] = _ => "Niezdefiniowany",
                 ["numer katalogowy oryginału"] = p => p.Code,
                 //["numery katalogowe zamienników"] = p => p.CrossNumbers != null ? string.Join(",", p.CrossNumbers.Select(cn => cn.CrossNumberValue)) : null,
-                ["stan opakowania"] = _ => "oryginalne",
+                //["stan opakowania"] = _ => "oryginalne",
                 ["jakość części (zgodnie z gvo)"] = _ => "P - zamiennik o jakości porównywalnej do oryginału"
             };
 

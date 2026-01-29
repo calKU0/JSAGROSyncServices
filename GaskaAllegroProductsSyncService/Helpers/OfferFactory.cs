@@ -73,9 +73,6 @@ namespace GaskaAllegroProductsSyncService.Helpers
         {
             var price = CalculatePrice(
                 product.PriceGross,
-                product.PriceNet,
-                priceSettings.MinProductPriceNetForFreeDelivery,
-                priceSettings.StandardDeliveryPriceNet,
                 priceSettings.BulkyDeliveryPriceNet,
                 priceSettings.CustomDeliveryPriceNet,
                 priceSettings.DropshippingPriceNet,
@@ -535,9 +532,6 @@ namespace GaskaAllegroProductsSyncService.Helpers
 
         private static decimal CalculatePrice(
             decimal priceGross,
-            decimal priceNet,
-            decimal minProductPriceNetForFreeDelivery,
-            decimal standardDeliveryFeeNet,
             decimal bulkyDeliveryPriceNet,
             decimal customDeliveryPriceNet,
             decimal dropshippingFeeNet,
@@ -560,7 +554,6 @@ namespace GaskaAllegroProductsSyncService.Helpers
                 _ => 0m
             };
 
-            calculatedPrice += (priceNet <= minProductPriceNetForFreeDelivery ? standardDeliveryFeeNet * 1.23m : 0m);
             calculatedPrice += dropshippingFeeNet * 1.23m;
 
             if (calculatedPrice < 5m)

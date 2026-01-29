@@ -60,7 +60,7 @@ namespace RolmarAllegroProductsSyncService.Repositories
                     return new AllegroOffer
                     {
                         Id = o.Id,
-                        Account = "JSAGRO2",
+                        Account = "JSAGRO",
                         Name = o.Name ?? string.Empty,
                         ProductId = null,
                         CategoryId = categoryId,
@@ -137,33 +137,50 @@ namespace RolmarAllegroProductsSyncService.Repositories
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
         {
+            var deliveryNames = _deliveries?
+                .Select(d => d.DeliveryName)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList() ?? new List<string>();
+
+            if (!deliveryNames.Any())
+            {
+                _logger.LogInformation("Brak skonfigurowanych dostaw — pomijam pobieranie ofert do aktualizacji.");
+                return new List<AllegroOffer>();
+            }
+
             using var connection = _context.CreateConnection();
             connection.Open();
 
             // Step 1: Get offers with products
             const string offersSql = @"
                 SELECT
-                    ao.Id, ao.ExternalId, ao.Name, ao.CategoryId, ao.Status, ao.StartingAt,
+                    ao.Id, ao.ExternalId, ao.Name, ao.CategoryId, ao.Status, ao.StartingAt, ao.DeliveryName,
                     p.Id, p.AllegroId, p.Code, p.Name, p.Description,
                     p.Ean, p.Weight, p.Fits, p.SupplierName, p.Substitutes, p.InStock, p.Unit,
                     p.CurrencyPrice, p.PriceNet, p.PriceGross, p.DefaultAllegroCategory, p.Package,
                     p.CreatedDate, p.UpdatedDate
                 FROM AllegroOffers ao
                 INNER JOIN RolmarProducts p ON p.Code = ao.ExternalId AND p.IntegrationCompany = 'Rolmar'
-                WHERE ao.Status IN ('ACTIVE', 'ENDED')";
+                WHERE ao.Status IN ('ACTIVE', 'ENDED') AND ao.DeliveryName IN @DeliveryNames";
 
             var offerDict = new Dictionary<string, AllegroOffer>();
 
-            var offers = (await connection.QueryAsync<AllegroOffer, RolmarProduct, AllegroOffer>(
+            var command = new CommandDefinition(
                 offersSql,
+                new { DeliveryNames = deliveryNames },
+                commandTimeout: 900,
+                cancellationToken: ct);
+
+            var offers = (await connection.QueryAsync<AllegroOffer, RolmarProduct, AllegroOffer>(
+                command,
                 (offer, product) =>
                 {
                     offer.Product = product;
                     offerDict[offer.Id] = offer;
                     return offer;
                 },
-                splitOn: "Id",
-                commandTimeout: 900
+                splitOn: "Id"
             )).ToList();
 
             if (!offers.Any())
@@ -224,6 +241,11 @@ namespace RolmarAllegroProductsSyncService.Repositories
                 new { ProductId = productId }
             );
 
+            var offerId = await connection.QueryFirstOrDefaultAsync<string>(
+                @"SELECT Id FROM AllegroOffers WHERE ExternalId = @CodeGaska",
+                new { CodeGaska = code }
+            );
+
             if (code == null)
             {
                 _logger.LogWarning("Product with Id {ProductId} not found. Cannot delete offer.", productId);
@@ -232,12 +254,18 @@ namespace RolmarAllegroProductsSyncService.Repositories
 
             // Delete AllegroOffers where ExternalId = CodeGaska
             var sql = @"
+                DELETE FROM AllegroOfferAttributes
+                WHERE OfferId = @OfferId
+
+                DELETE FROM AllegroOfferDescriptions
+                WHERE OfferId = @OfferId
+
                 DELETE FROM AllegroOffers
-                WHERE ExternalId = @Code";
+                WHERE Id = @OfferId";
 
-            var affectedRows = await connection.ExecuteAsync(sql, new { Code = code });
+            var affectedRows = await connection.ExecuteAsync(sql, new { OfferId = offerId });
 
-            _logger.LogInformation("Deleted {Count} Allegro offer(s) for product {Code}.", affectedRows, code);
+            _logger.LogInformation("Deleted Allegro offer for product {Code}.", code);
         }
     }
 }

@@ -2,7 +2,6 @@ using DbUp;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Services;
 using JSAGROSyncServices.Shared.Settings;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RolmarAllegroProductsSyncService;
 using RolmarAllegroProductsSyncService.Data;
@@ -66,6 +65,8 @@ var host = Host.CreateDefaultBuilder(args)
         services.Configure<RolmarApiCredentials>(configuration.GetSection("RolmarApiCredentials"));
         services.Configure<AllegroApiCredentials>(configuration.GetSection("AllegroApiCredentials"));
         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
+        services.Configure<PriceSettings>(configuration.GetSection("PriceSettings"));
+        services.Configure<AllegroSettings>(configuration.GetSection("AllegroSettings"));
 
         // HttpClients
         services.AddHttpClient<IRolmarSyncService, RolmarSyncService>((sp, client) =>
