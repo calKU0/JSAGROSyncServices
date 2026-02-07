@@ -1,11 +1,10 @@
-﻿using Allegro.JSAGRO.Rolmar.ProductsService.DTOs;
-using Allegro.JSAGRO.Rolmar.ProductsService.Models;
+﻿using JSAGROSyncServices.Shared.Models;
 
-namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces
+namespace JSAGROSyncServices.Shared.Interfaces
 {
     public interface IProductRepository
     {
-        public Task<bool> UpsertProductAsync(ProductResult product, CancellationToken ct);
+        public Task<bool> UpsertProductAsync(RolmarProduct product, CancellationToken ct);
 
         public Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct);
 

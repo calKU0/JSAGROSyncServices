@@ -1,11 +1,12 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
-using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
+﻿using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Helpers;
 using JSAGROSyncServices.Shared.Models;
 using System.Globalization;
 using System.Text;
+using AllegroOffer = Allegro.JSAGRO.Gaska.ProductsService.Models.AllegroOffer;
+using ProductParameter = Allegro.JSAGRO.Gaska.ProductsService.Models.Product.ProductParameter;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
 {

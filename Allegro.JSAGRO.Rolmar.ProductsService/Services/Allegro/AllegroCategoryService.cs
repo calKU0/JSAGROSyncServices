@@ -1,8 +1,7 @@
 ﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
 using JSAGROSyncServices.Shared.Services;
-using Allegro.JSAGRO.Rolmar.ProductsService.Models;
-using Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
 {

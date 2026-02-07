@@ -1,14 +1,13 @@
 using Allegro.JSAGRO.Rolmar.ProductsService;
-using Allegro.JSAGRO.Rolmar.ProductsService.Data;
-using Allegro.JSAGRO.Rolmar.ProductsService.Logging;
 using Allegro.JSAGRO.Rolmar.ProductsService.Repositories;
-using Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces;
 using Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro;
 using Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces;
 using Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar;
 using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 using DbUp;
+using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Logging;
 using JSAGROSyncServices.Shared.Services;
 using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
@@ -112,7 +111,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddHostedService<Worker>();
 
         // Dapper
-        services.AddSingleton<DapperContext>();
+        services.AddSingleton(sp => new DapperContext(connectionString));
 
         // Host options
         services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(5));

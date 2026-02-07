@@ -1,6 +1,6 @@
 ﻿using DbUp.Engine.Output;
 
-namespace Allegro.JSAGRO.Gaska.OrdersService.Logging
+namespace JSAGROSyncServices.Shared.Logging
 {
     public class SerilogUpgradeLog : IUpgradeLog
     {

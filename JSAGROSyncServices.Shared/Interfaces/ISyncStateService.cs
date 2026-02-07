@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces
+﻿namespace JSAGROSyncServices.Shared.Interfaces
 {
     public interface ISyncStateService
     {

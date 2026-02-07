@@ -9,6 +9,9 @@ using Microsoft.Extensions.Options;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using ICategoryRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.ICategoryRepository;
+using IOfferRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IOfferRepository;
+using IProductRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IProductRepository;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 {

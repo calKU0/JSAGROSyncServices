@@ -1,5 +1,5 @@
 ﻿using Dapper;
-using Allegro.JSAGRO.Gaska.ProductsService.Data;
+using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Models;

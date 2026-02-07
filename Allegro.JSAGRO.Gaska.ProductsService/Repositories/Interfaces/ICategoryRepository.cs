@@ -1,6 +1,6 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
+﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Models;
+using CategoryParameter = Allegro.JSAGRO.Gaska.ProductsService.Models.CategoryParameter;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces
 {

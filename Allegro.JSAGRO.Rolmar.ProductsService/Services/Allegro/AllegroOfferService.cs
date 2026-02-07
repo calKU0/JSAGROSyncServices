@@ -1,12 +1,10 @@
-﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
+﻿using Allegro.JSAGRO.Rolmar.ProductsService.Helpers;
+using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Models;
 using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
-using Allegro.JSAGRO.Rolmar.ProductsService.Helpers;
-using Allegro.JSAGRO.Rolmar.ProductsService.Models;
-using Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces;
-using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;

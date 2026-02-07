@@ -1,13 +1,13 @@
-﻿using Microsoft.Extensions.Options;
-using Allegro.JSAGRO.Rolmar.ProductsService.DTOs;
+﻿using Allegro.JSAGRO.Rolmar.ProductsService.DTOs;
 using Allegro.JSAGRO.Rolmar.ProductsService.DTOs.Rolmar;
-using Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces;
 using Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces;
 using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
+using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
 {
@@ -84,7 +84,8 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
                                     c.StartsWith(ac, StringComparison.OrdinalIgnoreCase))))
                             continue;
 
-                        bool success = await _productRepository.UpsertProductAsync(product, ct);
+                        var mappedProduct = MapToRolmarProduct(product);
+                        bool success = await _productRepository.UpsertProductAsync(mappedProduct, ct);
 
                         if (success)
                         {
@@ -252,6 +253,36 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
             {
                 _logger.LogError(ex, "Error occurred while syncing images from Rolmar.");
             }
+        }
+
+        private static RolmarProduct MapToRolmarProduct(ProductResult product)
+        {
+            var priceNet = decimal.TryParse(product.Price, out var pn) ? pn : 0m;
+            var weight = float.TryParse(product.Weight, out var w) ? w : 0f;
+            var package = decimal.TryParse(product.ErpPackage, out var pkg) ? pkg : 0m;
+
+            return new RolmarProduct
+            {
+                Code = product.ProductIndex,
+                Name = product.Name,
+                Description = product.Description,
+                Ean = product.Ean,
+                Weight = weight,
+                Fits = product.Fits,
+                Substitutes = product.Substitutes,
+                Unit = product.Unit,
+                CurrencyPrice = product.Currency,
+                PriceNet = priceNet,
+                PriceGross = priceNet * 1.23m,
+                Package = package,
+                Specifications = product.Specifications?.Select(s => new JSAGROSyncServices.Shared.Models.ProductSpecification
+                {
+                    Name = s.Name,
+                    Value = s.Value,
+                    UnitName = s.UnitName
+                }).ToList(),
+                Categories = product.Categories?.Select(c => new RolmarCategory { Name = c }).ToList()
+            };
         }
     }
 }

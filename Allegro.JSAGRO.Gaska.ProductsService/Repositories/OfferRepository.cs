@@ -1,16 +1,15 @@
-﻿using Dapper;
-using Allegro.JSAGRO.Gaska.ProductsService.Data;
-using Allegro.JSAGRO.Gaska.ProductsService.Models;
+﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
 using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
 using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
+using Dapper;
+using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using Microsoft.Extensions.Options;
 using System.Globalization;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 {
-    // TODO: BundleProducts Under X Price handling
     public class OfferRepository : IOfferRepository
     {
         private readonly DapperContext _context;

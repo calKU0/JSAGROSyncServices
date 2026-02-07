@@ -1,8 +1,8 @@
 using Allegro.Erli.ProductsService;
-using Allegro.Erli.ProductsService.Data;
 using Allegro.Erli.ProductsService.Repositories;
 using Allegro.Erli.ProductsService.Services;
 using Allegro.Erli.ProductsService.Settings;
+using JSAGROSyncServices.Shared.Data;
 using Serilog;
 
 var host = Host.CreateDefaultBuilder(args)
@@ -36,7 +36,8 @@ var host = Host.CreateDefaultBuilder(args)
         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
 
         // Register dependencies
-        services.AddSingleton<DapperContext>();
+        var connectionString = configuration.GetConnectionString("MyDbContext");
+        services.AddSingleton(sp => new DapperContext(connectionString));
         services.AddScoped<OfferRepository>();
         services.AddScoped<ErliClient>();
         services.AddScoped<ErliService>();

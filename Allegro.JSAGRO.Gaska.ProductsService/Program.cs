@@ -1,10 +1,10 @@
-using Allegro.JSAGRO.Gaska.ProductsService.Data;
 using Allegro.JSAGRO.Gaska.ProductsService.Repositories;
 using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.Gaska.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
+using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Services;
 using JSAGROSyncServices.Shared.Settings;
@@ -13,6 +13,9 @@ using Serilog;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using ICategoryRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.ICategoryRepository;
+using IOfferRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IOfferRepository;
+using IProductRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IProductRepository;
 
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
@@ -87,7 +90,8 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddHostedService<Worker>();
 
         // Dapper
-        services.AddSingleton<DapperContext>();
+        var connectionString = configuration.GetConnectionString("MyDbContext");
+        services.AddSingleton(sp => new DapperContext(connectionString));
 
         // Host options
         services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(15));

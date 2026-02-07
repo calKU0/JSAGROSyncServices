@@ -1,8 +1,8 @@
-﻿using Allegro.JSAGRO.Gaska.OrdersService.Data;
-using Allegro.JSAGRO.Gaska.OrdersService.Data.Enums;
+﻿using Allegro.JSAGRO.Gaska.OrdersService.Data.Enums;
 using Allegro.JSAGRO.Gaska.OrdersService.Models;
 using Allegro.JSAGRO.Gaska.OrdersService.Repositories.Interfaces;
 using Dapper;
+using JSAGROSyncServices.Shared.Data;
 
 namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
 {

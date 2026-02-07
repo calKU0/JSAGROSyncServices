@@ -1,8 +1,7 @@
 ﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Models;
-using Allegro.JSAGRO.Rolmar.ProductsService.Models;
 
-namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces
+namespace JSAGROSyncServices.Shared.Interfaces
 {
     public interface ICategoryRepository
     {

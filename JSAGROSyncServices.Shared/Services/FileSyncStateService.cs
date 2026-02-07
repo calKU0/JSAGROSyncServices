@@ -1,11 +1,8 @@
-﻿using Allegro.JSAGRO.Rolmar.ProductsService.Models;
-using Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces;
-using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
 using System.Text.Json;
 
-namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
+namespace JSAGROSyncServices.Shared.Services
 {
     public class FileSyncStateService : ISyncStateService
     {

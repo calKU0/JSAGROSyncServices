@@ -1,10 +1,9 @@
-﻿using Dapper;
+﻿using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
+using Dapper;
+using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
 using Microsoft.Extensions.Options;
-using Allegro.JSAGRO.Rolmar.ProductsService.Data;
-using Allegro.JSAGRO.Rolmar.ProductsService.DTOs;
-using Allegro.JSAGRO.Rolmar.ProductsService.Models;
-using Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces;
-using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 {
@@ -85,7 +84,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
             await connection.QueryAsync<
                 RolmarProduct,
-                Models.ProductSpecification,
+                JSAGROSyncServices.Shared.Models.ProductSpecification,
                 RolmarProduct>(
                 sql,
                 (product, spec) =>
@@ -93,7 +92,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                     if (!productDict.TryGetValue(product.Id, out var existing))
                     {
                         existing = product;
-                        existing.Specifications = new List<Models.ProductSpecification>();
+                        existing.Specifications = new List<JSAGROSyncServices.Shared.Models.ProductSpecification>();
                         existing.Parameters = new List<ProductParameter>();
 
                         productDict.Add(existing.Id, existing);
@@ -162,7 +161,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
             await connection.QueryAsync<
                 RolmarProduct,
-                Models.ProductSpecification,
+                JSAGROSyncServices.Shared.Models.ProductSpecification,
                 ProductParameter,
                 RolmarProduct>(
                 sql,
@@ -171,7 +170,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                     if (!productDict.TryGetValue(product.Id, out var existing))
                     {
                         existing = product;
-                        existing.Specifications = new List<Models.ProductSpecification>();
+                        existing.Specifications = new List<JSAGROSyncServices.Shared.Models.ProductSpecification>();
                         existing.Parameters = new List<ProductParameter>();
 
                         productDict.Add(existing.Id, existing);
@@ -231,7 +230,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
             await connection.QueryAsync<
                 RolmarProduct,
-                Models.ProductSpecification,
+                JSAGROSyncServices.Shared.Models.ProductSpecification,
                 RolmarProduct>(
                 sql,
                 (product, spec) =>
@@ -239,7 +238,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                     if (!productDict.TryGetValue(product.Id, out var existing))
                     {
                         existing = product;
-                        existing.Specifications = new List<Models.ProductSpecification>();
+                        existing.Specifications = new List<JSAGROSyncServices.Shared.Models.ProductSpecification>();
                         existing.Parameters = new List<ProductParameter>(); // puste
 
                         productDict.Add(existing.Id, existing);
@@ -327,7 +326,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             return affectedRows > 0;
         }
 
-        public async Task<bool> UpsertProductAsync(ProductResult product, CancellationToken ct)
+        public async Task<bool> UpsertProductAsync(RolmarProduct product, CancellationToken ct)
         {
             const string upsertProductSql = @"
                 MERGE RolmarProducts AS target
@@ -388,19 +387,19 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                     upsertProductSql,
                     new
                     {
-                        Code = product.ProductIndex,
+                        Code = product.Code,
                         Name = product.Name,
                         Description = product.Description,
                         Ean = product.Ean,
-                        Weight = float.TryParse(product.Weight, out var w) ? w : 0,
+                        Weight = product.Weight,
                         Fits = product.Fits,
                         Unit = product.Unit,
-                        Currency = product.Currency,
+                        Currency = product.CurrencyPrice,
                         Substitutes = product.Substitutes,
                         IntegrationCompany = "Rolmar",
-                        PriceNet = decimal.TryParse(product.Price, out var pn) ? pn : 0,
-                        PriceGross = decimal.TryParse(product.Price, out var pg) ? pg * 1.23m : 0,
-                        Package = decimal.TryParse(product.ErpPackage, out var pkg) ? pkg : 0
+                        PriceNet = product.PriceNet,
+                        PriceGross = product.PriceGross,
+                        Package = product.Package
                     },
                     transaction
                 );
@@ -441,7 +440,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                     var categories = product.Categories.Select(c => new
                     {
                         ProductId = productId,
-                        Name = c
+                        Name = c.Name
                     });
 
                     await connection.ExecuteAsync(

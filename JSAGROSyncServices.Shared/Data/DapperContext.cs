@@ -1,15 +1,15 @@
 ﻿using Microsoft.Data.SqlClient;
 using System.Data;
 
-namespace Allegro.Erli.ProductsService.Data
+namespace JSAGROSyncServices.Shared.Data
 {
     public class DapperContext
     {
         private readonly string _connectionString;
 
-        public DapperContext(IConfiguration configuration)
+        public DapperContext(string connectionString)
         {
-            _connectionString = configuration.GetConnectionString("MyDbContext")
+            _connectionString = connectionString
                 ?? throw new InvalidOperationException("Connection string 'MyDbContext' not found.");
         }
 

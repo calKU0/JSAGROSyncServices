@@ -1,10 +1,12 @@
-﻿using Dapper;
-using Allegro.JSAGRO.Gaska.ProductsService.Data;
-using Allegro.JSAGRO.Gaska.ProductsService.Models;
+﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
 using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
+using Dapper;
+using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Models;
 using System.Data;
+using CategoryParameter = Allegro.JSAGRO.Gaska.ProductsService.Models.CategoryParameter;
+using CategoryParameterValue = Allegro.JSAGRO.Gaska.ProductsService.Models.CategoryParameterValue;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 {

@@ -1,12 +1,12 @@
 using Allegro.JSAGRO.Gaska.OrdersService;
-using Allegro.JSAGRO.Gaska.OrdersService.Data;
-using Allegro.JSAGRO.Gaska.OrdersService.Logging;
 using Allegro.JSAGRO.Gaska.OrdersService.Repositories;
 using Allegro.JSAGRO.Gaska.OrdersService.Repositories.Interfaces;
 using Allegro.JSAGRO.Gaska.OrdersService.Services;
 using Allegro.JSAGRO.Gaska.OrdersService.Services.Interfaces;
 using Allegro.JSAGRO.Gaska.OrdersService.Settings;
 using DbUp;
+using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Shared.Logging;
 using Serilog;
 
 var host = Host.CreateDefaultBuilder(args)
@@ -67,7 +67,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.Configure<SmtpSettings>(configuration.GetSection("SmtpSettings"));
 
         // Register Dapper context
-        services.AddSingleton<DapperContext>();
+        services.AddSingleton(sp => new DapperContext(connectionString));
 
         // Register repositories
         services.AddScoped<IOrderRepository, OrderRepository>();

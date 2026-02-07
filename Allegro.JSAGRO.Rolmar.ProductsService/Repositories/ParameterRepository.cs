@@ -1,7 +1,7 @@
 ﻿using Dapper;
-using Allegro.JSAGRO.Rolmar.ProductsService.Data;
-using Allegro.JSAGRO.Rolmar.ProductsService.Models;
-using Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces;
+using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 {

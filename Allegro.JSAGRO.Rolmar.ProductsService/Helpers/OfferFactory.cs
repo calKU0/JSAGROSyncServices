@@ -1,7 +1,7 @@
-﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
+﻿using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Helpers;
-using Allegro.JSAGRO.Rolmar.ProductsService.Models;
-using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
+using JSAGROSyncServices.Shared.Models;
 using System.Globalization;
 using System.Text;
 

@@ -1,6 +1,6 @@
-﻿using Allegro.Erli.ProductsService.Data;
-using Allegro.Erli.ProductsService.Models;
+﻿using Allegro.Erli.ProductsService.Models;
 using Dapper;
+using JSAGROSyncServices.Shared.Data;
 
 namespace Allegro.Erli.ProductsService.Repositories
 {

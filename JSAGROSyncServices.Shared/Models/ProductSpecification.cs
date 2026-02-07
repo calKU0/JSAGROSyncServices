@@ -1,4 +1,4 @@
-﻿namespace Allegro.JSAGRO.Rolmar.ProductsService.Models
+﻿namespace JSAGROSyncServices.Shared.Models
 {
     public class ProductSpecification
     {

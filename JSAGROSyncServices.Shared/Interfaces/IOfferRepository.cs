@@ -1,7 +1,7 @@
 ﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
-using Allegro.JSAGRO.Rolmar.ProductsService.Models;
+using JSAGROSyncServices.Shared.Models;
 
-namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories.Interfaces
+namespace JSAGROSyncServices.Shared.Interfaces
 {
     public interface IOfferRepository
     {

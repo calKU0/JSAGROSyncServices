@@ -1,9 +1,10 @@
 ﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
 using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
-using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Services;
+using ICategoryRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.ICategoryRepository;
+using IProductRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IProductRepository;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 {

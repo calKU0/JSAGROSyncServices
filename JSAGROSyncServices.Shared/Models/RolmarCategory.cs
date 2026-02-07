@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Allegro.JSAGRO.Rolmar.ProductsService.Models
+﻿namespace JSAGROSyncServices.Shared.Models
 {
     public class RolmarCategory
     {

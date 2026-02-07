@@ -15,6 +15,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO.Rolmar.Produ
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSAGROSyncServices.Shared", "JSAGROSyncServices.Shared\JSAGROSyncServices.Shared.csproj", "{ECEE6280-18A7-4AFE-B821-05DC68D93F36}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO2.Gaska.ProductsService", "Allegro.JSAGRO2.Gaska.ProductsService\Allegro.JSAGRO2.Gaska.ProductsService.csproj", "{F49458B2-7CE2-4894-8D4F-230C7901CB67}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO2.Gaska.OrdersService", "Allegro.JSAGRO2.Gaska.OrdersService\Allegro.JSAGRO2.Gaska.OrdersService.csproj", "{1B42F7E1-0195-48ED-9E6E-80FF09691086}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO2.Rolmar.ProductsService", "Allegro.JSAGRO2.Rolmar.ProductsService\Allegro.JSAGRO2.Rolmar.ProductsService.csproj", "{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,6 +51,18 @@ Global
 		{ECEE6280-18A7-4AFE-B821-05DC68D93F36}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ECEE6280-18A7-4AFE-B821-05DC68D93F36}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ECEE6280-18A7-4AFE-B821-05DC68D93F36}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F49458B2-7CE2-4894-8D4F-230C7901CB67}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F49458B2-7CE2-4894-8D4F-230C7901CB67}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F49458B2-7CE2-4894-8D4F-230C7901CB67}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F49458B2-7CE2-4894-8D4F-230C7901CB67}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1B42F7E1-0195-48ED-9E6E-80FF09691086}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1B42F7E1-0195-48ED-9E6E-80FF09691086}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1B42F7E1-0195-48ED-9E6E-80FF09691086}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1B42F7E1-0195-48ED-9E6E-80FF09691086}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

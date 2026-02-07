@@ -1,8 +1,8 @@
+using Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces;
+using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
-using Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces;
-using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService
 {

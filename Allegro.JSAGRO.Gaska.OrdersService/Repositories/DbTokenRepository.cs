@@ -1,9 +1,9 @@
-﻿using Allegro.JSAGRO.Gaska.OrdersService.Data;
-using Allegro.JSAGRO.Gaska.OrdersService.DTOs;
+﻿using Allegro.JSAGRO.Gaska.OrdersService.DTOs;
 using Allegro.JSAGRO.Gaska.OrdersService.Models;
 using Allegro.JSAGRO.Gaska.OrdersService.Repositories.Interfaces;
 using Allegro.JSAGRO.Gaska.OrdersService.Settings;
 using Dapper;
+using JSAGROSyncServices.Shared.Data;
 using Microsoft.Extensions.Options;
 
 namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories

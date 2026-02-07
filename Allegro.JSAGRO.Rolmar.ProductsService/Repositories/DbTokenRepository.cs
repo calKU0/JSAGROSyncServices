@@ -1,10 +1,10 @@
 ﻿using Dapper;
+using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Models;
 using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
-using Allegro.JSAGRO.Rolmar.ProductsService.Data;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 {
