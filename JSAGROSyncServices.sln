@@ -5,13 +5,13 @@ VisualStudioVersion = 18.0.11222.15
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceManager", "ServiceManager\ServiceManager.csproj", "{99D56FE4-6713-4992-8ECA-011581427AB8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GaskaAllegroProductsSyncService", "GaskaAllegroProductsSyncService\GaskaAllegroProductsSyncService.csproj", "{E613B824-2053-4523-81BE-394D0B124221}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO.Gaska.ProductsService", "Allegro.JSAGRO.Gaska.ProductsService\Allegro.JSAGRO.Gaska.ProductsService.csproj", "{E613B824-2053-4523-81BE-394D0B124221}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AllegroGaskaOrdersSyncService", "AllegroGaskaOrdersSyncService\AllegroGaskaOrdersSyncService.csproj", "{B7448204-9E71-4782-B00F-C1BCF9C4D240}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO.Gaska.OrdersService", "Allegro.JSAGRO.Gaska.OrdersService\Allegro.JSAGRO.Gaska.OrdersService.csproj", "{B7448204-9E71-4782-B00F-C1BCF9C4D240}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AllegroErliProductsSyncService", "AllegroErliProductsSyncService\AllegroErliProductsSyncService.csproj", "{EA1C55D3-81FD-4D9A-A480-D2A295149A75}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.Erli.ProductsService", "Allegro.Erli.ProductsService\Allegro.Erli.ProductsService.csproj", "{EA1C55D3-81FD-4D9A-A480-D2A295149A75}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RolmarAllegroProductsSyncService", "RolmarAllegroProductsSyncService\RolmarAllegroProductsSyncService.csproj", "{F47495A5-7817-47D8-B40D-8659075752A3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO.Rolmar.ProductsService", "Allegro.JSAGRO.Rolmar.ProductsService\Allegro.JSAGRO.Rolmar.ProductsService.csproj", "{F47495A5-7817-47D8-B40D-8659075752A3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSAGROSyncServices.Shared", "JSAGROSyncServices.Shared\JSAGROSyncServices.Shared.csproj", "{ECEE6280-18A7-4AFE-B821-05DC68D93F36}"
 EndProject
