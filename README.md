@@ -1,45 +1,38 @@
 # JSAGROSyncServices
 
-> 💼 **Commercial Project** — part of a private or client-facing initiative.
+> Commercial project - part of a private or client-facing initiative.
 
 ## Overview
 
-**JSAGROSyncServices** is a set of Windows Services designed for the JSAGRO client, automating product and offer synchronization across multiple platforms.  
-Each service is independent and handles a specific data source or target system, ensuring reliable data transfer and robust logging.
+**JSAGROSyncServices** is a collection of Windows worker services and a WPF configurator that automate product and order synchronization between JSAGRO data sources (Gaska/Rolmar) and marketplace platforms (Allegro, Erli). Each service runs independently, focuses on a single integration flow, and ships with structured logging.
 
-## Services
+## Solution Layout
 
-### JSAGROSyncServices.GaskaToAllegro
+### Worker Services (`net10.0`)
 
-- Fetches products from the **Gaska API** (JSON format)
-- Enriches products with Allegro categories, parameters, and images
-- Creates new offers or updates existing ones in **Allegro**
-- Handles error reporting and daily summary logs
+- `Allegro.JSAGRO.Gaska.ProductsService` - synchronizes Gaska/JSAGRO products into Allegro.
+- `Allegro.JSAGRO.Gaska.OrdersService` - synchronizes Allegro orders into JSAGRO/Gaska flows.
+- `Allegro.JSAGRO.Rolmar.ProductsService` - synchronizes Rolmar products into Allegro.
+- `Allegro.JSAGRO2.Gaska.ProductsService` - JSAGRO2 variant of the Gaska product sync.
+- `Allegro.JSAGRO2.Gaska.OrdersService` - JSAGRO2 variant of the order sync.
+- `Allegro.JSAGRO2.Rolmar.ProductsService` - JSAGRO2 variant of the Rolmar product sync.
+- `Allegro.Erli.ProductsService` - synchronizes Allegro offers into Erli.
 
-### JSAGROSyncServices.AllegroToErli
+### Shared Libraries
 
-- Fetches product listings from **Allegro**
-- Maps Allegro data to the Erli schema
-- Synchronizes products into **Erli**
-- Maintains logs of all synchronization actions and errors
+- `JSAGROSyncServices.Shared` - shared models, helpers, and SQL Server migrations.
+
+### Desktop Tooling (`net8.0-windows`)
+
+- `ServiceManager` - WPF configurator and service monitor for runtime settings and log viewing.
 
 ## Features
 
-### GaskaToAllegro
-
-- Automated product fetching and enrichment
-- Allegro offer creation and updates
-- Image management and upload
-- Real-time and daily summary logging
-- Configurable API and service settings
-
-### AllegroToErli
-
-- Allegro product retrieval and transformation
-- Reliable data mapping to Erli
-- Incremental synchronization with database logging
-- Error tracking and notification
-- Configurable service parameters
+- Product catalog and offer synchronization
+- Order import workflows
+- Image processing and uploads
+- SQL Server-backed state and migrations
+- Serilog-based structured logging
 
 ## Screenshots
 
@@ -53,22 +46,12 @@ Each service is independent and handles a specific data source or target system,
 
 ## Technologies Used
 
-- **Frameworks:** .NET Framework
-- **Languages:** C#
+- **Frameworks:** .NET 10 Worker Service, .NET 8 WPF
+- **Language:** C#
 - **Data Sources & Targets:** REST APIs (Gaska, Allegro, Erli)
 - **Database:** SQL Server
+- **Data Access:** Dapper
 - **Logging:** Serilog
-
-## Installation & Setup
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/calKU0/JSAGROAllegroSync.git
-   ```
-2. Open the solution in Visual Studio and build the project.
-3. Configure the service using the WPF configurator or by editing `app.config`.
-4. Install the Windows Service via PowerShell or `sc.exe`.
-5. Start the service and verify logs for successful operation.
 
 ## License
 
