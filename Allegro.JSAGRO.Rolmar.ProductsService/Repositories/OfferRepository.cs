@@ -1,10 +1,12 @@
-﻿using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
+﻿using Allegro.JSAGRO.Rolmar.ProductsService.Constants;
+using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 using Dapper;
 using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Models;
 using Microsoft.Extensions.Options;
+using System.Data;
 using System.Globalization;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
@@ -35,33 +37,18 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             try
             {
                 const int batchSize = 1000;
-
-                // 1️ Preload existing offer IDs in batches
-                var allOfferIds = offers.Select(o => o.Id).ToList();
-                var existingIds = new HashSet<string>();
-
-                foreach (var batch in allOfferIds.Chunk(batchSize))
-                {
-                    var ids = await connection.QueryAsync<string>(
-                        "SELECT Id FROM AllegroOffers WHERE Id IN @Ids",
-                        new { Ids = batch },
-                        transaction);
-                    foreach (var id in ids)
-                        existingIds.Add(id);
-                }
-
-                // 2️ Map AllegroOffer entities
+                // 1️ Map AllegroOffer entities
                 var allegroOffers = offers.Select(o =>
                 {
                     decimal.TryParse(o.SellingMode?.Price?.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out var price);
                     int.TryParse(o.Category?.Id, out var categoryId);
 
-                    return new AllegroOffer
+                    return new
                     {
                         Id = o.Id,
-                        Account = "JSAGRO",
+                        Account = RolmarConstraints.Account,
                         Name = o.Name ?? string.Empty,
-                        ProductId = null,
+                        ProductId = (int?)null,
                         CategoryId = categoryId,
                         Price = price,
                         Stock = o.Stock?.Available ?? 0,
@@ -74,49 +61,17 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                     };
                 }).ToList();
 
-                var newOffers = allegroOffers.Where(a => !existingIds.Contains(a.Id)).ToList();
-                var updateOffers = allegroOffers.Where(a => existingIds.Contains(a.Id)).ToList();
-
-                // 3️ Insert new offers in batches
-                if (newOffers.Any())
+                foreach (var batch in allegroOffers.Chunk(batchSize))
                 {
-                    const string insertSql = @"
-                        INSERT INTO AllegroOffers
-                        (Id, Account, Name, ProductId, CategoryId, Price, Stock, WatchersCount, VisitsCount, Status, DeliveryName, StartingAt, ExternalId)
-                        VALUES
-                        (@Id, @Account, @Name, @ProductId, @CategoryId, @Price, @Stock, @WatchersCount, @VisitsCount, @Status, @DeliveryName, @StartingAt, @ExternalId)";
-
-                    foreach (var batch in newOffers.Chunk(batchSize))
-                    {
-                        await connection.ExecuteAsync(insertSql, batch, transaction);
-                    }
-                }
-
-                // 4️ Update existing offers in batches
-                if (updateOffers.Any())
-                {
-                    const string updateSql = @"
-                        UPDATE AllegroOffers
-                        SET Name = @Name,
-                            Account = @Account,
-                            CategoryId = @CategoryId,
-                            Price = @Price,
-                            Stock = @Stock,
-                            WatchersCount = @WatchersCount,
-                            VisitsCount = @VisitsCount,
-                            Status = @Status,
-                            DeliveryName = @DeliveryName,
-                            StartingAt = @StartingAt
-                        WHERE Id = @Id";
-
-                    foreach (var batch in updateOffers.Chunk(batchSize))
-                    {
-                        await connection.ExecuteAsync(updateSql, batch, transaction);
-                    }
+                    await connection.ExecuteAsync(
+                        "AllegroOffers_Upsert",
+                        batch,
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
-                _logger.LogInformation("Upsert of offers completed: {New} new, {Updated} updated", newOffers.Count, updateOffers.Count);
+                _logger.LogInformation("Upsert of offers completed: {Count} processed", allegroOffers.Count);
             }
             catch (Exception ex)
             {
@@ -130,8 +85,10 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
         {
             using var connection = _context.CreateConnection();
             connection.Open();
-            var sql = "SELECT * FROM AllegroOffers";
-            return (await connection.QueryAsync<AllegroOffer>(sql)).ToList();
+            return (await connection.QueryAsync<AllegroOffer>(
+                "AllegroOffers_GetAll",
+                new { Account = RolmarConstraints.Account },
+                commandType: CommandType.StoredProcedure)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
@@ -151,36 +108,23 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             using var connection = _context.CreateConnection();
             connection.Open();
 
-            // Step 1: Get offers with products
-            const string offersSql = @"
-                SELECT
-                    ao.Id, ao.ExternalId, ao.Name, ao.CategoryId, ao.Status, ao.StartingAt, ao.DeliveryName,
-                    p.Id, p.AllegroId, p.Code, p.Name, p.Description,
-                    p.Ean, p.Weight, p.Fits, p.SupplierName, p.Substitutes, p.InStock, p.Unit,
-                    p.CurrencyPrice, p.PriceNet, p.PriceGross, p.DefaultAllegroCategory, p.Package,
-                    p.CreatedDate, p.UpdatedDate
-                FROM AllegroOffers ao
-                INNER JOIN RolmarProducts p ON p.Code = ao.ExternalId AND p.IntegrationCompany = 'Rolmar'
-                WHERE ao.Status IN ('ACTIVE', 'ENDED') AND ao.DeliveryName IN @DeliveryNames";
-
-            var offerDict = new Dictionary<string, AllegroOffer>();
-
+            // Step 1: Get offers, images, and specs in one call
             var command = new CommandDefinition(
-                offersSql,
-                new { DeliveryNames = deliveryNames },
+                "AllegroOffers_GetOffersToUpdate",
+                new { DeliveryNames = string.Join(",", deliveryNames), IntegrationCompany = RolmarConstraints.Company, Account = RolmarConstraints.Account },
                 commandTimeout: 900,
-                cancellationToken: ct);
+                cancellationToken: ct,
+                commandType: CommandType.StoredProcedure);
 
-            var offers = (await connection.QueryAsync<AllegroOffer, RolmarProduct, AllegroOffer>(
-                command,
+            using var grid = await connection.QueryMultipleAsync(command);
+
+            var offers = grid.Read<AllegroOffer, RolmarProduct, AllegroOffer>(
                 (offer, product) =>
                 {
                     offer.Product = product;
-                    offerDict[offer.Id] = offer;
                     return offer;
                 },
-                splitOn: "Id"
-            )).ToList();
+                splitOn: "Id").ToList();
 
             if (!offers.Any())
                 return offers;
@@ -190,32 +134,10 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                 .Select(g => g.OrderByDescending(o => o.StartingAt).First())
                 .ToList();
 
-            var productIds = offers.Select(o => o.Product.Id).ToList();
-            const int batchSize = 1000;
+            var allImages = grid.Read<AllegroImages>().ToList();
+            var allSpecs = grid.Read<ProductSpecification>().ToList();
 
-            var allImages = new List<AllegroImages>();
-            var allSpecs = new List<ProductSpecification>();
-
-            // Step 2: Load related collections in batches
-            for (int i = 0; i < productIds.Count; i += batchSize)
-            {
-                var batchIds = productIds.Skip(i).Take(batchSize).ToList();
-
-                var imagesTask = connection.QueryAsync<AllegroImages>(
-                    "SELECT * FROM AllegroImages WHERE ProductId IN @Ids AND Connected = 1",
-                    new { Ids = batchIds });
-
-                var specsTask = connection.QueryAsync<ProductSpecification>(
-                    "SELECT * FROM ProductSpecifications WHERE ProductId IN @Ids",
-                    new { Ids = batchIds });
-
-                await Task.WhenAll(imagesTask, specsTask);
-
-                allImages.AddRange(imagesTask.Result);
-                allSpecs.AddRange(specsTask.Result);
-            }
-
-            // Step 3: Aggregate into product collections
+            // Step 2: Aggregate into product collections
             var imagesLookup = allImages.ToLookup(i => i.ProductId);
             var specsLookup = allSpecs.ToLookup(s => s.ProductId);
 
@@ -234,35 +156,16 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             using var connection = _context.CreateConnection();
             connection.Open();
 
-            // First, get the product's CodeGaska
-            var code = await connection.QueryFirstOrDefaultAsync<string>(
-                @"SELECT Code FROM RolmarProducts WHERE Id = @ProductId",
-                new { ProductId = productId }
-            );
+            var code = await connection.ExecuteScalarAsync<string>(
+                "AllegroOffers_DeleteByProductId",
+                new { ProductId = productId },
+                commandType: CommandType.StoredProcedure);
 
-            var offerId = await connection.QueryFirstOrDefaultAsync<string>(
-                @"SELECT Id FROM AllegroOffers WHERE ExternalId = @CodeGaska",
-                new { CodeGaska = code }
-            );
-
-            if (code == null)
+            if (string.IsNullOrWhiteSpace(code))
             {
                 _logger.LogWarning("Product with Id {ProductId} not found. Cannot delete offer.", productId);
                 return;
             }
-
-            // Delete AllegroOffers where ExternalId = CodeGaska
-            var sql = @"
-                DELETE FROM AllegroOfferAttributes
-                WHERE OfferId = @OfferId
-
-                DELETE FROM AllegroOfferDescriptions
-                WHERE OfferId = @OfferId
-
-                DELETE FROM AllegroOffers
-                WHERE Id = @OfferId";
-
-            var affectedRows = await connection.ExecuteAsync(sql, new { OfferId = offerId });
 
             _logger.LogInformation("Deleted Allegro offer for product {Code}.", code);
         }

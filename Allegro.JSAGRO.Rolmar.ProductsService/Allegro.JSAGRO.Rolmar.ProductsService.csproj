@@ -24,34 +24,4 @@
   <ItemGroup>
     <ProjectReference Include="..\JSAGROSyncServices.Shared\JSAGROSyncServices.Shared.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <None Update="Migrations\20251205_01_InitialMigration.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251216_02_ChangeColumnDefaults.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251216_01_ChangeInStockField.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251217_02_AddSubstitutesColumn.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251217_01_AddRolmarCategoryTable.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251220_02_AddAllegroImagesTable.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251220_01_AddAllegroIdColumn.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260106_01_AddAccountColumn.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251220_03_AddSupplierColumns.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
 </Project>

@@ -1,4 +1,6 @@
-﻿namespace JSAGROSyncServices.Shared.Models
+﻿using JSAGROSyncServices.Shared.Data.Enums;
+
+namespace JSAGROSyncServices.Shared.Models
 {
     public class RolmarProduct
     {
@@ -22,6 +24,8 @@
         public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
 
         public DateTime UpdatedDate { get; set; } = DateTime.UtcNow;
+        public IntegrationCompany IntegrationCompany { get; set; }
+        public int IntegrationId { get; set; }
         public List<ProductSpecification> Specifications { get; set; }
         public List<ProductParameter> Parameters { get; set; }
         public List<RolmarCategory> Categories { get; set; }

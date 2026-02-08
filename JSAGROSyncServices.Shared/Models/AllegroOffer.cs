@@ -1,9 +1,11 @@
-﻿namespace JSAGROSyncServices.Shared.Models
+﻿using JSAGROSyncServices.Shared.Data.Enums;
+
+namespace JSAGROSyncServices.Shared.Models
 {
     public class AllegroOffer
     {
         public string Id { get; set; }
-        public string Account { get; set; }
+        public AllegroAccount Account { get; set; }
 
         public int? ProductId { get; set; }
         public string ExternalId { get; set; }
