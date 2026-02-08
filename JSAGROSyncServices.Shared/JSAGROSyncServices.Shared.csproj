@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.1" />
     <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
   </ItemGroup>
 
   <ItemGroup>
@@ -64,19 +65,22 @@
     <None Update="Migrations\20260208_02_AddCategoryStoredProcedures.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Migrations\20260208_07_AddTokenStoredProcedures.sql">
+    <None Update="Migrations\20260208_08_AddTokenStoredProcedures.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Migrations\20260208_03_AddImageStoredProcedures.sql">
+    <None Update="Migrations\20260208_04_AddImageStoredProcedures.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Migrations\20260208_04_AddOfferStoredProcedures.sql">
+    <None Update="Migrations\20260208_05_AddOfferStoredProcedures.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Migrations\20260208_05_AddParameterStoredProcedures.sql">
+    <None Update="Migrations\20260208_06_AddParameterStoredProcedures.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Migrations\20260208_06_AddProductStoredProcedures.sql">
+    <None Update="Migrations\20260208_07_AddProductStoredProcedures.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Migrations\20260208_03_AddAccountColumnInImages.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="Resources\Images\jsagro-logo.jpg">
