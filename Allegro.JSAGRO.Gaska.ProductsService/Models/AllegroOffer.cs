@@ -3,7 +3,7 @@
     public class AllegroOffer
     {
         public string Id { get; set; }
-        public string Account { get; set; }
+        public int Account { get; set; }
 
         public int? ProductId { get; set; }
         public string ExternalId { get; set; }

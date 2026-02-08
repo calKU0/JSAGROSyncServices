@@ -489,7 +489,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
 
             calculatedPrice += shippingCost;
 
-            return calculatedPrice;
+            return Math.Max(calculatedPrice, 1.00m);
         }
 
         private static string GetDelivery(RolmarProduct product, List<Settings.Delivery> deliveries)

@@ -46,7 +46,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                     return new
                     {
                         Id = o.Id,
-                        Account = RolmarConstraints.Account,
+                        Account = ServiceConstants.Account,
                         Name = o.Name ?? string.Empty,
                         ProductId = (int?)null,
                         CategoryId = categoryId,
@@ -87,7 +87,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             connection.Open();
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetAll",
-                new { Account = RolmarConstraints.Account },
+                new { Account = ServiceConstants.Account },
                 commandType: CommandType.StoredProcedure)).ToList();
         }
 
@@ -111,7 +111,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             // Step 1: Get offers, images, and specs in one call
             var command = new CommandDefinition(
                 "AllegroOffers_GetOffersToUpdate",
-                new { DeliveryNames = string.Join(",", deliveryNames), IntegrationCompany = RolmarConstraints.Company, Account = RolmarConstraints.Account },
+                new { DeliveryNames = string.Join(",", deliveryNames), IntegrationCompany = ServiceConstants.Company, Account = ServiceConstants.Account },
                 commandTimeout: 900,
                 cancellationToken: ct,
                 commandType: CommandType.StoredProcedure);

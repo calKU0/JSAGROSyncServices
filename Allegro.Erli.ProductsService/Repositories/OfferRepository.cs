@@ -19,7 +19,7 @@ namespace Allegro.Erli.ProductsService.Repositories
             {
                 var sql = @"
                 SELECT Id, ExistsInErli
-                FROM AllegroOffers WHERE Account = 'JSAGRO'";
+                FROM AllegroOffers WHERE Account = 1";
 
                 var offerDict = new Dictionary<string, Offer>();
 
@@ -63,7 +63,7 @@ namespace Allegro.Erli.ProductsService.Repositories
                     SELECT o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
                     FROM AllegroOffers o
                     LEFT JOIN AllegroOfferDescriptions d ON o.Id = d.OfferId
-                    WHERE o.Account = 'JSAGRO' AND ExistsInErli = 0 AND o.Status in ('ACTIVE', 'ENDED') AND Price > 0 AND Stock > 0 AND CategoryId != 0 AND CategoryId is not null";
+                    WHERE o.Account = 1 AND ExistsInErli = 0 AND o.Status in ('ACTIVE', 'ENDED') AND Price > 0 AND Stock > 0 AND CategoryId != 0 AND CategoryId is not null";
 
                 var offerDict = new Dictionary<string, Offer>();
 
@@ -117,7 +117,7 @@ namespace Allegro.Erli.ProductsService.Repositories
                     SELECT o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
                     FROM AllegroOffers o
                     LEFT JOIN AllegroOfferDescriptions d ON o.Id = d.OfferId
-                    WHERE o.Account = 'JSAGRO' AND ExistsInErli = 1 AND Price > 0 AND CategoryId != 0 AND CategoryId is not null";
+                    WHERE o.Account = 1 AND ExistsInErli = 1 AND Price > 0 AND CategoryId != 0 AND CategoryId is not null";
 
                 var offerDict = new Dictionary<string, Offer>();
 

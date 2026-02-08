@@ -1,13 +1,12 @@
 ﻿using Allegro.JSAGRO.Rolmar.ProductsService.Helpers;
 using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Helpers;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Models;
 using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Processing;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -20,7 +19,6 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
         private readonly ILogger<AllegroOfferService> _logger;
         private readonly IProductRepository _productRepo;
         private readonly IOfferRepository _offerRepo;
-        private readonly ICategoryRepository _categoryRepo;
         private readonly IParameterRepository _parameterRepo;
         private readonly IImageRespository _imageRepo;
         private readonly AllegroApiClient _apiClient;
@@ -37,11 +35,10 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
             WriteIndented = true
         };
 
-        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, ICategoryRepository categoryRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<PriceSettings> priceSettings, IOptions<AllegroSettings> allegroSettings, ILogger<AllegroOfferService> logger, IParameterRepository parameterRepo, IImageRespository imageRepo)
+        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<PriceSettings> priceSettings, IOptions<AllegroSettings> allegroSettings, ILogger<AllegroOfferService> logger, IParameterRepository parameterRepo, IImageRespository imageRepo)
         {
             _productRepo = productRepo;
             _offerRepo = offerRepo;
-            _categoryRepo = categoryRepo;
             _apiClient = apiClient;
             _appSettings = appsettings.Value;
             _priceSettings = priceSettings.Value;
@@ -394,9 +391,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
         {
             var imageResults = new ConcurrentBag<(string FileName, string Url)>();
 
-            var imagesFolder = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "Images");
+            var imagesFolder = @"C:\Program Files (x86)\Api Sync Services\RolmarImages";
 
             if (!Directory.Exists(imagesFolder))
             {
@@ -416,7 +411,6 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
 
             if (!imageFiles.Any())
             {
-                _logger.LogInformation("No images found for product {Code}", product.Code);
                 return new List<AllegroImages>();
             }
 
@@ -433,7 +427,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
                     try
                     {
                         var imageBytes = await File.ReadAllBytesAsync(filePath, token);
-                        var validatedBytes = EnsureMinSize(imageBytes);
+                        var validatedBytes = Utils.EnsureImageMinSize(imageBytes);
 
                         if (validatedBytes == null)
                         {
@@ -441,7 +435,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
                             return;
                         }
 
-                        var contentType = GetContentType(filePath);
+                        var contentType = Utils.GetContentTypeFromPath(filePath);
 
                         var uploadResult = await _apiClient.PostAsync<AllegroImageResponse>("/sale/images", validatedBytes, token, contentType);
 
@@ -507,48 +501,6 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
             }
 
             return result;
-        }
-
-        private static string GetContentType(string path)
-        {
-            return Path.GetExtension(path).ToLowerInvariant() switch
-            {
-                ".png" => "image/png",
-                ".jpg" or ".jpeg" => "image/jpeg",
-                _ => "application/octet-stream"
-            };
-        }
-
-        private byte[] EnsureMinSize(byte[] image, int minWidth = 400, int minHeight = 400)
-        {
-            try
-            {
-                using var imageTemp = Image.Load(image);
-
-                if (imageTemp.Width >= minWidth && imageTemp.Height >= minHeight)
-                    return image; // already large enough
-
-                // Calculate scale factor to meet minimum size
-                double scaleX = (double)minWidth / imageTemp.Width;
-                double scaleY = (double)minHeight / imageTemp.Height;
-                double scale = Math.Max(scaleX, scaleY);
-
-                int newWidth = (int)(imageTemp.Width * scale);
-                int newHeight = (int)(imageTemp.Height * scale);
-
-                imageTemp.Mutate(x => x.Resize(newWidth, newHeight));
-
-                using var ms = new MemoryStream();
-                imageTemp.Save(ms, new JpegEncoder());
-                _logger.LogInformation("Resized image to {Width}x{Height}px", newWidth, newHeight);
-
-                return ms.ToArray();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to resize image");
-                return null;
-            }
         }
 
         public Task SyncAllegroOffersDetails(CancellationToken ct = default)

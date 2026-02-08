@@ -8,7 +8,7 @@ using Serilog;
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "Allegro.Erli.ProductsService";
+        options.ServiceName = "AllegroErliProductsService";
     })
     .ConfigureServices((hostContext, services) =>
     {

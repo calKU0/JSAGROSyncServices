@@ -17,7 +17,7 @@ using System.Net.Http.Headers;
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "Allegro.JSAGRO.Rolmar.ProductsService";
+        options.ServiceName = "AllegroJSAGRORolmarProductsService";
     })
     .ConfigureServices((hostContext, services) =>
     {

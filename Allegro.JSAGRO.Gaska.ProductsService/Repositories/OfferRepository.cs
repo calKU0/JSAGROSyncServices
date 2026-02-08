@@ -60,7 +60,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     return new AllegroOffer
                     {
                         Id = o.Id,
-                        Account = "JSAGRO",
+                        Account = 1,
                         Name = o.Name ?? string.Empty,
                         ProductId = null,
                         CategoryId = categoryId,
@@ -157,6 +157,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     return new AllegroOffer
                     {
                         Id = o.Id,
+                        Account = 1,
                         Name = o.Name ?? string.Empty,
                         CategoryId = categoryId,
                         Price = price,
@@ -182,9 +183,9 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                 {
                     var insertSql = @"
                         INSERT INTO AllegroOffers
-                        (Id, Name, CategoryId, Price, Stock, Status, DeliveryName, ExternalId, Weight, Images, StartingAt, HandlingTime, ResponsiblePerson, ResponsibleProducer)
+                        (Id, Account, Name, CategoryId, Price, Stock, Status, DeliveryName, ExternalId, Weight, Images, StartingAt, HandlingTime, ResponsiblePerson, ResponsibleProducer)
                         VALUES
-                        (@Id, @Name, @CategoryId, @Price, @Stock, @Status, @DeliveryName, @ExternalId, @Weight, @Images, @StartingAt, @HandlingTime, @ResponsiblePerson, @ResponsibleProducer)";
+                        (@Id, @Account, @Name, @CategoryId, @Price, @Stock, @Status, @DeliveryName, @ExternalId, @Weight, @Images, @StartingAt, @HandlingTime, @ResponsiblePerson, @ResponsibleProducer)";
                     await connection.ExecuteAsync(insertSql, newOffers, transaction);
                 }
 
@@ -195,6 +196,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                         UPDATE AllegroOffers
                         SET Name = @Name,
                             CategoryId = @CategoryId,
+                            Account = @Account,
                             Price = @Price,
                             Stock = @Stock,
                             Status = @Status,
@@ -285,7 +287,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
         public async Task<List<AllegroOffer>> GetAllOffers(CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
-            var sql = "SELECT * FROM AllegroOffers";
+            var sql = "SELECT * FROM AllegroOffers WHERE Account = 1";
             return (await connection.QueryAsync<AllegroOffer>(sql)).ToList();
         }
 
@@ -382,6 +384,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                 INNER JOIN Products p ON p.CodeGaska = o.ExternalId
                 WHERE (o.Status = 'ACTIVE' OR o.Status = 'ENDED')
                   AND o.DeliveryName = @DeliveryName
+                  AND o.Account = 1
                   AND EXISTS (SELECT 1 FROM ProductParameters pp WHERE pp.ProductId = p.Id)
                   AND EXISTS (SELECT 1 FROM ProductImages pi WHERE pi.ProductId = p.Id AND pi.AllegroUrl IS NOT NULL)
                   AND EXISTS (SELECT 1 FROM ProductCategories pc WHERE pc.ProductId = p.Id);",

@@ -1,7 +1,8 @@
-﻿using Dapper;
-using System.Data;
+﻿using Allegro.JSAGRO.Rolmar.ProductsService.Constants;
+using Dapper;
 using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.Interfaces;
+using System.Data;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 {
@@ -20,7 +21,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             connection.Open();
             return await connection.ExecuteScalarAsync<int>(
                 "AllegroImages_Add",
-                new { ProductId = productId, Url = url },
+                new { ProductId = productId, Url = url, Account = ServiceConstants.Account },
                 commandType: CommandType.StoredProcedure
             );
         }
@@ -31,7 +32,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             connection.Open();
             await connection.ExecuteScalarAsync<int>(
                 "AllegroImages_DeleteNotConnectedByProductId",
-                new { ProductId = productId },
+                new { ProductId = productId, Account = ServiceConstants.Account },
                 commandType: CommandType.StoredProcedure
             );
         }
@@ -42,7 +43,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             connection.Open();
             await connection.ExecuteAsync(
                 "AllegroImages_MarkConnectedByProductId",
-                new { ProductId = productId },
+                new { ProductId = productId, Account = ServiceConstants.Account },
                 commandType: CommandType.StoredProcedure
             );
         }

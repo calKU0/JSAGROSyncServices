@@ -204,8 +204,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
 
                 var rolmarResponse = rolmarResponseArray[0];
 
-                string baseDirectory =
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Images");
+                string baseDirectory = @"C:\Program Files (x86)\Api Sync Services\RolmarImages";
 
                 Directory.CreateDirectory(baseDirectory);
 

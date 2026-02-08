@@ -20,7 +20,7 @@ using IProductRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Int
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "Allegro.JSAGRO.Gaska.ProductsService";
+        options.ServiceName = "AllegroJSAGROGaskaProductsService";
     })
     .ConfigureServices((hostContext, services) =>
     {

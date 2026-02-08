@@ -12,7 +12,7 @@ using Serilog;
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "Allegro.JSAGRO.Gaska.OrdersService";
+        options.ServiceName = "AllegroJSAGROGaskaOrdersService";
     })
     .ConfigureServices((hostContext, services) =>
     {

@@ -26,7 +26,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
             var products = await connection.QueryAsync<RolmarProduct>(
                 "RolmarProducts_GetAll",
-                new { IntegrationCompany = RolmarConstraints.Company },
+                new { IntegrationCompany = ServiceConstants.Company },
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure);
 
@@ -40,7 +40,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
             var products = await connection.QueryAsync<RolmarProduct>(
                 "RolmarProducts_GetWithoutAllegroId",
-                new { IntegrationCompany = RolmarConstraints.Company },
+                new { IntegrationCompany = ServiceConstants.Company },
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure);
 
@@ -74,7 +74,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
                     return existing;
                 },
-                new { IntegrationCompany = RolmarConstraints.Company },
+                new { IntegrationCompany = ServiceConstants.Company },
                 splitOn: "Id",
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure
@@ -114,7 +114,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
                     return existing;
                 },
-                new { MinProductStock = minProductStock, IntegrationCompany = RolmarConstraints.Company },
+                new { MinProductStock = minProductStock, IntegrationCompany = ServiceConstants.Company, Account = ServiceConstants.Account },
                 splitOn: "Id,Id",
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure
@@ -150,7 +150,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
                     return existing;
                 },
-                new { IntegrationCompany = RolmarConstraints.Company },
+                new { IntegrationCompany = ServiceConstants.Company },
                 splitOn: "Id",
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure
@@ -236,7 +236,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                         Unit = product.Unit,
                         Currency = product.CurrencyPrice,
                         Substitutes = product.Substitutes,
-                        IntegrationCompany = RolmarConstraints.Company,
+                        IntegrationCompany = ServiceConstants.Company,
                         PriceNet = product.PriceNet,
                         PriceGross = product.PriceGross,
                         Package = product.Package
