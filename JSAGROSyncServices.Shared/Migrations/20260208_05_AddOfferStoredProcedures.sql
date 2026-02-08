@@ -101,8 +101,8 @@ BEGIN
         p.CreatedDate, p.UpdatedDate
     FROM AllegroOffers ao
     INNER JOIN RolmarProducts p ON p.Code = ao.ExternalId AND p.IntegrationCompany = @IntegrationCompany
-    WHERE ao.Status IN ('ACTIVE', 'ENDED') and Account = @Account
-      AND ao.DeliveryName IN (SELECT value FROM STRING_SPLIT(@DeliveryNames, ','));
+    WHERE ao.Status IN ('ACTIVE', 'ENDED') and Account = @Account 
+        AND ao.DeliveryName IN (SELECT value FROM STRING_SPLIT(@DeliveryNames, ','));
 
     SELECT
         OfferId AS Id,
@@ -136,7 +136,7 @@ BEGIN
     SELECT ai.*
     FROM AllegroImages ai
     WHERE ai.ProductId IN (SELECT DISTINCT ProductId FROM #OffersWithProducts)
-      AND ai.Connected = 1;
+      AND ai.Connected = 1 AND Account = @Account;
 
     SELECT ps.*
     FROM ProductSpecifications ps

@@ -63,7 +63,8 @@ GO
 
 CREATE OR ALTER PROCEDURE dbo.RolmarProducts_GetToUpload
     @MinProductStock INT,
-    @IntegrationCompany INT
+    @IntegrationCompany INT,
+    @Account INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -103,7 +104,7 @@ BEGIN
     LEFT JOIN ProductSpecifications ps ON ps.ProductId = p.Id
     JOIN RolmarProductParameters pp ON pp.ProductId = p.Id
     JOIN CategoryParameters cp ON cp.Id = pp.CategoryParameterId
-    LEFT JOIN AllegroOffers ao ON ao.ExternalId = p.Code
+    LEFT JOIN AllegroOffers ao ON ao.ExternalId = p.Code AND ao.Account = @Account
     WHERE p.InStock >= @MinProductStock
       AND NULLIF(p.DefaultAllegroCategory, 0) IS NOT NULL
       AND ao.Id IS NULL
