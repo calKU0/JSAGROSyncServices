@@ -94,7 +94,12 @@
         <!-- Service selection overlay -->
         <Grid x:Name="ServiceSelectionOverlay" Background="#CCFFFFFF" Visibility="Visible" ZIndex="10">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock Text="Wybierz serwis do obserwacji" FontSize="24" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center" />
+                <TextBlock Text="Wybierz konto" FontSize="24" FontWeight="Bold" Margin="0,0,0,12" HorizontalAlignment="Center" />
+                <ComboBox x:Name="CbAccountSelectorOverlay"
+                          Width="260"
+                          Margin="0,0,0,20"
+                          SelectionChanged="CbAccountSelector_SelectionChanged" />
+                <TextBlock Text="Wybierz serwis do obserwacji" FontSize="20" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center" />
                 <ItemsControl x:Name="IcAvailableServices"
                               ItemsSource="{Binding AvailableServices}"
                               HorizontalAlignment="Center">
@@ -133,14 +138,26 @@
 
                     <!-- Top header + nav buttons -->
                     <StackPanel DockPanel.Dock="Top">
-                        <ComboBox x:Name="CbServiceSelector"
-                          HorizontalAlignment="Stretch"
-                          VerticalAlignment="Top"
-                          Margin="10,0,10,0"
-                          Visibility="Collapsed"
-                          DisplayMemberPath="Name"
-                          SelectedValuePath="Id"
-                          SelectionChanged="CbServiceSelector_SelectionChanged" />
+                        <Grid Margin="10,0,10,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ComboBox x:Name="CbAccountSelector"
+                                      Grid.Column="0"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Top"
+                                      Margin="0,0,6,0"
+                                      SelectionChanged="CbAccountSelector_SelectionChanged" />
+                            <ComboBox x:Name="CbServiceSelector"
+                                      Grid.Column="1"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Top"
+                                      Margin="6,0,0,0"
+                                      DisplayMemberPath="Name"
+                                      SelectedValuePath="Id"
+                                      SelectionChanged="CbServiceSelector_SelectionChanged" />
+                        </Grid>
                         <TextBlock x:Name="ServiceNameTextBox" Text="..." FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="6,6,6,0" />
                         <TextBlock Text="Panel" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
 

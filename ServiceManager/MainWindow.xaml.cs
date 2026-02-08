@@ -41,11 +41,18 @@ namespace ServiceManager
         private bool _isAtBottom = true;
         private readonly List<(TextBox Length, TextBox Width, TextBox Height, TextBox Weight, TextBox Name)> _deliveryTextBoxes = new();
         private List<Delivery> _deliveries = new();
+        private readonly List<ServiceItem> _allServices = new();
+        public ObservableCollection<string> AvailableAccounts { get; } = new ObservableCollection<string>();
+        private string? _selectedAccount;
+        private bool _isUpdatingAccountSelection;
 
         public MainWindow()
         {
             InitializeComponent();
             IcAvailableServices.ItemsSource = AvailableServices;
+            CbServiceSelector.ItemsSource = AvailableServices;
+            CbAccountSelector.ItemsSource = AvailableAccounts;
+            CbAccountSelectorOverlay.ItemsSource = AvailableAccounts;
 
             _logReloadDebounce = new DispatcherTimer
             {
@@ -63,11 +70,21 @@ namespace ServiceManager
         {
             LoadAvailableServices();
 
-            if (AvailableServices.Count == 1)
+            if (AvailableAccounts.Count == 1)
             {
-                SelectService(AvailableServices[0]);
-                ServiceSelectionOverlay.Visibility = Visibility.Collapsed;
-                MainContentAreaNav.Visibility = Visibility.Visible;
+                SelectAccount(AvailableAccounts[0]);
+                if (AvailableServices.Count == 1)
+                {
+                    SelectService(AvailableServices[0]);
+                    CbServiceSelector.SelectedItem = AvailableServices[0];
+                    ServiceSelectionOverlay.Visibility = Visibility.Collapsed;
+                    MainContentAreaNav.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    ServiceSelectionOverlay.Visibility = Visibility.Visible;
+                    MainContentAreaNav.Visibility = Visibility.Collapsed;
+                }
             }
             else
             {
@@ -107,6 +124,8 @@ namespace ServiceManager
         private void LoadAvailableServices()
         {
             AvailableServices.Clear();
+            AvailableAccounts.Clear();
+            _allServices.Clear();
 
             var keys = ConfigurationManager.AppSettings.AllKeys
                 .Where(k => k.StartsWith("Service_"))
@@ -119,15 +138,78 @@ namespace ServiceManager
                 {
                     Id = key,
                     Name = ConfigurationManager.AppSettings[$"Service_{key}_Name"] ?? key,
+                    Account = ConfigurationManager.AppSettings[$"Service_{key}_Account"] ?? "",
                     LogoPath = ConfigurationManager.AppSettings[$"Service_{key}_LogoPath"] ?? "",
                     ServiceName = ConfigurationManager.AppSettings[$"Service_{key}_ServiceName"] ?? "",
                     LogFolderPath = ConfigurationManager.AppSettings[$"Service_{key}_LogFolder"] ?? "",
                     ExternalConfigPath = ConfigurationManager.AppSettings[$"Service_{key}_ConfigPath"] ?? ""
                 };
-                AvailableServices.Add(service);
+                _allServices.Add(service);
             }
 
-            CbServiceSelector.ItemsSource = AvailableServices;
+            foreach (var account in _allServices.Select(s => s.Account).Distinct())
+                AvailableAccounts.Add(account);
+
+            if (AvailableAccounts.Count == 1)
+                SelectAccount(AvailableAccounts[0]);
+        }
+
+        private void SelectAccount(string account)
+        {
+            if (_selectedAccount == account)
+                return;
+
+            _selectedAccount = account;
+
+            UpdateAccountSelectors(account);
+            ApplyAccountFilter();
+        }
+
+        private void UpdateAccountSelectors(string account)
+        {
+            _isUpdatingAccountSelection = true;
+            try
+            {
+                CbAccountSelector.SelectedItem = account;
+                CbAccountSelectorOverlay.SelectedItem = account;
+            }
+            finally
+            {
+                _isUpdatingAccountSelection = false;
+            }
+        }
+
+        private void ApplyAccountFilter()
+        {
+            AvailableServices.Clear();
+
+            var filtered = _allServices
+                .Where(s => string.Equals(s.Account, _selectedAccount, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var service in filtered)
+                AvailableServices.Add(service);
+
+            _selectedService = null;
+            CbServiceSelector.SelectedItem = null;
+            ServiceNameTextBox.Text = "...";
+            MainContentArea.Visibility = Visibility.Collapsed;
+            LogsViewContainer.Visibility = Visibility.Collapsed;
+            ConfigViewContainer.Visibility = Visibility.Collapsed;
+            BtnShowLogs.IsChecked = false;
+            BtnShowConfig.IsChecked = false;
+
+            if (AvailableServices.Count == 1)
+            {
+                SelectService(AvailableServices[0]);
+                ServiceSelectionOverlay.Visibility = Visibility.Collapsed;
+                MainContentAreaNav.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ServiceSelectionOverlay.Visibility = Visibility.Visible;
+                MainContentAreaNav.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void SelectService(ServiceItem service)
@@ -151,6 +233,9 @@ namespace ServiceManager
         {
             if (sender is Button btn && btn.DataContext is ServiceItem service)
             {
+                if (!string.IsNullOrEmpty(service.Account))
+                    SelectAccount(service.Account);
+
                 SelectService(service);
                 CbServiceSelector.SelectedValue = service.Id;
                 ServiceSelectionOverlay.Visibility = Visibility.Collapsed;
@@ -175,6 +260,17 @@ namespace ServiceManager
                 ConfigViewContainer.Visibility = Visibility.Collapsed;
                 BtnShowLogs.IsChecked = false;
                 BtnShowConfig.IsChecked = false;
+            }
+        }
+
+        private void CbAccountSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isUpdatingAccountSelection)
+                return;
+
+            if (sender is ComboBox combo && combo.SelectedItem is string account)
+            {
+                SelectAccount(account);
             }
         }
 
