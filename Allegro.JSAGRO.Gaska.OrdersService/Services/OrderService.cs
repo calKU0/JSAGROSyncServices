@@ -38,7 +38,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
         {
             const int limit = 100;
             int offset = 0, totalFetched = 0;
-            const string minBoughtFrom = "2025-10-24T00:00:00Z";
+            const string minBoughtFrom = "2026-02-11T00:00:00Z";
             var minBoughtDate = DateTime.Parse(minBoughtFrom, null, DateTimeStyles.AdjustToUniversal);
             var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
             var boughtDate = sevenDaysAgo < minBoughtDate ? minBoughtDate : sevenDaysAgo;
@@ -544,8 +544,8 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
         {
             var color = string.IsNullOrEmpty(errorMessage) ? "#28a745" : "#dc3545";
             var headerText = string.IsNullOrEmpty(errorMessage)
-                ? "Złożono automatyczne zamówienie w Gąsce"
-                : "Wystąpił błąd przy składaniu automatycznego zamówienia w Gąsce";
+                ? $"Złożono automatyczne zamówienie w Gąsce z konta {ServiceConstants.Account}"
+                : $"Wystąpił błąd przy składaniu automatycznego zamówienia w Gąsce z konta {ServiceConstants.Account}";
 
             var html = $@"
                 <html>
