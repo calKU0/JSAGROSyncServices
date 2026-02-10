@@ -1,12 +1,12 @@
 ﻿using Allegro.Erli.ProductsService.DTOs;
-using Allegro.Erli.ProductsService.Models;
+using JSAGROSyncServices.Shared.Models;
 using Newtonsoft.Json;
 
 namespace Allegro.Erli.ProductsService.Mappers
 {
     public static class ErliProductMapper
     {
-        public static ErliCreateProductRequest MapFromOffer(Offer offer)
+        public static ErliCreateProductRequest MapFromOffer(AllegroOffer offer)
         {
             if (offer == null) throw new ArgumentNullException(nameof(offer));
 
@@ -117,19 +117,19 @@ namespace Allegro.Erli.ProductsService.Mappers
             };
 
             // Build description
-            var descriptions = offer.Descriptions ?? new List<OfferDescription>();
+            var descriptions = offer.Descriptions ?? new List<AllegroOfferDescription>();
             var descriptionItems = descriptions
                 .Where(d => d != null)
                 .OrderBy(d => d.SectionId)
-                .ThenBy(d => d.DescriptionId)
+                .ThenBy(d => d.Id)
                 .Select(d => new
                 {
                     d.SectionId,
                     Item = new ErliDescriptionItem
                     {
-                        Type = string.Equals(d.DescType, "IMAGE", StringComparison.OrdinalIgnoreCase) ? "IMAGE" : "TEXT",
-                        Content = string.Equals(d.DescType, "TEXT", StringComparison.OrdinalIgnoreCase) ? d.Content : null,
-                        Url = string.Equals(d.DescType, "IMAGE", StringComparison.OrdinalIgnoreCase) ? d.Content : null
+                        Type = string.Equals(d.Type, "IMAGE", StringComparison.OrdinalIgnoreCase) ? "IMAGE" : "TEXT",
+                        Content = string.Equals(d.Type, "TEXT", StringComparison.OrdinalIgnoreCase) ? d.Content : null,
+                        Url = string.Equals(d.Type, "IMAGE", StringComparison.OrdinalIgnoreCase) ? d.Content : null
                     }
                 })
                 .ToList();

@@ -1,6 +1,8 @@
-﻿using Allegro.Erli.ProductsService.Models;
+﻿using Allegro.Erli.ProductsService.Constants;
 using Dapper;
 using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Shared.Models;
+using System.Data;
 
 namespace Allegro.Erli.ProductsService.Repositories
 {
@@ -13,17 +15,19 @@ namespace Allegro.Erli.ProductsService.Repositories
             _context = context;
         }
 
-        public IEnumerable<Offer> GetOffersWithDetails()
+        public IEnumerable<AllegroOffer> GetOffersWithDetails()
         {
             using (var connection = _context.CreateConnection())
             {
-                var sql = @"
-                SELECT Id, ExistsInErli
-                FROM AllegroOffers WHERE Account = 1";
+                var storedProcedure = "dbo.AllegroOffers_GetWithDetails";
 
-                var offerDict = new Dictionary<string, Offer>();
+                var offerDict = new Dictionary<string, AllegroOffer>();
 
-                connection.Query<Offer>(sql).ToList().ForEach(offer =>
+                connection.Query<AllegroOffer>(
+                    storedProcedure,
+                    new { Account = ServiceConstants.Account },
+                    commandType: CommandType.StoredProcedure
+                ).ToList().ForEach(offer =>
                 {
                     if (!offerDict.ContainsKey(offer.Id))
                     {
@@ -35,139 +39,99 @@ namespace Allegro.Erli.ProductsService.Repositories
             }
         }
 
-        public void UpdateOffersExistsInErli(IEnumerable<Offer> offers)
+        public void UpdateOffersExistsInErli(IEnumerable<AllegroOffer> offers)
         {
             using (var connection = _context.CreateConnection())
             {
-                var sql = "UPDATE AllegroOffers SET ExistsInErli = @ExistsInErli WHERE Id = @Id";
-
                 // Execute in a transaction for safety
                 connection.Open();
                 using (var transaction = connection.BeginTransaction())
                 {
                     foreach (var offer in offers)
                     {
-                        connection.Execute(sql, new { ExistsInErli = offer.ExistsInErli, Id = offer.Id }, transaction);
+                        connection.Execute(
+                            "dbo.AllegroOffers_UpdateExistsInErli",
+                            new { ExistsInErli = offer.ExistsInErli, Id = offer.Id },
+                            transaction,
+                            commandType: CommandType.StoredProcedure
+                        );
                     }
                     transaction.Commit();
                 }
             }
         }
 
-        public IEnumerable<Offer> GetOffersForErliCreation()
+        public IEnumerable<AllegroOffer> GetOffersForErliCreation()
         {
             using (var connection = _context.CreateConnection())
             {
-                // Step 1: get offers + descriptions
-                var sqlOffers = @"
-                    SELECT o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
-                    FROM AllegroOffers o
-                    LEFT JOIN AllegroOfferDescriptions d ON o.Id = d.OfferId
-                    WHERE o.Account = 1 AND ExistsInErli = 0 AND o.Status in ('ACTIVE', 'ENDED') AND Price > 0 AND Stock > 0 AND CategoryId != 0 AND CategoryId is not null";
+                var storedProcedure = "dbo.AllegroOffers_GetForErliCreation";
 
-                var offerDict = new Dictionary<string, Offer>();
+                var offerDict = new Dictionary<string, AllegroOffer>();
 
-                connection.Query<Offer, OfferDescription, Offer>(sqlOffers,
-                    (offer, desc) =>
+                connection.Query<AllegroOffer, AllegroOfferDescription, AllegroOfferAttribute, AllegroOffer>(
+                    storedProcedure,
+                    (offer, desc, attr) =>
                     {
                         if (!offerDict.TryGetValue(offer.Id, out var currentOffer))
                         {
                             currentOffer = offer;
-                            currentOffer.Descriptions = new List<OfferDescription>();
-                            currentOffer.Attributes = new List<OfferAttribute>();
+                            currentOffer.Descriptions = new List<AllegroOfferDescription>();
+                            currentOffer.Attributes = new List<AllegroOfferAttribute>();
                             offerDict.Add(currentOffer.Id, currentOffer);
                         }
 
-                        if (desc != null && !currentOffer.Descriptions.Any(d => d.DescriptionId == desc.DescriptionId))
+                        if (desc != null && !currentOffer.Descriptions.Any(d => d.Id == desc.Id))
                             currentOffer.Descriptions.Add(desc);
+
+                        if (attr != null && !currentOffer.Attributes.Any(a => a.Id == attr.Id))
+                            currentOffer.Attributes.Add(attr);
 
                         return offer;
                     },
-                    splitOn: "DescriptionId",
-                    commandTimeout: 600
+                    new { Account = ServiceConstants.Account },
+                    splitOn: "Id,Id",
+                    commandTimeout: 600,
+                    commandType: CommandType.StoredProcedure
                 ).ToList();
-
-                // Step 2: get all attributes separately
-                var sqlAttrs = @"
-                    SELECT *
-                    FROM AllegroOfferAttributes
-                    WHERE OfferId IN @OfferIds and type in ('dictionary', 'string', 'number', 'float', 'int')";
-
-                var allAttrs = connection.Query<OfferAttribute>(sqlAttrs, new { OfferIds = offerDict.Keys.ToArray() });
-
-                // Step 3: merge attributes
-                foreach (var attr in allAttrs)
-                {
-                    if (offerDict.TryGetValue(attr.OfferId, out var offer))
-                    {
-                        offer.Attributes.Add(attr);
-                    }
-                }
 
                 return offerDict.Values;
             }
         }
 
-        public IEnumerable<Offer> GetOffersForErliUpdate()
+        public IEnumerable<AllegroOffer> GetOffersForErliUpdate()
         {
             using (var connection = _context.CreateConnection())
             {
-                // Step 1: get offers + descriptions
-                var sqlOffers = @"
-                    SELECT o.*, d.Id AS DescriptionId, d.Type AS DescType, d.Content, d.SectionId
-                    FROM AllegroOffers o
-                    LEFT JOIN AllegroOfferDescriptions d ON o.Id = d.OfferId
-                    WHERE o.Account = 1 AND ExistsInErli = 1 AND Price > 0 AND CategoryId != 0 AND CategoryId is not null";
+                var storedProcedure = "dbo.AllegroOffers_GetForErliUpdate";
 
-                var offerDict = new Dictionary<string, Offer>();
+                var offerDict = new Dictionary<string, AllegroOffer>();
 
-                connection.Query<Offer, OfferDescription, Offer>(
-                    sqlOffers,
-                    (offer, desc) =>
+                connection.Query<AllegroOffer, AllegroOfferDescription, AllegroOfferAttribute, AllegroOffer>(
+                    storedProcedure,
+                    (offer, desc, attr) =>
                     {
                         if (!offerDict.TryGetValue(offer.Id, out var currentOffer))
                         {
                             currentOffer = offer;
-                            currentOffer.Descriptions = new List<OfferDescription>();
-                            currentOffer.Attributes = new List<OfferAttribute>();
+                            currentOffer.Descriptions = new List<AllegroOfferDescription>();
+                            currentOffer.Attributes = new List<AllegroOfferAttribute>();
                             offerDict.Add(currentOffer.Id, currentOffer);
                         }
 
-                        if (desc != null && !currentOffer.Descriptions.Any(d => d.DescriptionId == desc.DescriptionId))
+                        if (desc != null && !currentOffer.Descriptions.Any(d => d.Id == desc.Id))
                             currentOffer.Descriptions.Add(desc);
+
+                        if (attr != null && !currentOffer.Attributes.Any(a => a.Id == attr.Id))
+                            currentOffer.Attributes.Add(attr);
 
                         return offer;
                     },
-                    splitOn: "DescriptionId",
-                    commandTimeout: 600
+                    new { Account = ServiceConstants.Account },
+                    splitOn: "Id,Id",
+                    commandTimeout: 600,
+                    commandType: CommandType.StoredProcedure
                 ).ToList();
-
-                // Step 2: get all attributes in batches
-                var offerIds = offerDict.Keys.ToList();
-                var allAttrs = new List<OfferAttribute>();
-
-                const int batchSize = 2000;
-                for (int i = 0; i < offerIds.Count; i += batchSize)
-                {
-                    var batch = offerIds.Skip(i).Take(batchSize).ToArray();
-
-                    var sqlAttrs = @"
-                        SELECT *
-                        FROM AllegroOfferAttributes
-                        WHERE OfferId IN @OfferIds and type in ('dictionary', 'string', 'number', 'float', 'int')";
-
-                    var batchAttrs = connection.Query<OfferAttribute>(sqlAttrs, new { OfferIds = batch });
-                    allAttrs.AddRange(batchAttrs);
-                }
-
-                // Step 3: merge attributes
-                foreach (var attr in allAttrs)
-                {
-                    if (offerDict.TryGetValue(attr.OfferId, out var offer))
-                    {
-                        offer.Attributes.Add(attr);
-                    }
-                }
 
                 return offerDict.Values;
             }

@@ -6,10 +6,8 @@ namespace JSAGROSyncServices.Shared.Models
     {
         public string Id { get; set; }
         public AllegroAccount Account { get; set; }
-
         public int? ProductId { get; set; }
         public string ExternalId { get; set; }
-
         public string Name { get; set; }
         public int CategoryId { get; set; }
         public decimal Price { get; set; }
@@ -26,5 +24,7 @@ namespace JSAGROSyncServices.Shared.Models
         public string ResponsibleProducer { get; set; }
         public string ResponsiblePerson { get; set; }
         public virtual RolmarProduct Product { get; set; }
+        public virtual List<AllegroOfferDescription> Descriptions { get; set; }
+        public virtual List<AllegroOfferAttribute> Attributes { get; set; }
     }
 }

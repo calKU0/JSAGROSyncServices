@@ -1,7 +1,7 @@
 ﻿using Allegro.Erli.ProductsService.DTOs;
 using Allegro.Erli.ProductsService.Mappers;
-using Allegro.Erli.ProductsService.Models;
 using Allegro.Erli.ProductsService.Repositories;
+using JSAGROSyncServices.Shared.Models;
 using Newtonsoft.Json;
 using Serilog;
 
@@ -111,7 +111,7 @@ namespace Allegro.Erli.ProductsService.Services
             }
         }
 
-        private async Task SendProductToErli(Offer offer, bool isUpdate = false)
+        private async Task SendProductToErli(AllegroOffer offer, bool isUpdate = false)
         {
             var request = ErliProductMapper.MapFromOffer(offer);
 
