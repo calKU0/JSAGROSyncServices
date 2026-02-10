@@ -1,12 +1,10 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
-using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
-using Dapper;
+﻿using Dapper;
 using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Models;
 using System.Data;
-using CategoryParameter = Allegro.JSAGRO.Gaska.ProductsService.Models.CategoryParameter;
-using CategoryParameterValue = Allegro.JSAGRO.Gaska.ProductsService.Models.CategoryParameterValue;
+using System.Text.Json;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 {
@@ -40,28 +38,14 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             {
                 var dto = stack.Pop();
 
-                var existing = await conn.QueryFirstOrDefaultAsync<AllegroCategory>(
-                    "SELECT * FROM AllegroCategories WHERE CategoryId = @CategoryId",
-                    new { CategoryId = dto.Id }, tran
+                var id = await conn.ExecuteScalarAsync<int>(
+                    "AllegroCategories_Upsert",
+                    new { CategoryId = dto.Id, Name = dto.Name, ParentId = parentEntity?.Id },
+                    tran,
+                    commandType: CommandType.StoredProcedure
                 );
 
-                if (existing == null)
-                {
-                    var id = await conn.ExecuteScalarAsync<int>(
-                        @"INSERT INTO AllegroCategories (CategoryId, Name, ParentId)
-                          VALUES (@CategoryId, @Name, @ParentId); SELECT SCOPE_IDENTITY();",
-                        new { CategoryId = dto.Id, Name = dto.Name, ParentId = parentEntity?.Id }, tran
-                    );
-                    parentEntity = new AllegroCategory { Id = id, CategoryId = dto.Id, Name = dto.Name, ParentId = parentEntity?.Id };
-                }
-                else
-                {
-                    await conn.ExecuteAsync(
-                        "UPDATE AllegroCategories SET Name = @Name, ParentId = @ParentId WHERE Id = @Id",
-                        new { Name = dto.Name, ParentId = parentEntity?.Id, Id = existing.Id }, tran
-                    );
-                    parentEntity = existing;
-                }
+                parentEntity = new AllegroCategory { Id = id, CategoryId = dto.Id, Name = dto.Name, ParentId = parentEntity?.Id };
             }
 
             tran.Commit();
@@ -69,20 +53,12 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 
         public async Task<IEnumerable<CategoryParameter>> GetCategoryParametersAsync(int categoryId, CancellationToken ct = default)
         {
-            const string sql = @"
-        SELECT
-            cp.*,
-            cpv.Id AS ValueId, cpv.Value, cpv.CategoryParameterId
-        FROM CategoryParameters cp
-        LEFT JOIN CategoryParameterValues cpv ON cp.Id = cpv.CategoryParameterId
-        WHERE cp.CategoryId = @CategoryId";
-
             using var conn = _context.CreateConnection();
 
             var paramDict = new Dictionary<int, CategoryParameter>();
 
             await conn.QueryAsync<CategoryParameter, CategoryParameterValue, CategoryParameter>(
-                sql,
+                "CategoryParameters_GetByCategoryId",
                 (cp, cpv) =>
                 {
                     if (!paramDict.TryGetValue(cp.Id, out var categoryParam))
@@ -97,8 +73,9 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 
                     return categoryParam;
                 },
-                new { CategoryId = categoryId },
-                splitOn: "ValueId"
+                new { CategoryId = categoryId, OnlyForOffers = 0 },
+                splitOn: "ValueId",
+                commandType: CommandType.StoredProcedure
             );
 
             return paramDict.Values;
@@ -113,102 +90,32 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             conn.Open();
             using var tran = conn.BeginTransaction();
 
-            var paramList = parameters.ToList();
-
-            // Get existing category parameters
-            var categoryIds = paramList.Select(p => p.CategoryId).Distinct();
-            var paramIds = paramList.Select(p => p.ParameterId).Distinct();
-
-            var existing = (await conn.QueryAsync<CategoryParameter>(
-                @"SELECT * FROM CategoryParameters
-                    WHERE CategoryId IN @CategoryIds AND ParameterId IN @ParamIds",
-                new { CategoryIds = categoryIds, ParamIds = paramIds }, tran
-            )).ToDictionary(p => (p.CategoryId, p.ParameterId));
-
-            var toInsert = new List<CategoryParameter>();
-            var toUpdate = new List<CategoryParameter>();
-
-            foreach (var param in paramList)
+            foreach (var param in parameters)
             {
-                if (existing.TryGetValue((param.CategoryId, param.ParameterId), out var existingParam))
-                {
-                    existingParam.Name = param.Name;
-                    existingParam.Type = param.Type;
-                    existingParam.Required = param.Required;
-                    existingParam.RequiredForProduct = param.RequiredForProduct;
-                    existingParam.DescribesProduct = param.DescribesProduct;
-                    existingParam.CustomValuesEnabled = param.CustomValuesEnabled;
-                    existingParam.AmbiguousValueId = param.AmbiguousValueId;
-                    existingParam.Min = param.Min;
-                    existingParam.Max = param.Max;
+                var valuesJson = param.Values != null && param.Values.Any()
+                    ? JsonSerializer.Serialize(param.Values.Select(v => v.Value))
+                    : null;
 
-                    toUpdate.Add(existingParam);
-                }
-                else
-                {
-                    toInsert.Add(param);
-                }
-            }
-
-            // 1. Insert new CategoryParameters
-            if (toInsert.Any())
-            {
-                await conn.ExecuteAsync(@"
-                    INSERT INTO CategoryParameters
-                    (CategoryId, ParameterId, Name, Type, Required, Min, Max, RequiredForProduct, DescribesProduct, CustomValuesEnabled, AmbiguousValueId)
-                    VALUES (@CategoryId, @ParameterId, @Name, @Type, @Required, @Min, @Max, @RequiredForProduct, @DescribesProduct, @CustomValuesEnabled, @AmbiguousValueId)",
-                    toInsert, tran);
-            }
-
-            // 2. Update existing CategoryParameters
-            if (toUpdate.Any())
-            {
-                await conn.ExecuteAsync(@"
-                    UPDATE CategoryParameters
-                    SET Name = @Name, Type = @Type, Required = @Required, Min = @Min, Max = @Max, RequiredForProduct = @RequiredForProduct,
-                        DescribesProduct = @DescribesProduct, CustomValuesEnabled = @CustomValuesEnabled, AmbiguousValueId = @AmbiguousValueId
-                    WHERE CategoryId = @CategoryId AND ParameterId = @ParameterId",
-                    toUpdate, tran);
-            }
-
-            // 3. Handle parameter values
-            var allParams = toInsert.Concat(toUpdate).ToList();
-            if (allParams.Any())
-            {
-                var allIds = await conn.QueryAsync<int>(
-                    @"SELECT Id FROM CategoryParameters
-                        WHERE CategoryId IN @CategoryIds AND ParameterId IN @ParamIds",
-                    new { CategoryIds = categoryIds, ParamIds = paramIds }, tran);
-
-                var idDict = (await conn.QueryAsync<(int Id, int CategoryId, int ParameterId)>(
-                    @"SELECT Id, CategoryId, ParameterId FROM CategoryParameters
-                        WHERE CategoryId IN @CategoryIds AND ParameterId IN @ParamIds",
-                    new { CategoryIds = categoryIds, ParamIds = paramIds }, tran))
-                    .ToDictionary(x => (x.CategoryId, x.ParameterId), x => x.Id);
-
-                // Delete existing values
-                await conn.ExecuteAsync(@"
-                    DELETE FROM CategoryParameterValues
-                    WHERE CategoryParameterId IN @Ids",
-                    new { Ids = idDict.Values }, tran);
-
-                // Insert new values
-                var newValues = allParams
-                    .Where(p => p.Values != null && p.Values.Any())
-                    .SelectMany(p => p.Values.Select(v => new
+                await conn.ExecuteAsync(
+                    "CategoryParameters_UpsertWithValues",
+                    new
                     {
-                        CategoryParameterId = idDict[(p.CategoryId, p.ParameterId)],
-                        v.Value
-                    }))
-                    .ToList();
-
-                if (newValues.Any())
-                {
-                    await conn.ExecuteAsync(@"
-                        INSERT INTO CategoryParameterValues (CategoryParameterId, Value)
-                        VALUES (@CategoryParameterId, @Value)",
-                        newValues, tran);
-                }
+                        param.CategoryId,
+                        param.ParameterId,
+                        param.Name,
+                        param.Type,
+                        param.Required,
+                        param.Min,
+                        param.Max,
+                        param.RequiredForProduct,
+                        param.DescribesProduct,
+                        param.CustomValuesEnabled,
+                        param.AmbiguousValueId,
+                        ValuesJson = valuesJson
+                    },
+                    tran,
+                    commandType: CommandType.StoredProcedure
+                );
             }
 
             tran.Commit();
@@ -218,11 +125,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
         {
             using var conn = _context.CreateConnection();
             var result = await conn.QueryAsync<int>(
-                @"SELECT DISTINCT p.DefaultAllegroCategory
-                  FROM Products p
-                  LEFT JOIN CategoryParameters cp ON cp.CategoryId = p.DefaultAllegroCategory
-                  WHERE p.DefaultAllegroCategory != 0 AND p.Archived = 0 AND cp.CategoryId IS NULL"
-            );
+                "RolmarProducts_GetDefaultAllegroCategoriesWithoutParameters",
+                commandType: CommandType.StoredProcedure);
             return result;
         }
 
@@ -230,41 +134,34 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
         {
             using var conn = _context.CreateConnection();
 
-            var productCategories = (await conn.QueryAsync<ProductCategory>(
-                "SELECT * FROM ProductCategories WHERE ProductId = @ProductId", new { ProductId = productId }
+            var productCategories = (await conn.QueryAsync<RolmarCategory>(
+                "SELECT * FROM RolmarCategory WHERE ProductId = @ProductId", new { ProductId = productId }
             )).ToList();
 
             if (!productCategories.Any()) return null;
 
-            var root = productCategories.FirstOrDefault(pc => pc.ParentID == 0 && pc.CategoryId == 19178)
-                       ?? productCategories.FirstOrDefault(pc => pc.ParentID == 0);
+            var root = productCategories.Select(c => c.Name).FirstOrDefault(c => c.Contains("Części według rodzaju")) // check
+                       ?? productCategories.Select(c => c.Name).First();
 
             if (root == null) return null;
 
-            var branch = productCategories.Where(pc => IsInBranch(pc, root.CategoryId, productCategories)).ToList();
+            var stats = await conn.QueryFirstOrDefaultAsync<(int CategoryId, int Count)>(
+                @"SELECT p.DefaultAllegroCategory AS CategoryId, COUNT(*) AS Count
+                    FROM RolmarCategory pc
+                    INNER JOIN RolmarProducts p ON p.Id = pc.ProductId
+                    WHERE pc.Name = @Name AND pc.ProductId != @ProductId AND p.DefaultAllegroCategory != 0
+                    GROUP BY p.DefaultAllegroCategory
+                    ORDER BY COUNT(*) DESC",
+                new { Name = root, ProductId = productId }
+            );
 
-            // Leaf = category not a parent of any other
-            var leaf = branch.FirstOrDefault(c => !branch.Any(o => o.ParentID == c.CategoryId));
+            if (stats.CategoryId != 0) return stats.CategoryId;
 
-            if (leaf != null)
-            {
-                var stats = await conn.QueryFirstOrDefaultAsync<(int CategoryId, int Count)>(
-                    @"SELECT p.DefaultAllegroCategory AS CategoryId, COUNT(*) AS Count
-                      FROM ProductCategories pc
-                      INNER JOIN Products p ON p.Id = pc.ProductId
-                      WHERE pc.CategoryId = @LeafId AND pc.ProductId != @ProductId AND p.DefaultAllegroCategory != 0
-                      GROUP BY p.DefaultAllegroCategory
-                      ORDER BY COUNT(*) DESC",
-                    new { LeafId = leaf.CategoryId, ProductId = productId }
-                );
-
-                if (stats.CategoryId != 0) return stats.CategoryId;
-            }
 
             // Fallback for traktor/kombajn
-            var nameLower = branch.Select(c => c.Name.ToLower()).ToList();
-            if (nameLower.Any(n => n.Contains("traktor"))) return 305829;
-            if (nameLower.Any(n => n.Contains("kombajn"))) return 319159;
+            var nameLower = root.ToLower();
+            if (nameLower.Contains("traktor")) return 305829;
+            if (nameLower.Contains("kombajn")) return 319159;
 
             return null;
         }
@@ -272,14 +169,9 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
         public async Task<IEnumerable<AllegroCategory>> GetAllegroCategories(CancellationToken ct)
         {
             using var conn = _context.CreateConnection();
-            return await conn.QueryAsync<AllegroCategory>("SELECT * FROM AllegroCategories");
-        }
-
-        private bool IsInBranch(ProductCategory category, int rootId, List<ProductCategory> allCategories)
-        {
-            if (category.CategoryId == rootId) return true;
-            var parent = allCategories.FirstOrDefault(c => c.CategoryId == category.ParentID);
-            return parent != null && IsInBranch(parent, rootId, allCategories);
+            return await conn.QueryAsync<AllegroCategory>(
+                "AllegroCategories_GetAll",
+                commandType: CommandType.StoredProcedure);
         }
     }
 }

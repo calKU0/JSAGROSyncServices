@@ -1,10 +1,7 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
-using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
+﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
 using JSAGROSyncServices.Shared.Services;
-using ICategoryRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.ICategoryRepository;
-using IProductRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IProductRepository;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 {
@@ -30,18 +27,18 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                 var products = await _productRepo.GetProductsWithoutDefaultCategory(ct);
                 if (!products.Any()) return;
 
-                var categoryResults = new List<(int ProductId, int CategoryId, string CodeGaska, string Name)>();
+                var categoryResults = new List<(int ProductId, int CategoryId, string Code, string Name)>();
 
                 foreach (var product in products)
                 {
                     try
                     {
                         int categoryId = await GetCategoriesSuggestions(product, ct);
-                        categoryResults.Add((product.Id, categoryId, product.CodeGaska, product.Name));
+                        categoryResults.Add((product.Id, categoryId, product.Code, product.Name));
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error while fetching suggested Allegro category for {Name} ({Code})", product.Name, product.CodeGaska);
+                        _logger.LogError(ex, "Error while fetching suggested Allegro category {Code}", product.Code);
                     }
                 }
 
@@ -53,7 +50,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error updating Allegro category in DB for {Name} ({Code})", result.Name, result.CodeGaska);
+                        _logger.LogError(ex, "Error updating Allegro category in DB {Code}", result.Code);
                     }
                 }
 
@@ -75,7 +72,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error updating DB-based category for {Name} ({Code})", product.Name, product.CodeGaska);
+                        _logger.LogError(ex, "Error updating DB-based category for {Code}", product.Code);
                     }
                 }
             }
@@ -85,7 +82,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             }
         }
 
-        private async Task<int> GetCategoriesSuggestions(Product product, CancellationToken ct)
+        private async Task<int> GetCategoriesSuggestions(RolmarProduct product, CancellationToken ct)
         {
             try
             {
@@ -133,13 +130,13 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 
                 await _categoryRepo.SaveCategoryTreeAsync(selectedCategory, ct);
 
-                _logger.LogInformation("Selected category for {CodeGaska}: {Path}", product.CodeGaska, BuildCategoryPath(selectedCategory, c => c.Name));
+                _logger.LogInformation("Selected category for {Code}: {Path}", product.Code, BuildCategoryPath(selectedCategory, c => c.Name));
 
                 return Convert.ToInt32(selectedCategory.Id);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Exception in category suggestion for product {CodeGaska}", product.CodeGaska);
+                _logger.LogError(ex, "Exception in category suggestion for product {Code}", product.Code);
                 return 0;
             }
         }

@@ -1,8 +1,10 @@
-﻿using Allegro.JSAGRO.Gaska.OrdersService.Data.Enums;
-using Allegro.JSAGRO.Gaska.OrdersService.Models;
-using Allegro.JSAGRO.Gaska.OrdersService.Repositories.Interfaces;
+﻿using Allegro.JSAGRO.Gaska.OrdersService.Constants;
 using Dapper;
 using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Shared.Data.Enums;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
+using System.Data;
 
 namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
 {
@@ -15,27 +17,16 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
             _context = context;
         }
 
-        public async Task<List<AllegroOrder>> GetOrdersToUpdateGaskaInfo()
+        public async Task<List<AllegroOrder>> GetOrdersToUpdateExternalInfo()
         {
             using var conn = _context.CreateConnection();
             conn.Open();
-            var sql = @"
-                SELECT
-                    o.*,
-                    i.Id, i.AllegroOrderId, i.GaskaItemId, i.OrderItemId, i.OfferId, i.OfferName, i.ExternalId,
-                    i.PriceGross, i.Currency, i.Quantity, i.GaskaCourier, i.GaskaTrackingNumber, i.BoughtAt
-                FROM AllegroOrders o
-                LEFT JOIN AllegroOrderItems i ON o.Id = i.AllegroOrderId
-                WHERE
-                    o.SentToGaska = 1
-                    AND isnull(o.GaskaOrderStatus,'') <> 'Zrealizowane'
-                    AND o.GaskaOrderId IS NOT NULL;
-                ";
+            var storedProcedure = "dbo.AllegroOrders_GetToUpdateExternalInfo";
 
             var orderDict = new Dictionary<int, AllegroOrder>();
 
             var orders = await conn.QueryAsync<AllegroOrder, AllegroOrderItem, AllegroOrder>(
-                sql,
+                storedProcedure,
                 (order, item) =>
                 {
                     if (!orderDict.TryGetValue(order.Id, out var currentOrder))
@@ -50,7 +41,9 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
 
                     return currentOrder;
                 },
-                splitOn: "Id"
+                new { IntegrationCompany = ServiceConstants.Company, Account = ServiceConstants.Account, NotWithExternalOrderStatus = "Zrealizowane" },
+                splitOn: "Id",
+                commandType: CommandType.StoredProcedure
             );
 
             return orderDict.Values.ToList();
@@ -60,30 +53,12 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
         {
             using var conn = _context.CreateConnection();
             conn.Open();
-            var sql = @"
-                SELECT
-                    o.*,
-                    i.Id, i.AllegroOrderId, i.GaskaItemId, i.OrderItemId, i.OfferId, i.OfferName, i.ExternalId,
-                    i.PriceGross, i.Currency, i.Quantity, i.GaskaCourier, i.GaskaTrackingNumber, i.BoughtAt
-                FROM AllegroOrders o
-                LEFT JOIN AllegroOrderItems i ON o.Id = i.AllegroOrderId
-                WHERE
-                    o.SentToGaska = 1
-                    AND o.GaskaOrderId IS NOT NULL
-                    AND o.Status = @ReadyStatus
-                    AND o.RealizeStatus IN (
-                        @NewStatus,
-                        @ProcessingStatus,
-                        @ReadyForShipmentStatus,
-                        @ReadyForPickupStatus,
-                        @SentStatus
-                    );
-                ";
+            var storedProcedure = "dbo.AllegroOrders_GetToUpdateInAllegro";
 
             var orderDict = new Dictionary<int, AllegroOrder>();
 
             var orders = await conn.QueryAsync<AllegroOrder, AllegroOrderItem, AllegroOrder>(
-                sql,
+                storedProcedure,
                 (order, item) =>
                 {
                     if (!orderDict.TryGetValue(order.Id, out var currentOrder))
@@ -105,36 +80,27 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
                     ReadyForShipmentStatus = AllegroOrderStatus.READY_FOR_SHIPMENT,
                     ReadyForPickupStatus = AllegroOrderStatus.READY_FOR_PICKUP,
                     SentStatus = AllegroOrderStatus.SENT,
-                    ReadyStatus = AllegroCheckoutFormStatus.READY_FOR_PROCESSING
+                    ReadyStatus = AllegroCheckoutFormStatus.READY_FOR_PROCESSING,
+                    Account = ServiceConstants.Account,
+                    IntegrationCompany = ServiceConstants.Company
                 },
-                splitOn: "Id"
+                splitOn: "Id",
+                commandType: CommandType.StoredProcedure
             );
 
             return orderDict.Values.ToList();
         }
 
-        public async Task<List<AllegroOrder>> GetPendingOrdersForGaska(int delayMinutes)
+        public async Task<List<AllegroOrder>> GetPendingOrdersForExternalCompany(int delayMinutes)
         {
             using var conn = _context.CreateConnection();
             conn.Open();
-            var sql = @"
-                SELECT
-                    o.*,
-                    i.Id, i.AllegroOrderId, i.GaskaItemId, i.OrderItemId, i.OfferId, i.OfferName, i.ExternalId,
-                    i.PriceGross, i.Currency, i.Quantity, i.GaskaCourier, i.GaskaTrackingNumber, i.BoughtAt
-                FROM AllegroOrders o
-                LEFT JOIN AllegroOrderItems i ON o.Id = i.AllegroOrderId
-                WHERE
-                    o.SentToGaska = 0
-                    AND o.Status = @ReadyStatus
-                    AND o.RealizeStatus = @NewStatus
-                    AND DATEDIFF(MINUTE, o.CreatedAt, GETUTCDATE()) >= @DelayMinutes;
-                ";
+            var storedProcedure = "dbo.AllegroOrders_GetPendingForExternalCompany";
 
             var orderDict = new Dictionary<int, AllegroOrder>();
 
             var orders = await conn.QueryAsync<AllegroOrder, AllegroOrderItem, AllegroOrder>(
-                sql,
+                storedProcedure,
                 (order, item) =>
                 {
                     if (!orderDict.TryGetValue(order.Id, out var currentOrder))
@@ -149,26 +115,30 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
 
                     return currentOrder;
                 },
-                param: new { ReadyStatus = AllegroCheckoutFormStatus.READY_FOR_PROCESSING, DelayMinutes = delayMinutes, NewStatus = AllegroOrderStatus.NEW },
-                splitOn: "Id"
+                param: new
+                {
+                    ReadyStatus = AllegroCheckoutFormStatus.READY_FOR_PROCESSING,
+                    DelayMinutes = delayMinutes,
+                    NewStatus = AllegroOrderStatus.NEW,
+                    Account = ServiceConstants.Account,
+                    IntegrationCompany = ServiceConstants.Company
+                },
+                splitOn: "Id",
+                commandType: CommandType.StoredProcedure
             );
 
             return orderDict.Values.ToList();
         }
 
-        public async Task MarkAsOrderedInGaska(int orderId, int gaskaOrderId)
+        public async Task MarkAsOrderedInExternalCompany(int orderId, int externalOrderId)
         {
             using var conn = _context.CreateConnection();
             conn.Open();
-            var sql = @"
-                UPDATE AllegroOrders
-                SET
-                    SentToGaska = 1,
-                    GaskaOrderId = @GaskaOrderId
-                WHERE Id = @OrderId;
-                ";
-
-            await conn.ExecuteAsync(sql, new { OrderId = orderId, GaskaOrderId = gaskaOrderId });
+            await conn.ExecuteAsync(
+                "dbo.AllegroOrders_MarkAsOrderedInExternalCompany",
+                new { OrderId = orderId, ExternalOrderId = externalOrderId },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task SaveAllegroOrder(AllegroOrder order)
@@ -179,117 +149,82 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
 
             try
             {
-                // Insert or update the order
-                var orderSql = @"
-                    IF EXISTS (SELECT 1 FROM AllegroOrders WHERE AllegroId = @AllegroId)
-                    BEGIN
-                        UPDATE AllegroOrders
-                        SET
-                            MessageToSeller = @MessageToSeller,
-                            Note = @Note,
-                            Status = @Status,
-                            RealizeStatus = @RealizeStatus,
-                            Amount = @Amount,
-                            ClientNickname = @ClientNickname,
-                            RecipientFirstName = @RecipientFirstName,
-                            RecipientLastName = @RecipientLastName,
-                            RecipientStreet = @RecipientStreet,
-                            RecipientCity = @RecipientCity,
-                            RecipientPostalCode = @RecipientPostalCode,
-                            RecipientCountry = @RecipientCountry,
-                            RecipientCompanyName = @RecipientCompanyName,
-                            RecipientEmail = @RecipientEmail,
-                            RecipientPhoneNumber = @RecipientPhoneNumber,
-                            DeliveryMethodId = @DeliveryMethodId,
-                            DeliveryMethodName = @DeliveryMethodName,
-                            CancellationDate = @CancellationDate,
-                            CreatedAt = @CreatedAt,
-                            Revision = @Revision,
-                            PaymentType = @PaymentType
-                        WHERE AllegroId = @AllegroId;
+                var orderParams = new DynamicParameters();
+                orderParams.Add("@AllegroId", order.AllegroId);
+                orderParams.Add("@MessageToSeller", order.MessageToSeller);
+                orderParams.Add("@Note", order.Note);
+                orderParams.Add("@Status", order.Status);
+                orderParams.Add("@RealizeStatus", order.RealizeStatus);
+                orderParams.Add("@Amount", order.Amount);
+                orderParams.Add("@ClientNickname", order.ClientNickname);
+                orderParams.Add("@RecipientFirstName", order.RecipientFirstName);
+                orderParams.Add("@RecipientLastName", order.RecipientLastName);
+                orderParams.Add("@RecipientStreet", order.RecipientStreet);
+                orderParams.Add("@RecipientCity", order.RecipientCity);
+                orderParams.Add("@RecipientPostalCode", order.RecipientPostalCode);
+                orderParams.Add("@RecipientCountry", order.RecipientCountry);
+                orderParams.Add("@RecipientCompanyName", order.RecipientCompanyName);
+                orderParams.Add("@RecipientEmail", order.RecipientEmail);
+                orderParams.Add("@RecipientPhoneNumber", order.RecipientPhoneNumber);
+                orderParams.Add("@DeliveryMethodId", order.DeliveryMethodId);
+                orderParams.Add("@DeliveryMethodName", order.DeliveryMethodName);
+                orderParams.Add("@CancellationDate", order.CancellationDate);
+                orderParams.Add("@CreatedAt", order.CreatedAt);
+                orderParams.Add("@Revision", order.Revision);
+                orderParams.Add("@SentToExternalCompany", order.SentToExternalCompany);
+                orderParams.Add("@ExternalOrderId", order.ExternalOrderId);
+                orderParams.Add("@PaymentType", order.PaymentType);
+                orderParams.Add("@ExternalOrderStatus", order.ExternalOrderStatus);
+                orderParams.Add("@ExternalOrderNumber", order.ExternalOrderNumber);
+                orderParams.Add("@ExternalDeliveryName", order.ExternalDeliveryName);
+                orderParams.Add("@Account", order.Account);
+                orderParams.Add("@IntegrationCompany", order.IntegrationCompany);
+                orderParams.Add("@Id", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
-                        SELECT @Id = Id FROM AllegroOrders WHERE AllegroId = @AllegroId;
-                    END
-                    ELSE
-                    BEGIN
-                        INSERT INTO AllegroOrders (
-                            AllegroId, MessageToSeller, Note, Status, RealizeStatus, Amount, ClientNickname,
-                            RecipientFirstName, RecipientLastName, RecipientStreet, RecipientCity, RecipientPostalCode, RecipientCountry,
-                            RecipientCompanyName, RecipientEmail, RecipientPhoneNumber,
-                            DeliveryMethodId, DeliveryMethodName, CancellationDate, CreatedAt, Revision,
-                            SentToGaska, GaskaOrderId, PaymentType, GaskaOrderStatus, GaskaOrderNumber, GaskaDeliveryName
-                        )
-                        VALUES (
-                            @AllegroId, @MessageToSeller, @Note, @Status, @RealizeStatus, @Amount, @ClientNickname,
-                            @RecipientFirstName, @RecipientLastName, @RecipientStreet, @RecipientCity, @RecipientPostalCode, @RecipientCountry,
-                            @RecipientCompanyName, @RecipientEmail, @RecipientPhoneNumber,
-                            @DeliveryMethodId, @DeliveryMethodName, @CancellationDate, @CreatedAt, @Revision,
-                            @SentToGaska, @GaskaOrderId, @PaymentType, @GaskaOrderStatus, @GaskaOrderNumber, @GaskaDeliveryName
-                        );
-
-                        SET @Id = SCOPE_IDENTITY();
-                    END";
-
-                var orderParams = new DynamicParameters(order);
-                orderParams.Add("@Id", dbType: System.Data.DbType.Int32, direction: System.Data.ParameterDirection.Output);
-
-                await conn.ExecuteAsync(orderSql, orderParams, transaction);
+                await conn.ExecuteAsync(
+                    "dbo.AllegroOrders_Save",
+                    orderParams,
+                    transaction,
+                    commandType: CommandType.StoredProcedure
+                );
 
                 if (order.Id == 0)
                     order.Id = orderParams.Get<int>("@Id");
 
                 foreach (var item in order.Items)
                 {
-                    var product = await conn.QueryFirstOrDefaultAsync<(int GaskaItemId, string CodeGaska)>(
-                        "SELECT Id AS GaskaItemId, CodeGaska FROM Products WHERE CodeGaska = @CodeGaska",
-                        new { CodeGaska = item.ExternalId }, transaction
+                    var product = await conn.QueryFirstOrDefaultAsync<(int ProductId, string Code)>(
+                        "dbo.RolmarProducts_GetByCode",
+                        new { Code = item.ExternalId, IntegrationCompany = ServiceConstants.Company },
+                        transaction,
+                        commandType: CommandType.StoredProcedure
                     );
 
                     if (product == default)
-                        throw new Exception($"Product with Id {item.GaskaItemId} not found.");
+                        throw new Exception($"Product with Id {item.ProductId} not found.");
 
                     var itemParams = new
                     {
                         AllegroOrderId = order.Id,
                         OrderItemId = item.OrderItemId,
-                        GaskaItemId = product.GaskaItemId,
+                        ProductId = product.ProductId,
                         OfferId = item.OfferId,
                         OfferName = item.OfferName,
-                        ExternalId = product.CodeGaska,
+                        ExternalId = product.Code,
                         PriceGross = item.PriceGross,
                         Currency = item.Currency,
                         Quantity = item.Quantity,
-                        GaskaCourier = item.GaskaCourier,
-                        GaskaTrackingNumber = item.GaskaTrackingNumber,
+                        ExternalCourier = item.ExternalCourier,
+                        ExternalTrackingNumber = item.ExternalTrackingNumber,
                         BoughtAt = item.BoughtAt
                     };
 
-                    var itemSql = @"
-                    MERGE INTO AllegroOrderItems AS target
-                    USING (SELECT
-                              @AllegroOrderId AS AllegroOrderId,
-                              @OrderItemId AS OrderItemId
-                          ) AS source
-                    ON target.AllegroOrderId = source.AllegroOrderId AND target.OrderItemId = source.OrderItemId
-                    WHEN MATCHED THEN
-                        UPDATE SET
-                            GaskaItemId = @GaskaItemId,
-                            OfferId = @OfferId,
-                            OfferName = @OfferName,
-                            ExternalId = @ExternalId,
-                            PriceGross = @PriceGross,
-                            Currency = @Currency,
-                            Quantity = @Quantity,
-                            BoughtAt = @BoughtAt
-                    WHEN NOT MATCHED THEN
-                        INSERT (
-                            AllegroOrderId, GaskaItemId, OrderItemId, OfferId, OfferName, ExternalId, PriceGross, Currency, Quantity, BoughtAt
-                        )
-                        VALUES (
-                            @AllegroOrderId, @GaskaItemId, @OrderItemId, @OfferId, @OfferName, @ExternalId, @PriceGross, @Currency, @Quantity, @BoughtAt
-                        );";
-
-                    await conn.ExecuteAsync(itemSql, itemParams, transaction);
+                    await conn.ExecuteAsync(
+                        "dbo.AllegroOrderItems_Upsert",
+                        itemParams,
+                        transaction,
+                        commandType: CommandType.StoredProcedure
+                    );
                 }
 
                 transaction.Commit();
@@ -306,16 +241,14 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
             using var conn = _context.CreateConnection();
             conn.Open();
 
-            var sql = @"
-                UPDATE AllegroOrders
-                SET EmailSent = 1
-                WHERE Id = @OrderId;
-            ";
-
-            await conn.ExecuteAsync(sql, new { OrderId = orderId });
+            await conn.ExecuteAsync(
+                "dbo.AllegroOrders_SetEmailSent",
+                new { OrderId = orderId },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
-        public async Task UpdateOrderGaskaInfo(AllegroOrder order)
+        public async Task UpdateOrderExternalInfo(AllegroOrder order)
         {
             using var conn = _context.CreateConnection();
             conn.Open();
@@ -323,45 +256,34 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
 
             try
             {
-                // Update only Gaska fields in the order
-                var orderSql = @"
-                    UPDATE AllegroOrders
-                    SET
-                        GaskaOrderStatus = @GaskaOrderStatus,
-                        GaskaOrderNumber = @GaskaOrderNumber,
-                        GaskaDeliveryName = @GaskaDeliveryName
-                    WHERE Id = @Id;
-                    ";
-
-                await conn.ExecuteAsync(orderSql, new
-                {
-                    order.Id,
-                    order.GaskaOrderId,
-                    order.GaskaOrderStatus,
-                    order.GaskaOrderNumber,
-                    order.GaskaDeliveryName
-                }, transaction);
-
-                // Update Gaska fields in items
-                var itemSql = @"
-                    UPDATE AllegroOrderItems
-                    SET
-                        GaskaItemId = @GaskaItemId,
-                        GaskaCourier = @GaskaCourier,
-                        GaskaTrackingNumber = @GaskaTrackingNumber
-                    WHERE AllegroOrderId = @AllegroOrderId AND OrderItemId = @OrderItemId;
-                    ";
+                await conn.ExecuteAsync(
+                    "dbo.AllegroOrders_UpdateExternalInfo",
+                    new
+                    {
+                        order.Id,
+                        order.ExternalOrderStatus,
+                        order.ExternalOrderNumber,
+                        order.ExternalDeliveryName
+                    },
+                    transaction,
+                    commandType: CommandType.StoredProcedure
+                );
 
                 foreach (var item in order.Items)
                 {
-                    await conn.ExecuteAsync(itemSql, new
-                    {
-                        AllegroOrderId = order.Id,
-                        item.OrderItemId,
-                        item.GaskaItemId,
-                        item.GaskaCourier,
-                        item.GaskaTrackingNumber
-                    }, transaction);
+                    await conn.ExecuteAsync(
+                        "dbo.AllegroOrderItems_UpdateExternalInfo",
+                        new
+                        {
+                            AllegroOrderId = order.Id,
+                            item.OrderItemId,
+                            item.ProductId,
+                            item.ExternalCourier,
+                            item.ExternalTrackingNumber
+                        },
+                        transaction,
+                        commandType: CommandType.StoredProcedure
+                    );
                 }
 
                 transaction.Commit();

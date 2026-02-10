@@ -1,10 +1,11 @@
-﻿using Allegro.JSAGRO.Gaska.OrdersService.Data.Enums;
-using Allegro.JSAGRO.Gaska.OrdersService.DTOs.AllegroApi;
-using Allegro.JSAGRO.Gaska.OrdersService.DTOs.GaskaApi;
-using Allegro.JSAGRO.Gaska.OrdersService.Models;
-using Allegro.JSAGRO.Gaska.OrdersService.Repositories.Interfaces;
-using Allegro.JSAGRO.Gaska.OrdersService.Services.Interfaces;
+﻿using Allegro.JSAGRO.Gaska.OrdersService.Constants;
 using Allegro.JSAGRO.Gaska.OrdersService.Settings;
+using JSAGROSyncServices.Shared.Data.Enums;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.DTOs.Allegro.GaskaApi;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Text.Json;
@@ -77,7 +78,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                                 await semaphore.WaitAsync(ct);
                                 try
                                 {
-                                    return await _allegroApiClient.GetAsync<AllegroOfferDetails>($"/sale/product-offers/{item.Offer.Id}", ct);
+                                    return await _allegroApiClient.GetAsync<AllegroMinimalOfferDetails>($"/sale/product-offers/{item.Offer.Id}", ct);
                                 }
                                 finally
                                 {
@@ -128,7 +129,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
         {
             try
             {
-                List<AllegroOrder> orders = await _orderRepo.GetPendingOrdersForGaska(_appSettings.OfferProcessingDelayMinutes);
+                List<AllegroOrder> orders = await _orderRepo.GetPendingOrdersForExternalCompany(_appSettings.OfferProcessingDelayMinutes);
 
                 foreach (var order in orders)
                 {
@@ -146,16 +147,16 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                         if (orderResponse.Result != 0)
                             throw new Exception(orderResponse.Message);
 
-                        order.GaskaOrderId = orderResponse.NewOrders.FirstOrDefault();
-                        await _orderRepo.MarkAsOrderedInGaska(order.Id, order.GaskaOrderId);
+                        order.ExternalOrderId = orderResponse.NewOrders.FirstOrDefault();
+                        await _orderRepo.MarkAsOrderedInExternalCompany(order.Id, order.ExternalOrderId);
 
                         // Fetch order data from Gąska to update local record
                         await FetchAndUpdateGaskaOrder(order, ct);
-                        _logger.LogInformation("Created Order {GaskaOrderId} in Gąska for Allegro Order {AllegroOrderId}.", order.GaskaOrderNumber, order.AllegroId);
+                        _logger.LogInformation("Created Order {GaskaOrderId} in Gąska for Allegro Order {AllegroOrderId}.", order.ExternalOrderNumber, order.AllegroId);
 
                         // Send success email
                         var body = BuildOrderEmailBody(order);
-                        await _emailService.SendEmailAsync(_appSettings.NotificationsEmail, $"Złożono automatyczne zamówienie {order.GaskaOrderNumber}", body);
+                        await _emailService.SendEmailAsync(ServiceConstants.MailSender, _appSettings.NotificationsEmail, $"Złożono automatyczne zamówienie {order.ExternalOrderNumber}", body);
                         await _orderRepo.SetEmailSent(order.Id);
                     }
                     catch (Exception ex)
@@ -167,7 +168,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
 
                         // Send error email
                         var body = BuildOrderEmailBody(order, ex.Message);
-                        await _emailService.SendEmailAsync(_appSettings.NotificationsEmail, $"BŁĄD przy składaniu zamówienia: {order.AllegroId}", body);
+                        await _emailService.SendEmailAsync(ServiceConstants.MailSender, _appSettings.NotificationsEmail, $"BŁĄD przy składaniu zamówienia: {order.AllegroId}", body);
                         await _orderRepo.SetEmailSent(order.Id);
                     }
                 }
@@ -182,7 +183,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
         {
             try
             {
-                var orders = await _orderRepo.GetOrdersToUpdateGaskaInfo();
+                var orders = await _orderRepo.GetOrdersToUpdateExternalInfo();
                 foreach (var order in orders)
                 {
                     await FetchAndUpdateGaskaOrder(order, ct);
@@ -198,34 +199,34 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
         {
             try
             {
-                var gaskaOrderResponse = await _gaskaApiClient.GetAsync<GaskaGetOrderResponse>($"order?id={order.GaskaOrderId}&lng=pl", ct);
+                var gaskaOrderResponse = await _gaskaApiClient.GetAsync<GaskaGetOrderResponse>($"order?id={order.ExternalOrderId}&lng=pl", ct);
                 if (gaskaOrderResponse.Result != 0)
                 {
-                    _logger.LogError($"Failed to fetch Order {order.GaskaOrderId} from Gąska. Error: {gaskaOrderResponse.Message}");
+                    _logger.LogError($"Failed to fetch Order {order.ExternalOrderId} from Gąska. Error: {gaskaOrderResponse.Message}");
                     return;
                 }
 
                 if (gaskaOrderResponse.Order == null)
                 {
-                    _logger.LogError($"No Order data returned from Gąska for Order ID {order.GaskaOrderId}.");
+                    _logger.LogError($"No Order data returned from Gąska for Order ID {order.ExternalOrderId}.");
                     return;
                 }
 
-                order.GaskaDeliveryName = gaskaOrderResponse.Order.Delivery;
-                order.GaskaOrderStatus = gaskaOrderResponse.Order.Items.FirstOrDefault()?.RealizeDeliveryStatus;
-                order.GaskaOrderNumber = gaskaOrderResponse.Order.OrderNumber;
+                order.ExternalDeliveryName = gaskaOrderResponse.Order.Delivery;
+                order.ExternalOrderStatus = gaskaOrderResponse.Order.Items.FirstOrDefault()?.RealizeDeliveryStatus;
+                order.ExternalOrderNumber = gaskaOrderResponse.Order.OrderNumber;
 
                 foreach (var item in order.Items)
                 {
-                    var gaskaItem = gaskaOrderResponse.Order.Items.FirstOrDefault(i => i.Id == item.GaskaItemId);
+                    var gaskaItem = gaskaOrderResponse.Order.Items.FirstOrDefault(i => i.Id == item.ProductId);
                     if (gaskaItem != null)
                     {
-                        item.GaskaTrackingNumber = gaskaItem.RealizeTrackingNumber;
-                        item.GaskaCourier = gaskaItem.RealizeDelivery;
+                        item.ExternalTrackingNumber = gaskaItem.RealizeTrackingNumber;
+                        item.ExternalCourier = gaskaItem.RealizeDelivery;
                     }
                 }
 
-                await _orderRepo.UpdateOrderGaskaInfo(order);
+                await _orderRepo.UpdateOrderExternalInfo(order);
             }
             catch (Exception ex)
             {
@@ -243,7 +244,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                     // --- Update Order Status ---
                     try
                     {
-                        var status = MapGaskaStatusToAllegro(order.GaskaOrderStatus);
+                        var status = MapGaskaStatusToAllegro(order.ExternalOrderStatus);
                         if (status != order.RealizeStatus && status != AllegroOrderStatus.NEW)
                         {
                             var statusRequest = new AllegroSetOrderStatusRequest
@@ -281,8 +282,8 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
 
                         // Group items by tracking number (ignore those without tracking)
                         var groups = items
-                            .Where(i => !string.IsNullOrWhiteSpace(i.GaskaTrackingNumber))
-                            .GroupBy(i => i.GaskaTrackingNumber);
+                            .Where(i => !string.IsNullOrWhiteSpace(i.ExternalTrackingNumber))
+                            .GroupBy(i => i.ExternalTrackingNumber);
 
                         foreach (var group in groups)
                         {
@@ -292,7 +293,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                                 Id = i.OrderItemId
                             }).ToList();
 
-                            var carrierId = group.First().GaskaCourier;
+                            var carrierId = group.First().ExternalCourier;
 
                             carrierId = carrierId?.ToUpperInvariant() switch
                             {
@@ -378,6 +379,8 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                 RecipientPhoneNumber = (address?.PhoneNumber ?? allegroOrder.Buyer?.PhoneNumber).Trim(),
                 DeliveryMethodId = allegroOrder.Delivery?.Method?.Id,
                 DeliveryMethodName = allegroOrder.Delivery?.Method?.Name?.ToUpper() ?? "",
+                IntegrationCompany = ServiceConstants.Company,
+                Account = ServiceConstants.Account,
                 CancellationDate = allegroOrder.Delivery?.Cancellation?.Date,
                 Amount = decimal.TryParse(allegroOrder.Summary?.TotalToPay?.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out var amt) ? amt : 0m,
                 CreatedAt = allegroOrder.LineItems?.Max(i => (DateTime?)i.BoughtAt) ?? default,
@@ -474,7 +477,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                     : null,
                 Items = order.Items?.Select(i => new GaskaCreateOrderItemRequest
                 {
-                    Id = i.GaskaItemId,
+                    Id = i.ProductId,
                     Qty = i.Quantity.ToString()
                 }).ToList() ?? new List<GaskaCreateOrderItemRequest>()
             };
@@ -558,8 +561,8 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                         <p><strong>Telefon:</strong> {order.RecipientPhoneNumber ?? "BRAK"}</p>
                         <p><strong>Adres:</strong> {order.RecipientStreet}, {order.RecipientCity}, {order.RecipientPostalCode}, {order.RecipientCountry}</p>
                         <p><strong>Metoda dostawy:</strong> {order.DeliveryMethodName}</p>
-                        {(string.IsNullOrEmpty(order.GaskaOrderNumber) ? "" : $"<p><strong>Numer zamówienia Gąski:</strong> {order.GaskaOrderNumber}</p>")}
-                        {(string.IsNullOrEmpty(order.GaskaDeliveryName) ? "" : $"<p><strong>Metoda dostawy Gąski:</strong> {order.GaskaDeliveryName}</p>")}
+                        {(string.IsNullOrEmpty(order.ExternalOrderNumber) ? "" : $"<p><strong>Numer zamówienia Gąski:</strong> {order.ExternalOrderNumber}</p>")}
+                        {(string.IsNullOrEmpty(order.ExternalDeliveryName) ? "" : $"<p><strong>Metoda dostawy Gąski:</strong> {order.ExternalDeliveryName}</p>")}
                         {(string.IsNullOrEmpty(errorMessage) ? "" : $"<p style='color:#dc3545; font-weight:bold;'>Błąd: {errorMessage}</p>")}
 
                         <h3 style='border-bottom:2px solid #eee; padding-bottom:5px;'>Produkty:</h3>

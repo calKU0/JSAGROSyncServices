@@ -59,7 +59,6 @@ public class Worker : BackgroundService
         var offerService = services.GetRequiredService<IAllegroOfferService>();
         var categoryService = services.GetRequiredService<IAllegroCategoryService>();
         var parametersService = services.GetRequiredService<IAllegroParametersService>();
-        var imageService = services.GetRequiredService<IAllegroImageService>();
 
         _logger.LogInformation("=== Starting full synchronization cycle ===");
 
@@ -81,7 +80,7 @@ public class Worker : BackgroundService
             await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());
             await MeasureStepAsync("Allegro offers details", () => offerService.SyncAllegroOffersDetails());
 
-            if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 1 && DateTime.Now.Hour <= 8)
+            if (_lastProductDetailsSyncDate.Date < DateTime.Today && DateTime.Now.Hour >= 0 && DateTime.Now.Hour <= 24)
             {
                 await MeasureStepAsync("Detailed product sync", () => gaskaApiService.SyncProductDetails());
                 await MeasureStepAsync("Allegro categories update", () => categoryService.UpdateAllegroCategories());
@@ -90,7 +89,6 @@ public class Worker : BackgroundService
 
             await MeasureStepAsync("Category parameters fetch", () => categoryService.FetchAndSaveCategoryParameters());
             await MeasureStepAsync("Product parameters update", () => parametersService.UpdateParameters());
-            await MeasureStepAsync("Images import", () => imageService.ImportImages());
             await MeasureStepAsync("Offers creation", () => offerService.CreateOffers());
             await MeasureStepAsync("Offers update", () => offerService.UpdateOffers());
 

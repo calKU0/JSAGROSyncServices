@@ -12,6 +12,7 @@ namespace JSAGROSyncServices.Shared.Interfaces
         Task SaveCategoryParametersAsync(IEnumerable<CategoryParameter> parameters, CancellationToken ct);
 
         Task<IEnumerable<int>> GetDefaultCategories(CancellationToken ct);
+        Task<int?> GetMostCommonDefaultAllegroCategory(int productId, CancellationToken ct);
 
         Task<IEnumerable<AllegroCategory>> GetAllegroCategories(CancellationToken ct);
     }

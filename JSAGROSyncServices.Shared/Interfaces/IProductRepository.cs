@@ -4,11 +4,12 @@ namespace JSAGROSyncServices.Shared.Interfaces
 {
     public interface IProductRepository
     {
-        public Task<bool> UpsertProductAsync(RolmarProduct product, CancellationToken ct);
+        Task<List<RolmarProduct>> GetProductsForDetailUpdate(int limit, CancellationToken ct);
+        Task<bool> UpsertProductAsync(RolmarProduct product, CancellationToken ct);
+        Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct);
+        Task<bool> DeleteProduct(int productId, CancellationToken ct);
 
-        public Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct);
-
-        Task<List<RolmarProduct>> GetProductsToUpload(int minProductStock, CancellationToken ct);
+        Task<List<RolmarProduct>> GetProductsToUpload(int minProductStock, decimal minProductPrice, CancellationToken ct);
 
         Task<List<RolmarProduct>> GetAllProducts(CancellationToken ct);
 
@@ -21,6 +22,7 @@ namespace JSAGROSyncServices.Shared.Interfaces
         Task UpdateProductAllegroCategory(string code, string categoryId, CancellationToken ct);
 
         Task<List<RolmarProduct>> GetNotExistingProductsInAllegro(CancellationToken ct);
+        Task UpdateCompatibilitySet(int productId, bool value, CancellationToken ct);
 
         Task UpdateProductAllegroId(int productId, string allegroProductId, string allegroCategoryId, CancellationToken ct);
     }

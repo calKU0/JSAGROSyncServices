@@ -1,11 +1,13 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
-using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
-using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
+﻿using Allegro.JSAGRO.Gaska.ProductsService.Constants;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
 using Dapper;
 using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
+using System.Data;
 using System.Globalization;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
@@ -13,14 +15,14 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
     public class OfferRepository : IOfferRepository
     {
         private readonly DapperContext _context;
-        private readonly string _deliveryName;
+        private readonly List<DeliverySettings> _deliveries;
         private readonly ILogger<OfferRepository> _logger;
 
-        public OfferRepository(ILogger<OfferRepository> logger, DapperContext context, IOptions<AllegroSettings> options)
+        public OfferRepository(ILogger<OfferRepository> logger, DapperContext context, IOptions<AppSettings> options)
         {
             _logger = logger;
             _context = context;
-            _deliveryName = options.Value.AllegroDeliveryName;
+            _deliveries = options.Value.Deliveries;
         }
 
         public async Task UpsertOffers(List<Offer> offers, CancellationToken ct)
@@ -36,33 +38,18 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             try
             {
                 const int batchSize = 1000;
-
-                // 1️ Preload existing offer IDs in batches
-                var allOfferIds = offers.Select(o => o.Id).ToList();
-                var existingIds = new HashSet<string>();
-
-                foreach (var batch in allOfferIds.Chunk(batchSize))
-                {
-                    var ids = await connection.QueryAsync<string>(
-                        "SELECT Id FROM AllegroOffers WHERE Id IN @Ids",
-                        new { Ids = batch },
-                        transaction);
-                    foreach (var id in ids)
-                        existingIds.Add(id);
-                }
-
-                // 2️ Map AllegroOffer entities
+                // 1️ Map AllegroOffer entities
                 var allegroOffers = offers.Select(o =>
                 {
                     decimal.TryParse(o.SellingMode?.Price?.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out var price);
                     int.TryParse(o.Category?.Id, out var categoryId);
 
-                    return new AllegroOffer
+                    return new
                     {
                         Id = o.Id,
-                        Account = 1,
+                        Account = ServiceConstants.Account,
                         Name = o.Name ?? string.Empty,
-                        ProductId = null,
+                        ProductId = (int?)null,
                         CategoryId = categoryId,
                         Price = price,
                         Stock = o.Stock?.Available ?? 0,
@@ -75,49 +62,17 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     };
                 }).ToList();
 
-                var newOffers = allegroOffers.Where(a => !existingIds.Contains(a.Id)).ToList();
-                var updateOffers = allegroOffers.Where(a => existingIds.Contains(a.Id)).ToList();
-
-                // 3️ Insert new offers in batches
-                if (newOffers.Any())
+                foreach (var batch in allegroOffers.Chunk(batchSize))
                 {
-                    const string insertSql = @"
-                        INSERT INTO AllegroOffers
-                        (Id, Account, Name, ProductId, CategoryId, Price, Stock, WatchersCount, VisitsCount, Status, DeliveryName, StartingAt, ExternalId)
-                        VALUES
-                        (@Id, @Account, @Name, @ProductId, @CategoryId, @Price, @Stock, @WatchersCount, @VisitsCount, @Status, @DeliveryName, @StartingAt, @ExternalId)";
-
-                    foreach (var batch in newOffers.Chunk(batchSize))
-                    {
-                        await connection.ExecuteAsync(insertSql, batch, transaction);
-                    }
-                }
-
-                // 4️ Update existing offers in batches
-                if (updateOffers.Any())
-                {
-                    const string updateSql = @"
-                        UPDATE AllegroOffers
-                        SET Name = @Name,
-                            Account = @Account,
-                            CategoryId = @CategoryId,
-                            Price = @Price,
-                            Stock = @Stock,
-                            WatchersCount = @WatchersCount,
-                            VisitsCount = @VisitsCount,
-                            Status = @Status,
-                            DeliveryName = @DeliveryName,
-                            StartingAt = @StartingAt
-                        WHERE Id = @Id";
-
-                    foreach (var batch in updateOffers.Chunk(batchSize))
-                    {
-                        await connection.ExecuteAsync(updateSql, batch, transaction);
-                    }
+                    await connection.ExecuteAsync(
+                        "AllegroOffers_Upsert",
+                        batch,
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
-                _logger.LogInformation("Upsert of offers completed: {New} new, {Updated} updated", newOffers.Count, updateOffers.Count);
+                _logger.LogInformation("Upsert of offers completed: {Count} processed", allegroOffers.Count);
             }
             catch (Exception ex)
             {
@@ -139,13 +94,6 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 
             try
             {
-                // Preload existing offer IDs
-                var offerIds = offers.Select(o => o.Id).ToList();
-                var existingIds = (await connection.QueryAsync<string>(
-                    "SELECT Id FROM AllegroOffers WHERE Id IN @Ids",
-                    new { Ids = offerIds }, transaction)).ToHashSet();
-
-                // Map AllegroOffer
                 var allegroOffers = offers.Select(o =>
                 {
                     decimal price = 0;
@@ -154,10 +102,10 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     int categoryId = 0;
                     int.TryParse(o?.Category?.Id, out categoryId);
 
-                    return new AllegroOffer
+                    return new
                     {
                         Id = o.Id,
-                        Account = 1,
+                        Account = ServiceConstants.Account,
                         Name = o.Name ?? string.Empty,
                         CategoryId = categoryId,
                         Price = price,
@@ -174,45 +122,14 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     };
                 }).ToList();
 
-                // Split new and update
-                var newOffers = allegroOffers.Where(a => !existingIds.Contains(a.Id)).ToList();
-                var updateOffers = allegroOffers.Where(a => existingIds.Contains(a.Id)).ToList();
-
-                // Insert new offers
-                if (newOffers.Any())
-                {
-                    var insertSql = @"
-                        INSERT INTO AllegroOffers
-                        (Id, Account, Name, CategoryId, Price, Stock, Status, DeliveryName, ExternalId, Weight, Images, StartingAt, HandlingTime, ResponsiblePerson, ResponsibleProducer)
-                        VALUES
-                        (@Id, @Account, @Name, @CategoryId, @Price, @Stock, @Status, @DeliveryName, @ExternalId, @Weight, @Images, @StartingAt, @HandlingTime, @ResponsiblePerson, @ResponsibleProducer)";
-                    await connection.ExecuteAsync(insertSql, newOffers, transaction);
-                }
-
-                // Update existing offers
-                if (updateOffers.Any())
-                {
-                    var updateSql = @"
-                        UPDATE AllegroOffers
-                        SET Name = @Name,
-                            CategoryId = @CategoryId,
-                            Account = @Account,
-                            Price = @Price,
-                            Stock = @Stock,
-                            Status = @Status,
-                            DeliveryName = @DeliveryName,
-                            Weight = @Weight,
-                            Images = @Images,
-                            StartingAt = @StartingAt,
-                            HandlingTime = @HandlingTime,
-                            ResponsiblePerson = @ResponsiblePerson,
-                            ResponsibleProducer = @ResponsibleProducer
-                        WHERE Id = @Id";
-                    await connection.ExecuteAsync(updateSql, updateOffers, transaction);
-                }
+                await connection.ExecuteAsync(
+                    "AllegroOffers_UpsertDetails",
+                    allegroOffers,
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 // ---- Descriptions ----
-                var descriptions = new List<AllegroOfferDescription>();
+                var descriptions = new List<object>();
                 foreach (var o in offers)
                 {
                     int sectionIndex = 1;
@@ -222,7 +139,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                         {
                             foreach (var item in section.Items)
                             {
-                                descriptions.Add(new AllegroOfferDescription
+                                descriptions.Add(new
                                 {
                                     OfferId = o.Id,
                                     Type = item.Type,
@@ -237,22 +154,22 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 
                 if (descriptions.Any())
                 {
-                    var descSql = @"
-                        INSERT INTO AllegroOfferDescriptions
-                        (OfferId, Type, Content, SectionId)
-                        VALUES (@OfferId, @Type, @Content, @SectionId)";
-                    await connection.ExecuteAsync(descSql, descriptions, transaction);
+                    await connection.ExecuteAsync(
+                        "AllegroOfferDescriptions_Insert",
+                        descriptions,
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 // ---- Attributes ----
-                var attributes = new List<AllegroOfferAttribute>();
+                var attributes = new List<object>();
                 foreach (var o in offers)
                 {
                     if (o.Parameters != null)
                     {
                         foreach (var param in o.Parameters)
                         {
-                            attributes.Add(new AllegroOfferAttribute
+                            attributes.Add(new
                             {
                                 OfferId = o.Id,
                                 AttributeId = param.Id,
@@ -266,11 +183,11 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 
                 if (attributes.Any())
                 {
-                    var attrSql = @"
-                        INSERT INTO AllegroOfferAttributes
-                        (OfferId, AttributeId, Type, ValuesJson, ValuesIdsJson)
-                        VALUES (@OfferId, @AttributeId, @Type, @ValuesJson, @ValuesIdsJson)";
-                    await connection.ExecuteAsync(attrSql, attributes, transaction);
+                    await connection.ExecuteAsync(
+                        "AllegroOfferAttributes_Insert",
+                        attributes,
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
@@ -287,182 +204,88 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
         public async Task<List<AllegroOffer>> GetAllOffers(CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
-            var sql = "SELECT * FROM AllegroOffers WHERE Account = 1";
-            return (await connection.QueryAsync<AllegroOffer>(sql)).ToList();
+            connection.Open();
+            return (await connection.QueryAsync<AllegroOffer>(
+                "AllegroOffers_GetAll",
+                new { Account = ServiceConstants.Account },
+                commandType: CommandType.StoredProcedure)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersWithoutDetails(CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
-            var sql = @"
-                SELECT * FROM AllegroOffers o
-                WHERE NOT EXISTS (SELECT 1 FROM AllegroOfferDescriptions d WHERE d.OfferId = o.Id)
-                AND Status = 'ACTIVE'
-                ORDER BY StartingAt DESC";
-            return (await connection.QueryAsync<AllegroOffer>(sql)).ToList();
+            return (await connection.QueryAsync<AllegroOffer>(
+                "AllegroOffers_GetWithoutDetails",
+                commandType: CommandType.StoredProcedure)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
         {
-            using var conn = _context.CreateConnection();
-            conn.Open();
+            var deliveryNames = _deliveries?
+                .Select(d => d.DeliveryName)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList() ?? new List<string>();
 
-            const int SqlServerMaxParams = 2000;
-
-            IEnumerable<List<T>> Batch<T>(IEnumerable<T> source, int batchSize)
+            if (!deliveryNames.Any())
             {
-                var batch = new List<T>(batchSize);
-                foreach (var item in source)
-                {
-                    batch.Add(item);
-                    if (batch.Count >= batchSize)
-                    {
-                        yield return batch;
-                        batch.Clear();
-                    }
-                }
-                if (batch.Count > 0) yield return batch;
+                _logger.LogInformation("Brak skonfigurowanych dostaw — pomijam pobieranie ofert do aktualizacji.");
+                return new List<AllegroOffer>();
             }
 
-            async Task<List<T>> QueryInBatchesAsync<T>(string sql, IEnumerable<int> ids)
-            {
-                var result = new List<T>();
-                foreach (var batch in Batch(ids, SqlServerMaxParams))
-                {
-                    var batchResult = (await conn.QueryAsync<T>(sql, new { batch })).ToList();
-                    result.AddRange(batchResult);
-                }
-                return result;
-            }
+            using var connection = _context.CreateConnection();
+            connection.Open();
 
-            // 1️ Load active/ended offers with associated Product objects
-            var offersWithProducts = (await conn.QueryAsync<AllegroOffer, Product, (AllegroOffer Offer, Product Product)>(@"
-                SELECT
-                    -- AllegroOffer columns
-                    o.Id,
-                    o.ExternalId,
-                    o.Name,
-                    o.CategoryId,
-                    o.Price,
-                    o.Stock,
-                    o.WatchersCount,
-                    o.VisitsCount,
-                    o.Status,
-                    o.DeliveryName,
-                    o.StartingAt,
-                    o.ExistsInErli,
-                    o.Images AS OfferImages,
-                    o.Weight AS OfferWeight,
-                    o.HandlingTime,
-                    o.ResponsibleProducer,
-                    o.ResponsiblePerson,
+            // Step 1: Get offers, images, and specs in one call
+            var command = new CommandDefinition(
+                "AllegroOffers_GetOffersToUpdate",
+                new { DeliveryNames = string.Join(",", deliveryNames), IntegrationCompany = ServiceConstants.Company, Account = ServiceConstants.Account },
+                commandTimeout: 900,
+                cancellationToken: ct,
+                commandType: CommandType.StoredProcedure);
 
-                    -- Product columns
-                    p.Id,
-                    p.CodeGaska,
-                    p.CodeCustomer,
-                    p.Name,
-                    p.Description,
-                    p.Ean,
-                    p.DeliveryType,
-                    p.TechnicalDetails,
-                    p.WeightNet,
-                    p.WeightGross,
-                    p.SupplierName,
-                    p.SupplierLogo,
-                    p.InStock,
-                    p.Unit,
-                    p.CurrencyPrice,
-                    p.PriceNet,
-                    p.PriceGross,
-                    p.DefaultAllegroCategory,
-                    p.Archived,
-                    p.CreatedDate,
-                    p.BuildCompatibilitySet,
-                    p.UpdatedDate
-                FROM AllegroOffers o
-                INNER JOIN Products p ON p.CodeGaska = o.ExternalId
-                WHERE (o.Status = 'ACTIVE' OR o.Status = 'ENDED')
-                  AND o.DeliveryName = @DeliveryName
-                  AND o.Account = 1
-                  AND EXISTS (SELECT 1 FROM ProductParameters pp WHERE pp.ProductId = p.Id)
-                  AND EXISTS (SELECT 1 FROM ProductImages pi WHERE pi.ProductId = p.Id AND pi.AllegroUrl IS NOT NULL)
-                  AND EXISTS (SELECT 1 FROM ProductCategories pc WHERE pc.ProductId = p.Id);",
+            using var grid = await connection.QueryMultipleAsync(command);
+
+            var offers = grid.Read<AllegroOffer, RolmarProduct, AllegroOffer>(
                 (offer, product) =>
                 {
                     offer.Product = product;
-                    return (offer, product);
+                    return offer;
                 },
-                new { DeliveryName = _deliveryName },
-                splitOn: "Id",
-                commandTimeout: 900
-            )).ToList();
+                splitOn: "Id").ToList();
 
-            if (!offersWithProducts.Any())
-                return new List<AllegroOffer>();
+            if (!offers.Any())
+                return offers;
 
-            // 2️ Extract product IDs for child entity queries
-            var productIds = offersWithProducts.Select(op => op.Product.Id).ToArray();
-            if (!productIds.Any())
-                return offersWithProducts.Select(op => op.Offer).ToList();
+            offers = offers
+                .GroupBy(o => o.Product.Id)
+                .Select(g => g.OrderByDescending(o => o.StartingAt).First())
+                .ToList();
 
-            // 3️ Load child entities in batches
-            var images = await QueryInBatchesAsync<ProductImage>(
-                "SELECT ProductId, AllegroUrl, MAX(AllegroLogoUrl) AS AllegroLogoUrl FROM ProductImages WHERE ProductId IN @batch  AND AllegroUrl IS NOT NULL GROUP BY ProductId, AllegroUrl", productIds);
+            var allImages = grid.Read<AllegroImages>().ToList();
+            var allSpecs = grid.Read<ProductSpecification>().ToList();
+            var allApplications = grid.Read<ProductApplication>().ToList();
+            var allPackages = grid.Read<ProductPackage>().ToList();
+            var allParameters = grid.Read<ProductParameter>().ToList();
 
-            var packages = await QueryInBatchesAsync<Package>(
-                "SELECT * FROM Packages WHERE ProductId IN @batch;", productIds);
+            // Step 2: Aggregate into product collections
+            var imagesLookup = allImages.ToLookup(i => i.ProductId);
+            var specsLookup = allSpecs.ToLookup(s => s.ProductId);
+            var applicationsLookup = allApplications.ToLookup(a => a.ProductId);
+            var packagesLookup = allPackages.ToLookup(p => p.ProductId);
+            var parametersLookup = allParameters.ToLookup(p => p.ProductId);
 
-            var attributes = await QueryInBatchesAsync<ProductAttribute>(
-                "SELECT * FROM ProductAttributes WHERE ProductId IN @batch;", productIds);
-
-            var crossNumbers = await QueryInBatchesAsync<CrossNumber>(
-                "SELECT * FROM CrossNumbers WHERE ProductId IN @batch;", productIds);
-
-            var applications = await QueryInBatchesAsync<Application>(
-                "SELECT * FROM Applications WHERE ProductId IN @batch;", productIds);
-
-            var productParameters = new List<ProductParameter>();
-            foreach (var batch in Batch(productIds, SqlServerMaxParams))
+            foreach (var offer in offers)
             {
-                var batchParams = (await conn.QueryAsync<ProductParameter, CategoryParameter, ProductParameter>(@"
-                    SELECT
-                        pp.Id AS PpId, pp.ProductId, pp.CategoryParameterId, pp.Value, pp.IsForProduct,
-                        cp.Id AS CpId, cp.ParameterId, cp.CategoryId, cp.Name, cp.Type, cp.Required,
-                        cp.RequiredForProduct, cp.DescribesProduct, cp.CustomValuesEnabled, cp.AmbiguousValueId, cp.Min, cp.Max
-                    FROM ProductParameters pp
-                    INNER JOIN CategoryParameters cp ON cp.Id = pp.CategoryParameterId
-                    WHERE pp.ProductId IN @batch;",
-                    (pp, cp) =>
-                    {
-                        pp.CategoryParameter = cp;
-                        return pp;
-                    },
-                    new { batch },
-                    splitOn: "CpId"
-                )).ToList();
-
-                productParameters.AddRange(batchParams);
+                var product = offer.Product;
+                product.AllegroImages = imagesLookup[product.Id].ToList();
+                product.Specifications = specsLookup[product.Id].ToList();
+                product.Applications = applicationsLookup[product.Id].ToList();
+                product.Packages = packagesLookup[product.Id].ToList();
+                product.Parameters = parametersLookup[product.Id].ToList();
             }
 
-            // 4️ Map child collections to each product inside the offer
-            foreach (var op in offersWithProducts)
-            {
-                var product = op.Product;
-                var pId = product.Id;
-
-                product.Images = images.Where(i => i.ProductId == pId).ToList();
-                product.Packages = packages.Where(pkg => pkg.ProductId == pId).ToList();
-                product.Atributes = attributes.Where(a => a.ProductId == pId).ToList();
-                product.CrossNumbers = crossNumbers.Where(cn => cn.ProductId == pId).ToList();
-                product.Applications = applications.Where(app => app.ProductId == pId).ToList();
-                product.Parameters = productParameters.Where(pp => pp.ProductId == pId).ToList();
-
-                op.Offer.Product = product;
-            }
-
-            // 5️ Return only the offers
-            return offersWithProducts.Select(op => op.Offer).ToList();
+            return offers;
         }
 
         public async Task DeleteOffer(int productId, CancellationToken ct)
@@ -470,37 +293,18 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             using var connection = _context.CreateConnection();
             connection.Open();
 
-            // First, get the product's CodeGaska
-            var codeGaska = await connection.QueryFirstOrDefaultAsync<string>(
-                @"SELECT CodeGaska FROM Products WHERE Id = @ProductId",
-                new { ProductId = productId }
-            );
+            var code = await connection.ExecuteScalarAsync<string>(
+                "AllegroOffers_DeleteByProductId",
+                new { ProductId = productId },
+                commandType: CommandType.StoredProcedure);
 
-            var offerId = await connection.QueryFirstOrDefaultAsync<string>(
-                @"SELECT Id FROM AllegroOffers WHERE ExternalId = @CodeGaska",
-                new { CodeGaska = codeGaska }
-            );
-
-            if (codeGaska == null)
+            if (string.IsNullOrWhiteSpace(code))
             {
                 _logger.LogWarning("Product with Id {ProductId} not found. Cannot delete offer.", productId);
                 return;
             }
 
-            // Delete AllegroOffers where ExternalId = CodeGaska
-            var sql = @"
-                DELETE FROM AllegroOfferAttributes
-                WHERE OfferId = @OfferId
-
-                DELETE FROM AllegroOfferDescriptions
-                WHERE OfferId = @OfferId
-
-                DELETE FROM AllegroOffers
-                WHERE Id = @OfferId";
-
-            var affectedRows = await connection.ExecuteAsync(sql, new { OfferId = offerId });
-
-            _logger.LogInformation("Deleted Allegro offer for product {CodeGaska}.", codeGaska);
+            _logger.LogInformation("Deleted Allegro offer for product {Code}.", code);
         }
 
         private static bool TryParseDecimal(string input, out decimal result)

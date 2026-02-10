@@ -1,19 +1,17 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
-using Allegro.JSAGRO.Gaska.ProductsService.Settings;
+﻿using Allegro.JSAGRO.Gaska.ProductsService.Settings;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Helpers;
 using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Shared.Settings;
 using System.Globalization;
 using System.Text;
-using AllegroOffer = Allegro.JSAGRO.Gaska.ProductsService.Models.AllegroOffer;
-using ProductParameter = Allegro.JSAGRO.Gaska.ProductsService.Models.Product.ProductParameter;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
 {
     public static class OfferFactory
     {
         public static ProductOfferRequest BuildOffer(
-            Product product,
+            RolmarProduct product,
             List<AllegroCategory> allegroCategories,
             AppSettings appSettings,
             AllegroSettings allegroSettings,
@@ -26,6 +24,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                 quantity,
                 allegroCategories,
                 allegroSettings,
+                appSettings,
                 priceSettings,
                 publicationStatus: "ACTIVE",
                 startingAt: DateTime.UtcNow,
@@ -50,6 +49,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                 quantity,
                 allegroCategories,
                 allegroSettings,
+                appSettings,
                 priceSettings,
                 publicationStatus: product.InStock >= appSettings.MinProductStock && product.PriceNet >= appSettings.MinProductPriceNet ? "ACTIVE" : "ENDED",
                 startingAt: null,
@@ -60,10 +60,11 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
         }
 
         private static ProductOfferRequest CreateOffer(
-            Product product,
+            RolmarProduct product,
             int quantity,
             List<AllegroCategory> allegroCategories,
             AllegroSettings allegroSettings,
+            AppSettings appSettings,
             PriceSettings priceSettings,
             string publicationStatus,
             DateTime? startingAt,
@@ -103,13 +104,13 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                         Currency = "PLN"
                     }
                 },
-                Images = GetOfferImages(product),
+                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
                 Description = BuildDescription(product),
-                External = new External { Id = product.CodeGaska },
+                External = new External { Id = product.Code },
                 Publication = new Publication { Status = available < 1 ? "ENDED" : publicationStatus, StartingAt = startingAt },
                 Delivery = new Delivery
                 {
-                    ShippingRates = new ShippingRates { Name = allegroSettings.AllegroDeliveryName },
+                    ShippingRates = new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
                     HandlingTime = product.DeliveryType == 0
                         ? allegroSettings.AllegroHandlingTime
                         : allegroSettings.AllegroHandlingTimeCustomProducts
@@ -139,7 +140,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             return offer;
         }
 
-        private static int GetPackageQuantity(Product product, decimal minBundleNetValue)
+        private static int GetPackageQuantity(RolmarProduct product, decimal minBundleNetValue)
         {
             var baseQty = product.Packages.Any(p => p.PackRequired == 1)
                 ? Convert.ToInt32(product.Packages.First(p => p.PackRequired == 1).PackQty)
@@ -166,27 +167,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             return Math.Max(0, baseAvailable / safeQuantity);
         }
 
-        private static List<string> GetOfferImages(Product product)
-        {
-            var images = product.Images
-                .Select(i => i.AllegroUrl)
-                .Where(u => !string.IsNullOrWhiteSpace(u))
-                .ToList();
-
-            var logoUrl = product.Images
-                .Select(i => i.AllegroLogoUrl)
-                .FirstOrDefault(u => !string.IsNullOrWhiteSpace(u));
-
-            if (!string.IsNullOrWhiteSpace(logoUrl))
-            {
-                images.Add(logoUrl);
-            }
-
-            return images;
-        }
-
         private static List<ProductSet> BuildProductSet(
-            Product product,
+            RolmarProduct product,
             int quantity,
             AllegroSettings allegroSettings,
             string fallbackCat = "319123")
@@ -196,7 +178,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             {
                 Name = product.Name,
                 Category = new Category { Id = categoryId == "0" ? fallbackCat : categoryId },
-                Images = product.Images.Select(i => i.AllegroUrl).ToList(),
+                Images = product.AllegroImages.Select(i => i.Url).ToList(),
                 Parameters = BuildParameters(product.Parameters, isForProduct: true),
             };
 
@@ -239,8 +221,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
 
             foreach (var param in parameters.Where(p =>
                          p.IsForProduct == isForProduct &&
-                         p.CategoryParameter.Name != "EAN (GTIN)" &&
-                         p.CategoryParameter.Name != "Informacje o bezpieczeństwie"))
+                         p.Name != "EAN (GTIN)" &&
+                         p.Name != "Informacje o bezpieczeństwie"))
             {
                 if (string.IsNullOrWhiteSpace(param.Value))
                     continue;
@@ -251,7 +233,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                     .Trim();
 
                 List<string> values;
-                if (multiValueParams.Contains(param.CategoryParameter.Name))
+                if (multiValueParams.Contains(param.Name))
                 {
                     values = cleaned
                         .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
@@ -270,7 +252,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                 {
                     result.Add(new Parameter
                     {
-                        Name = param.CategoryParameter.Name,
+                        Name = param.Name,
                         Values = values
                     });
                 }
@@ -281,7 +263,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
 
         public static CompatibilityList? BuildCompatibilityList(
             int categoryId,
-            IEnumerable<Application> applications,
+            IEnumerable<ProductApplication> applications,
             IEnumerable<AllegroCategory> categories)
         {
             if (applications == null || !applications.Any())
@@ -320,7 +302,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
 
                 foreach (var leaf in leafApps)
                 {
-                    var fullPath = new List<Application>();
+                    var fullPath = new List<ProductApplication>();
                     var current = leaf;
                     while (current != null)
                     {
@@ -364,10 +346,10 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             return new CompatibilityList { Items = items.Take(99).ToList() };
         }
 
-        private static Description BuildDescription(Product product)
+        private static Description BuildDescription(RolmarProduct product)
         {
             var description = new Description { Sections = new List<Section>() };
-            var images = GetOfferImages(product);
+            var images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList();
             var imageIndex = 0;
 
             if (images.Any())
@@ -386,25 +368,22 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                 : string.Empty;
 
             var nameHtml = $"<p><b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Name))}</b></p>";
-            var codeHtml = string.IsNullOrWhiteSpace(product.CodeGaska)
+            var codeHtml = string.IsNullOrWhiteSpace(product.Code)
                 ? string.Empty
-                : $"<p><b>Kod produktu: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.CodeGaska))}</p>";
+                : $"<p><b>Kod produktu: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Code))}</p>";
             var producerHtml = string.IsNullOrWhiteSpace(product.SupplierName)
                 ? string.Empty
                 : $"<p><b>Producent: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.SupplierName))}</p>";
             var descriptionHtml = string.IsNullOrWhiteSpace(product.Description)
                 ? string.Empty
                 : $"<p><b>Opis: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Description))}</p>";
-            var technicalHtml = string.IsNullOrWhiteSpace(product.TechnicalDetails)
-                ? string.Empty
-                : $"<p><b>Porady techniczne: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.TechnicalDetails))}</p>";
 
             var parametersHtml = string.Empty;
-            if (product.Atributes?.Any() == true)
+            if (product.Specifications?.Any() == true)
             {
                 var attributesList = string.Join("",
-                    product.Atributes.Select(p =>
-                        $"<li>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.AttributeName))}: {RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.AttributeValue))}</li>"));
+                    product.Specifications.Select(p =>
+                        $"<li>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.Name))}: {RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.Value))}</li>"));
                 parametersHtml = $"<p><b>Parametry/Wymiary:</b></p><ul>{attributesList}</ul>";
             }
 
@@ -422,11 +401,9 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             }
 
             var crossNumbersText = string.Empty;
-            if (product.CrossNumbers?.Any() == true)
+            if (!string.IsNullOrEmpty(product.Substitutes))
             {
-                var crossNumbers = string.Join(", ",
-                    product.CrossNumbers.Select(c => System.Net.WebUtility.HtmlEncode(c.CrossNumberValue)));
-                crossNumbersText = $"<p><b>Numery referencyjne: </b>{crossNumbers}</p>";
+                crossNumbersText = $"<p><b>Numery referencyjne: </b>{product.Substitutes}</p>";
             }
 
             var contentBuilder = new StringBuilder()
@@ -435,7 +412,6 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                 .Append(codeHtml)
                 .Append(producerHtml)
                 .Append(descriptionHtml)
-                .Append(technicalHtml)
                 .Append(parametersHtml)
                 .Append(crossNumbersText)
                 .Append(warning);
@@ -531,6 +507,61 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             return description;
         }
 
+        private static string GetDelivery(RolmarProduct product, List<DeliverySettings> deliveries)
+        {
+            if (deliveries == null || deliveries.Count == 0)
+                return null;
+
+            var productWeight = (decimal)product.Weight;
+
+            var length = GetDimensionCm(product, "Długość");
+            var width = GetDimensionCm(product, "Szerokość");
+            var height = GetDimensionCm(product, "Wysokość");
+
+            var matchingDelivery = deliveries
+                .Where(d =>
+                    d.Weight >= productWeight &&
+                    (length == null || d.Length >= length) &&
+                    (width == null || d.Width >= width) &&
+                    (height == null || d.Height >= height))
+                .OrderBy(d => d.Weight)
+                .ThenBy(d => d.Length * d.Width * d.Height) // smallest volume wins
+                .FirstOrDefault();
+
+            // Fallback: biggest delivery
+            return matchingDelivery?.DeliveryName
+                ?? deliveries
+                    .OrderByDescending(d => d.Weight)
+                    .ThenByDescending(d => d.Length * d.Width * d.Height)
+                    .First()
+                    .DeliveryName;
+        }
+
+        private static decimal? GetDimensionCm(RolmarProduct product, string dimensionName)
+        {
+            var spec = product.Specifications?
+                .FirstOrDefault(s =>
+                    string.Equals(s.Name, dimensionName, StringComparison.OrdinalIgnoreCase));
+
+            if (spec == null)
+                return null;
+
+            if (!decimal.TryParse(
+                    spec.Value.Replace(",", "."),
+                    NumberStyles.Any,
+                    CultureInfo.InvariantCulture,
+                    out var value))
+                return null;
+
+            return spec.UnitName?.ToLower() switch
+            {
+                "mm" => value / 10m,
+                "cm" => value,
+                "m" => value * 100m,
+                _ => null
+            };
+        }
+
         private static decimal CalculatePrice(
             decimal priceGross,
             decimal bulkyDeliveryPriceNet,
@@ -560,21 +591,23 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             if (calculatedPrice < 5m)
             {
                 var withSmallMargin = calculatedPrice + marginLessThan5PLN;
-                return withSmallMargin < 5m
+                calculatedPrice = withSmallMargin < 5m
                     ? withSmallMargin
                     : calculatedPrice * (1 + marginMoreThan5PLNPercent / 100m);
             }
-
-            if (calculatedPrice <= 1000m)
+            else if (calculatedPrice <= 1000m)
             {
                 var tempPrice = calculatedPrice * (1 + marginMoreThan5PLNPercent / 100m);
-                if (tempPrice > 1000m)
-                    return calculatedPrice + marginMoreThan1000PLN;
-
-                return tempPrice;
+                calculatedPrice = tempPrice > 1000m
+                    ? calculatedPrice + marginMoreThan1000PLN
+                    : tempPrice;
+            }
+            else
+            {
+                calculatedPrice += marginMoreThan1000PLN;
             }
 
-            return calculatedPrice + marginMoreThan1000PLN;
+            return calculatedPrice;
         }
 
         private static string RemoveHiddenAscii(string input) =>

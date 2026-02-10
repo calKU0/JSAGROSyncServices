@@ -1,17 +1,16 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.Helpers;
-using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
-using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
+﻿using Allegro.JSAGRO.Gaska.ProductsService.Constants;
+using Allegro.JSAGRO.Gaska.ProductsService.Helpers;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Helpers;
 using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
 using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using ICategoryRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.ICategoryRepository;
-using IOfferRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IOfferRepository;
-using IProductRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IProductRepository;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 {
@@ -22,6 +21,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
         private readonly IOfferRepository _offerRepo;
         private readonly IImageRepository _imageRepo;
         private readonly ICategoryRepository _categoryRepo;
+        private readonly IParameterRepository _parameterRepo;
         private readonly AllegroApiClient _apiClient;
         private readonly AppSettings _appSettings;
         private readonly PriceSettings _priceSettings;
@@ -36,11 +36,12 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             WriteIndented = true
         };
 
-        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, ICategoryRepository categoryRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<AllegroSettings> allegroSettings, IOptions<PriceSettings> priceSettings, ILogger<AllegroOfferService> logger, IImageRepository imageRepo)
+        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, IParameterRepository parameterRepo, ICategoryRepository categoryRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<AllegroSettings> allegroSettings, IOptions<PriceSettings> priceSettings, ILogger<AllegroOfferService> logger, IImageRepository imageRepo)
         {
             _productRepo = productRepo;
             _offerRepo = offerRepo;
             _categoryRepo = categoryRepo;
+            _parameterRepo = parameterRepo;
             _apiClient = apiClient;
             _appSettings = appsettings.Value;
             _allegroSettings = allegroSettings.Value;
@@ -106,6 +107,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
         {
             try
             {
+                _logger.LogInformation("Starting offer details fetch.");
                 var allOffers = await _offerRepo.GetOffersWithoutDetails(ct);
                 var offersDetails = new List<AllegroOfferDetails.Root>();
                 foreach (var offer in allOffers)
@@ -186,6 +188,17 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                 {
                     try
                     {
+                        if (offer.Product.AllegroImages == null || !offer.Product.AllegroImages.Any())
+                        {
+                            var images = await ImportImages(offer.Product, token);
+
+                            if (images == null || !images.Any())
+                            {
+                                return;
+                            }
+
+                            offer.Product.AllegroImages = images;
+                        }
                         var offerDto = OfferFactory.PatchOffer(offer, allegroCategories, _appSettings, _allegroSettings, _priceSettings);
                         var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, offerDto, token);
 
@@ -195,7 +208,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Exception while updating offer for {Name} ({Code})", offer.Product.Name, offer.Product.CodeGaska);
+                        _logger.LogError(ex, "Exception while updating offer for {Code}", offer.Product.Code);
                     }
                 });
             }
@@ -227,6 +240,11 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                 {
                     try
                     {
+                        product.AllegroImages = await ImportImages(product, token);
+                        if (product.AllegroImages == null || !product.AllegroImages.Any())
+                        {
+                            return;
+                        }
                         var offer = OfferFactory.BuildOffer(product, allegroCategories, _appSettings, _allegroSettings, _priceSettings);
                         var response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, offer, token);
                         var body = await response.Content.ReadAsStringAsync();
@@ -234,7 +252,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Exception while creating offer for {Name} ({Code})", product.Name, product.CodeGaska);
+                        _logger.LogError(ex, "Exception while creating offer for {Code}", product.Code);
                     }
                 });
 
@@ -246,50 +264,58 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             }
         }
 
-        private async Task LogAllegroResponse(Product product, HttpResponseMessage response, string body, bool isUpdate = false)
+        private async Task LogAllegroResponse(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false)
         {
             var action = isUpdate ? "updated" : "created";
 
             switch ((int)response.StatusCode)
             {
                 case 200:
-                    _logger.LogInformation($"Offer {action} successfully for {product.Name} ({product.CodeGaska})");
+                    _logger.LogInformation($"Offer {action} successfully for {product.Code}");
+                    await _imageRepo.MarkImagesAsConnectedAsync(product.Id, new CancellationToken());
                     break;
 
                 case 201:
-                    _logger.LogInformation($"Offer {action} successfully for {product.Name} ({product.CodeGaska})");
+                    _logger.LogInformation($"Offer {action} successfully for {product.Code}");
+                    await _imageRepo.MarkImagesAsConnectedAsync(product.Id, new CancellationToken());
                     break;
 
                 case 202:
-                    _logger.LogInformation($"Offer {action} successfully but still processing for {product.Name} ({product.CodeGaska})");
+                    _logger.LogInformation($"Offer {action} successfully but still processing for {product.Code}");
+                    await _imageRepo.MarkImagesAsConnectedAsync(product.Id, new CancellationToken());
                     break;
 
                 case 400:
                 case 422:
                 case 433:
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     await LogAllegroErrors(product, response, body, isUpdate);
                     break;
 
                 case 401:
-                    _logger.LogError($"Unauthorized (401). Check token for product {product.CodeGaska} when {action} offer.");
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
+                    _logger.LogError($"Unauthorized (401). Check token for product {product.Code} when {action} offer.");
                     break;
 
                 case 403:
-                    _logger.LogError($"Forbidden (403). No permission for {action} offer for {product.CodeGaska}.");
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
+                    _logger.LogError($"Forbidden (403). No permission for {action} offer for {product.Code}.");
                     break;
 
                 case 404:
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
                     await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
                     break;
 
                 default:
-                    _logger.LogError($"Unexpected status {(int)response.StatusCode} ({response.StatusCode}) while {action} offer for {product.CodeGaska}. Response: {body}");
+                    await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
+                    _logger.LogError($"Unexpected status {(int)response.StatusCode} ({response.StatusCode}) while {action} offer for {product.Code}. Response: {body}");
                     break;
             }
         }
 
-        private async Task LogAllegroErrors(Product product, HttpResponseMessage response, string body, bool isUpdate = false)
+        private async Task LogAllegroErrors(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false)
         {
             var action = isUpdate ? "updating" : "creating";
             try
@@ -306,8 +332,13 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                             if (!string.IsNullOrEmpty(correctCategoryId))
                             {
                                 await _productRepo.UpdateProductAllegroCategory(product.Id, Convert.ToInt32(correctCategoryId), CancellationToken.None);
-                                _logger.LogInformation("Updated category for {Name} ({Code}) to {CategoryId}", product.Name, product.CodeGaska, correctCategoryId);
+                                _logger.LogInformation("Updated category for {Code} to {CategoryId}", product.Code, correctCategoryId);
                             }
+                        }
+                        else if (err.UserMessage.Contains("nieznany producent"))
+                        {
+                            await _parameterRepo.UpdateParameter(product.Id, 127415, "JAG", CancellationToken.None);
+                            await _parameterRepo.UpdateParameter(product.Id, 247835, "JAG", CancellationToken.None);
                         }
                         else if (
                             (err.Code == "PARAMETER_MISMATCH" && !string.IsNullOrEmpty(err.UserMessage)) ||
@@ -316,7 +347,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                              err.Message.Contains("parameter for the offered product"))
                         )
                         {
-                            _logger.LogInformation("Offer {Action} error for {Name}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}", action, product.Name, err.Code, err.Message, err.UserMessage ?? "N/A", err.Path ?? "N/A", err.Details ?? "N/A");
+                            _logger.LogInformation("Offer {Action} error for {Name}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}", action, product.Code, err.Code, err.Message, err.UserMessage ?? "N/A", err.Path ?? "N/A", err.Details ?? "N/A");
                             // Try to extract from either UserMessage or Message
                             var sourceMessage = !string.IsNullOrEmpty(err.UserMessage) ? err.UserMessage : err.Message;
 
@@ -325,13 +356,13 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 
                             if (!string.IsNullOrEmpty(parameterId) && !string.IsNullOrEmpty(correctValue))
                             {
-                                await _productRepo.UpdateParameter(product.Id, Convert.ToInt32(parameterId), correctValue, CancellationToken.None);
-                                _logger.LogInformation("Updated parameter {ParameterId} for {Name} ({Code}) to '{CorrectValue}'", parameterId, product.Name, product.CodeGaska, correctValue);
+                                await _parameterRepo.UpdateParameter(product.Id, Convert.ToInt32(parameterId), correctValue, CancellationToken.None);
+                                _logger.LogInformation("Updated parameter {ParameterId} for {Code} to '{CorrectValue}'", parameterId, product.Code, correctValue);
                             }
                         }
                         else if (err.UserMessage.Contains(@"Podany adres obrazka jest nieprawidłowy."))
                         {
-                            await _imageRepo.DeleteImage(product.Id);
+                            await _imageRepo.DeleteProductImagesAsync(product.Id, CancellationToken.None);
                         }
                         else if (err.UserMessage.Contains(@"bez wybierania wartości niejednoznacznej"))
                         {
@@ -347,21 +378,127 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                         }
                         else
                         {
-                            _logger.LogError("Offer {Action} error for {Name}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}",
-                                action, product.Name, err.Code, err.Message, err.UserMessage ?? "N/A", err.Path ?? "N/A", err.Details ?? "N/A");
+                            _logger.LogError("Offer {Action} error for {Code}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}",
+                                action, product.Code, err.Code, err.Message, err.UserMessage ?? "N/A", err.Path ?? "N/A", err.Details ?? "N/A");
                         }
                     }
                 }
                 else
                 {
-                    _logger.LogError($"Offer {action} error {response.StatusCode} for {product.Name}: {body}");
+                    _logger.LogError($"Offer {action} error {response.StatusCode} for {product.Code}: {body}");
                 }
             }
             catch (Exception exParse)
             {
-                _logger.LogError(exParse, $"Failed to parse Allegro error ({response.StatusCode}) while {action} offer for {product.Name}. Body={body}");
+                _logger.LogError(exParse, $"Failed to parse Allegro error ({response.StatusCode}) while {action} offer for {product.Code}. Body={body}");
             }
         }
+        private async Task<List<AllegroImages>> ImportImages(RolmarProduct product, CancellationToken ct)
+        {
+            var imageResults = new ConcurrentBag<(string FileName, string Url)>();
+
+            if (!Directory.Exists(ServiceConstants.ImagesFolder))
+            {
+                _logger.LogWarning("Images folder not found: {Path}", ServiceConstants.ImagesFolder);
+                return new List<AllegroImages>();
+            }
+
+            var imageFiles = ImageHelper.GetImageFiles(ServiceConstants.ImagesFolder, product.Id);
+
+            if (!imageFiles.Any())
+            {
+                return new List<AllegroImages>();
+            }
+
+            // Upload product images in parallel
+            await Parallel.ForEachAsync(
+                imageFiles,
+                new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = 3,
+                    CancellationToken = ct
+                },
+                async (filePath, token) =>
+                {
+                    try
+                    {
+                        var imageBytes = await File.ReadAllBytesAsync(filePath, token);
+                        var validatedBytes = Utils.EnsureImageMinSize(imageBytes);
+
+                        if (validatedBytes == null)
+                        {
+                            _logger.LogWarning("Image too small or invalid: {File}", filePath);
+                            return;
+                        }
+
+                        var contentType = Utils.GetContentTypeFromPath(filePath);
+
+                        var uploadResult = await _apiClient.PostAsync<AllegroImageResponse>("/sale/images", validatedBytes, token, contentType);
+
+                        if (!string.IsNullOrWhiteSpace(uploadResult?.Location))
+                        {
+                            imageResults.Add((Path.GetFileName(filePath), uploadResult.Location));
+
+                            _logger.LogInformation("Uploaded image {File} -> {Url}", Path.GetFileName(filePath), uploadResult.Location);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error uploading image {File}", Path.GetFileName(filePath));
+                    }
+                });
+
+            // Sort uploaded product images alphabetically
+            var orderedUrls = imageResults
+                .OrderBy(x => x.FileName, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.Url)
+                .ToList();
+
+            // Upload logo LAST
+            var logoPath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "Resources",
+                "Images",
+                "jsagro-logo.jpg");
+
+            try
+            {
+                if (File.Exists(logoPath))
+                {
+                    var logoBytes = await File.ReadAllBytesAsync(logoPath, ct);
+                    var logoResult = await _apiClient.PostAsync<AllegroImageResponse>("/sale/images", logoBytes, ct, "image/jpeg");
+
+                    if (!string.IsNullOrWhiteSpace(logoResult?.Location))
+                    {
+                        orderedUrls.Add(logoResult.Location);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to upload logo image.");
+            }
+
+            _logger.LogInformation("Imported {Count} images for product {Code}", orderedUrls.Count, product.Code);
+
+            var result = new List<AllegroImages>(orderedUrls.Count);
+
+            foreach (var url in orderedUrls)
+            {
+                var imageId = await _imageRepo.AddImageAsync(product.Id, url, ct);
+
+                result.Add(new AllegroImages
+                {
+                    Id = imageId,
+                    ProductId = product.Id,
+                    Url = url,
+                    Connected = false
+                });
+            }
+
+            return result;
+        }
+
 
         private string ExtractCorrectCategoryId(string message)
         {

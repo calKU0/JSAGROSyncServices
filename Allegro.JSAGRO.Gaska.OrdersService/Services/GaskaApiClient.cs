@@ -1,4 +1,4 @@
-﻿using Allegro.JSAGRO.Gaska.OrdersService.Settings;
+﻿using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;

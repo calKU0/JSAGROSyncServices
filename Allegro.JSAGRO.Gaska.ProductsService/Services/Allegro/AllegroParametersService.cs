@@ -1,8 +1,5 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.Models;
-using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
-using JSAGROSyncServices.Shared.Interfaces;
-using ICategoryRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.ICategoryRepository;
-using IProductRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IProductRepository;
+﻿using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 {
@@ -11,11 +8,13 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
         private readonly ILogger<AllegroParametersService> _logger;
         private readonly IProductRepository _productRepo;
         private readonly ICategoryRepository _categoryRepo;
+        private readonly IParameterRepository _parameterRepo;
 
-        public AllegroParametersService(IProductRepository productRepo, ICategoryRepository categoryRepo, ILogger<AllegroParametersService> logger)
+        public AllegroParametersService(IProductRepository productRepo, ICategoryRepository categoryRepo, IParameterRepository parameterRepository, ILogger<AllegroParametersService> logger)
         {
             _productRepo = productRepo;
             _categoryRepo = categoryRepo;
+            _parameterRepo = parameterRepository;
             _logger = logger;
         }
 
@@ -49,7 +48,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 
                             if (string.IsNullOrEmpty(value) && (catParam.Required || catParam.RequiredForProduct))
                             {
-                                _logger.LogWarning("Missing required parameter {ParamName} for product {Name} ({Code})", product.Name, product.CodeGaska);
+                                _logger.LogWarning("Missing required parameter {ParamName} for product {Code}", product.Code);
                                 continue;
                             }
 
@@ -65,19 +64,19 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                         if (productParams.Count > 0)
                         {
                             allProductParameters.AddRange(productParams);
-                            _logger.LogInformation("Assigned {Count} parameters for product {Name} ({Code})", productParams.Count, product.Name, product.CodeGaska);
+                            _logger.LogInformation("Assigned {Count} parameters for product {Code}", productParams.Count, product.Code);
                         }
                     }
                     catch (Exception exProduct)
                     {
-                        _logger.LogError(exProduct, "Error updating parameters for product {Name} ({Code})", product.Name, product.CodeGaska);
+                        _logger.LogError(exProduct, "Error updating parameters for product {Code}", product.Code);
                     }
                 }
 
                 // Single bulk save at the end instead of per product
                 if (allProductParameters.Any())
                 {
-                    await _productRepo.SaveProductParametersAsync(allProductParameters, ct);
+                    await _parameterRepo.SaveProductParametersAsync(allProductParameters, ct);
                     _logger.LogInformation("Saved {Count} parameters for {ProductsCount} products", allProductParameters.Count, products.Count);
                 }
             }
@@ -87,27 +86,27 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             }
         }
 
-        private string MapProductToParameter(Product product, CategoryParameter param)
+        private string MapProductToParameter(RolmarProduct product, CategoryParameter param)
         {
             if (param == null) return null;
 
             var name = param.Name?.ToLowerInvariant();
 
-            var directMappings = new Dictionary<string, Func<Product, string>>(StringComparer.OrdinalIgnoreCase)
+            var directMappings = new Dictionary<string, Func<RolmarProduct, string>>(StringComparer.OrdinalIgnoreCase)
             {
                 ["stan"] = _ => "Nowy",
-                ["waga produktu z opakowaniem jednostkowym"] = p => p.WeightNet.ToString(), // bez ?. dla float
-                ["numer katalogowy części"] = p => "JS" + p.CodeGaska,
+                ["waga produktu z opakowaniem jednostkowym"] = p => p.Weight.ToString(), // bez ?. dla float
+                ["numer katalogowy części"] = p => "JS" + p.Code,
                 ["typ maszyny"] = _ => "Inny",
                 ["rodzaj skrzyni"] = _ => "Brak informacji",
                 ["typ samochodu"] = _ => "Niezdefiniowany",
-                ["numer katalogowy oryginału"] = p => p.CodeGaska,
-                ["numery katalogowe zamienników"] = p => p.CrossNumbers != null ? string.Join(",", p.CrossNumbers.Select(cn => cn.CrossNumberValue)) : null,
+                ["numer katalogowy oryginału"] = p => p.Code,
+                ["numery katalogowe zamienników"] = p => p.Substitutes,
                 ["stan opakowania"] = _ => "oryginalne",
                 ["jakość części (zgodnie z gvo)"] = _ => "P - zamiennik o jakości porównywalnej do oryginału"
             };
 
-            Func<Product, string> resolver;
+            Func<RolmarProduct, string> resolver;
             if (name != null && directMappings.TryGetValue(name, out resolver))
                 return resolver(product);
 
@@ -120,7 +119,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             return null;
         }
 
-        private string GetMatchingValue(Product product, CategoryParameter param)
+        private string GetMatchingValue(RolmarProduct product, CategoryParameter param)
         {
             const string fallback = "nieznany producent";
 
@@ -150,7 +149,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                 : fallback;
         }
 
-        private string GetBrandMatchingValue(Product product, CategoryParameter param)
+        private string GetBrandMatchingValue(RolmarProduct product, CategoryParameter param)
         {
             const string fallback = "Inna";
 

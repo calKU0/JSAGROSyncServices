@@ -1,11 +1,12 @@
 using Allegro.JSAGRO.Gaska.ProductsService.Repositories;
-using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.Gaska.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
+using DbUp;
 using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Logging;
 using JSAGROSyncServices.Shared.Services;
 using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
@@ -13,9 +14,6 @@ using Serilog;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
-using ICategoryRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.ICategoryRepository;
-using IOfferRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IOfferRepository;
-using IProductRepository = Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces.IProductRepository;
 
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
@@ -42,6 +40,25 @@ var host = Host.CreateDefaultBuilder(args)
             .MinimumLevel.Override("System.Net.Http.HttpClient", Serilog.Events.LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
             .CreateLogger();
+
+        var connectionString = configuration.GetConnectionString("MyDbContext");
+        EnsureDatabase.For.SqlDatabase(connectionString);
+
+        var upgrader = DeployChanges.To
+            .SqlDatabase(connectionString)
+            .LogTo(new SerilogUpgradeLog(Log.Logger))
+            .WithScriptsFromFileSystem(Path.Combine(AppContext.BaseDirectory, "Migrations"))
+            .Build();
+
+        var result = upgrader.PerformUpgrade();
+
+        if (!result.Successful)
+        {
+            Log.Error(result.Error.ToString());
+            throw result.Error;
+        }
+
+        Log.Information("Database migration completed successfully.");
 
         // Bind configuration
         services.Configure<GaskaApiCredentials>(configuration.GetSection("GaskaApiCredentials"));
@@ -79,18 +96,17 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<IOfferRepository, OfferRepository>();
         services.AddScoped<IImageRepository, ImageRepository>();
+        services.AddScoped<IParameterRepository, ParameterRepository>();
 
         // Services
         services.AddScoped<IAllegroOfferService, AllegroOfferService>();
         services.AddScoped<IAllegroCategoryService, AllegroCategoryService>();
         services.AddScoped<IAllegroParametersService, AllegroParametersService>();
-        services.AddScoped<IAllegroImageService, AllegroImageService>();
 
         // Background worker
         services.AddHostedService<Worker>();
 
         // Dapper
-        var connectionString = configuration.GetConnectionString("MyDbContext");
         services.AddSingleton(sp => new DapperContext(connectionString));
 
         // Host options

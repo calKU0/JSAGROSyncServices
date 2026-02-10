@@ -1,10 +1,11 @@
-﻿using Allegro.JSAGRO.Gaska.OrdersService.DTOs;
-using Allegro.JSAGRO.Gaska.OrdersService.Models;
-using Allegro.JSAGRO.Gaska.OrdersService.Repositories.Interfaces;
-using Allegro.JSAGRO.Gaska.OrdersService.Settings;
-using Dapper;
+﻿using Dapper;
 using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
+using System.Data;
 
 namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
 {
@@ -24,8 +25,9 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
             using var conn = _context.CreateConnection();
 
             var entity = await conn.QueryFirstOrDefaultAsync<AllegroTokenEntity>(
-                "SELECT TOP 1 * FROM AllegroTokenEntities WHERE TokenName = @TokenName",
-                new { TokenName = _credentials.ClientName }
+                "AllegroTokens_GetByTokenName",
+                new { TokenName = _credentials.ClientName },
+                commandType: CommandType.StoredProcedure
             );
 
             if (entity == null)
@@ -45,50 +47,26 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
             using var conn = _context.CreateConnection();
             conn.Open();
 
-            var existing = await conn.QueryFirstOrDefaultAsync<AllegroTokenEntity>(
-                "SELECT TOP 1 * FROM AllegroTokenEntities WHERE TokenName = @TokenName",
-                new { TokenName = _credentials.ClientName }
-            );
-
-            if (existing == null)
-            {
-                const string insertSql = @"
-                    INSERT INTO AllegroTokenEntities (AccessToken, RefreshToken, ExpiryDateUtc, TokenName)
-                    VALUES (@AccessToken, @RefreshToken, @ExpiryDateUtc, @TokenName);";
-
-                await conn.ExecuteAsync(insertSql, new
+            await conn.ExecuteAsync(
+                "AllegroTokens_Upsert",
+                new
                 {
                     tokens.AccessToken,
                     tokens.RefreshToken,
                     tokens.ExpiryDateUtc,
                     TokenName = _credentials.ClientName
-                });
-            }
-            else
-            {
-                const string updateSql = @"
-                    UPDATE AllegroTokenEntities
-                    SET AccessToken = @AccessToken,
-                        RefreshToken = @RefreshToken,
-                        ExpiryDateUtc = @ExpiryDateUtc
-                    WHERE Id = @Id;";
-
-                await conn.ExecuteAsync(updateSql, new
-                {
-                    tokens.AccessToken,
-                    tokens.RefreshToken,
-                    tokens.ExpiryDateUtc,
-                    existing.Id
-                });
-            }
+                },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task ClearAsync()
         {
             using var conn = _context.CreateConnection();
             await conn.ExecuteAsync(
-                "DELETE FROM AllegroTokenEntities WHERE TokenName = @TokenName",
-                new { TokenName = _credentials.ClientName }
+                "AllegroTokens_DeleteByTokenName",
+                new { TokenName = _credentials.ClientName },
+                commandType: CommandType.StoredProcedure
             );
         }
     }

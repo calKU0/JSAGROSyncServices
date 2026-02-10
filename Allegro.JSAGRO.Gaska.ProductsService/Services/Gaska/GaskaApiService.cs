@@ -1,8 +1,11 @@
-﻿using Allegro.JSAGRO.Gaska.ProductsService.DTOs;
-using Allegro.JSAGRO.Gaska.ProductsService.Models.Product;
-using Allegro.JSAGRO.Gaska.ProductsService.Repositories.Interfaces;
+﻿using Allegro.JSAGRO.Gaska.ProductsService.Constants;
+using Allegro.JSAGRO.Gaska.ProductsService.DTOs;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.Gaska.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
+using JSAGROSyncServices.Shared.Helpers;
+using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 
@@ -75,8 +78,10 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
                         try
                         {
                             fetchedProductIds.UnionWith(apiResponse.Products.Select(p => p.Id));
-
-                            await _productRepo.UpsertProducts(apiResponse.Products, fetchedProductIds, ct);
+                            foreach (var product in apiResponse.Products)
+                            {
+                                await _productRepo.UpsertProductAsync(MapToRolmarProduct(product), ct);
+                            }
                             _logger.LogInformation($"Successfully fetched and updated {apiResponse.Products.Count} products for category {categoryId}.");
                         }
                         catch (Exception ex)
@@ -111,20 +116,20 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
                 return;
             }
 
-            try
-            {
-                var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds, ct);
-                _logger.LogInformation($"Archived {archivedCount} products.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while checking for products to archive.");
-            }
+            //try
+            //{
+            //    var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds, ct);
+            //    _logger.LogInformation($"Archived {archivedCount} products.");
+            //}
+            //catch (Exception ex)
+            //{
+            //    _logger.LogError(ex, "An error occurred while checking for products to archive.");
+            //}
         }
 
         public async Task SyncProductDetails(CancellationToken ct = default)
         {
-            List<Product> productsToUpdate;
+            List<RolmarProduct> productsToUpdate;
 
             try
             {
@@ -141,11 +146,11 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
             {
                 try
                 {
-                    var response = await _http.GetAsync($"/product?id={product.Id}&lng=pl");
+                    var response = await _http.GetAsync($"/product?id={product.IntegrationId}&lng=pl");
 
                     if (!response.IsSuccessStatusCode)
                     {
-                        _logger.LogError($"API error while fetching product details. Product name: {product.Name}. Product Code: {product.CodeGaska}. Response Status: {response.StatusCode}");
+                        _logger.LogError($"API error while fetching product details {product.Code}. Response Status: {response.StatusCode}");
                         continue;
                     }
 
@@ -154,18 +159,169 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
 
                     if (apiResponse?.Product == null) continue;
 
-                    await _productRepo.UpdateProductDetails(product.Id, apiResponse.Product, ct);
-                    _logger.LogInformation($"Successfully fetched and updated details of product {product.Name} ({product.CodeGaska})");
+                    await SaveProductImagesAsync(apiResponse.Product, product.Id, ct);
+                    await _productRepo.UpsertProductAsync(MapToRolmarProduct(product, apiResponse.Product), ct);
+                    _logger.LogInformation($"Successfully fetched and updated details of product {product.Code}");
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, $"Error while updating product details. Product name: {product.Name} Code: {product.CodeGaska}");
+                    _logger.LogError(ex, $"Error while updating product {product.Code}");
                 }
                 finally
                 {
                     await Task.Delay(TimeSpan.FromSeconds(_apiSettings.Value.ProductInterval));
                 }
             }
+        }
+
+        private async Task SaveProductImagesAsync(ApiProduct product, int productId, CancellationToken ct)
+        {
+            if (product.Images == null || !product.Images.Any())
+                return;
+
+            foreach (var image in product.Images)
+            {
+                if (string.IsNullOrWhiteSpace(image?.Url))
+                    continue;
+
+                try
+                {
+                    var savedPath = await ImageHelper.SaveImageAsync(_http, image.Url, productId, ServiceConstants.ImagesFolder, ct);
+                    if (string.IsNullOrWhiteSpace(savedPath))
+                        _logger.LogWarning("Failed to save image for product {ProductId}. Url: {Url}", productId, image.Url);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to save image for product {ProductId}. Url: {Url}", productId, image.Url);
+                }
+            }
+        }
+
+        private static RolmarProduct MapToRolmarProduct(ApiProducts product)
+        {
+            return new RolmarProduct
+            {
+                Code = product.CodeGaska,
+                CustomerCode = product.CodeCustomer,
+                Name = product.Name,
+                Description = product.Description + " " + product.TechnicalDetails,
+                Ean = product.Ean,
+                Weight = product.GrossWeight,
+                SupplierName = product.SupplierName,
+                SupplierLogo = product.SupplierLogo,
+                InStock = product.InStock,
+                Unit = product.Unit,
+                CurrencyPrice = product.CurrencyPrice,
+                PriceNet = product.NetPrice,
+                PriceGross = product.GrossPrice,
+                DeliveryType = product.DeliveryType,
+                IntegrationId = product.Id
+            };
+        }
+
+        private static RolmarProduct MapToRolmarProduct(RolmarProduct existing, ApiProduct product)
+        {
+            return new RolmarProduct
+            {
+                Id = existing.Id,
+                Code = product.CodeGaska ?? existing.Code,
+                CustomerCode = product.CodeCustomer ?? existing.CustomerCode,
+                Name = product.Name ?? existing.Name,
+                Description = existing.Description,
+                Ean = existing.Ean,
+                Weight = existing.Weight,
+                SupplierName = product.SupplierName ?? existing.SupplierName,
+                SupplierLogo = product.SupplierLogo ?? existing.SupplierLogo,
+                Substitutes = product.CrossNumbers != null
+                    ? string.Join(',', product.CrossNumbers.Select(c => c.CrossNumber).Where(c => !string.IsNullOrWhiteSpace(c)))
+                    : existing.Substitutes,
+                InStock = product.InStock,
+                Unit = product.Packages?.Where(p => p.PackRequired == 1).Select(p => p.PackUnit).FirstOrDefault() ?? existing.Unit,
+                CurrencyPrice = product.CurrencyPrice ?? existing.CurrencyPrice,
+                Package = product.Packages?.Where(p => p.PackRequired == 1).Select(p => Convert.ToDecimal(p.PackQty)).FirstOrDefault() ?? 1,
+                PriceNet = product.PriceNet,
+                PriceGross = product.PriceGross,
+                DeliveryType = product.DeliveryType,
+                IntegrationId = product.Id,
+                Packages = product.Packages?.Select(p => new ProductPackage
+                {
+                    PackUnit = p.PackUnit,
+                    PackQty = p.PackQty,
+                    PackNettWeight = p.PackNettWeight,
+                    PackGrossWeight = p.PackGrossWeight,
+                    PackEan = p.PackEan,
+                    PackRequired = p.PackRequired
+                }).ToList() ?? new List<ProductPackage>(),
+                Applications = product.Applications?.Select(a => new ProductApplication
+                {
+                    ApplicationId = a.Id,
+                    ParentID = a.ParentID,
+                    Name = a.Name
+                }).ToList() ?? new List<ProductApplication>(),
+                Specifications = MapSpecifications(product.Parameters),
+                Categories = MapCategories(product.Categories)
+            };
+        }
+
+        private static List<ProductSpecification> MapSpecifications(IEnumerable<ApiParameter>? parameters)
+        {
+            return parameters?
+                .Where(p => !string.IsNullOrWhiteSpace(p.AttributeName))
+                .Select(p => new ProductSpecification
+                {
+                    Name = p.AttributeName,
+                    Value = p.AttributeValue
+                })
+                .ToList() ?? new List<ProductSpecification>();
+        }
+
+        private static List<RolmarCategory> MapCategories(IEnumerable<ApiCategory>? categories)
+        {
+            if (categories == null)
+                return new List<RolmarCategory>();
+
+            var categoryList = categories.ToList();
+            var parentIds = categoryList.Select(c => c.ParentID).ToHashSet();
+            var leafCategories = categoryList.Where(c => !parentIds.Contains(c.Id)).ToList();
+            var categoryLookup = categoryList
+                .GroupBy(c => c.Id)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var result = new List<RolmarCategory>();
+
+            foreach (var category in leafCategories)
+            {
+                var name = BuildCategoryName(category, categoryLookup);
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+
+                result.Add(new RolmarCategory { Name = name });
+            }
+
+            return result
+                .GroupBy(c => c.Name)
+                .Select(g => g.First())
+                .ToList();
+        }
+
+        private static string BuildCategoryName(ApiCategory category, IReadOnlyDictionary<int, ApiCategory> lookup)
+        {
+            var parts = new Stack<string>();
+            var visited = new HashSet<int>();
+            var current = category;
+
+            while (current != null && visited.Add(current.Id))
+            {
+                if (!string.IsNullOrWhiteSpace(current.Name))
+                    parts.Push(current.Name.Trim());
+
+                if (current.ParentID == 0 || !lookup.TryGetValue(current.ParentID, out var parent))
+                    break;
+
+                current = parent;
+            }
+
+            return string.Join(" > ", parts);
         }
     }
 }
