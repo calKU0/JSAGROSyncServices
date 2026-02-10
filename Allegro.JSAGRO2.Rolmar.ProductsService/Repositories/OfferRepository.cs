@@ -169,5 +169,15 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
 
             _logger.LogInformation("Deleted Allegro offer for product {Code}.", code);
         }
+
+        public Task<List<AllegroOffer>> GetOffersWithoutDetails(CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task UpsertOfferDetails(List<AllegroOfferDetails.Root> offers, CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

@@ -6,7 +6,7 @@ using System.Data;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 {
-    public class ImageRepository : IImageRespository
+    public class ImageRepository : IImageRepository
     {
         private readonly DapperContext _context;
 
@@ -32,6 +32,17 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             connection.Open();
             await connection.ExecuteScalarAsync<int>(
                 "AllegroImages_DeleteNotConnectedByProductId",
+                new { ProductId = productId, Account = ServiceConstants.Account },
+                commandType: CommandType.StoredProcedure
+            );
+        }
+
+        public Task<int> DeleteProductImagesAsync(int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+            connection.Open();
+            return connection.ExecuteScalarAsync<int>(
+                "AllegroImages_DeleteByProductId",
                 new { ProductId = productId, Account = ServiceConstants.Account },
                 commandType: CommandType.StoredProcedure
             );

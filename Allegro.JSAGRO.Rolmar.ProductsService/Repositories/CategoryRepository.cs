@@ -146,5 +146,10 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                 commandType: CommandType.StoredProcedure
             );
         }
+
+        public Task<int?> GetMostCommonDefaultAllegroCategory(int productId, CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

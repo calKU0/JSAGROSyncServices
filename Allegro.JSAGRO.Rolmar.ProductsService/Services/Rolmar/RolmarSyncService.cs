@@ -1,7 +1,9 @@
-﻿using Allegro.JSAGRO.Rolmar.ProductsService.DTOs;
+﻿using Allegro.JSAGRO.Rolmar.ProductsService.Constants;
+using Allegro.JSAGRO.Rolmar.ProductsService.DTOs;
 using Allegro.JSAGRO.Rolmar.ProductsService.DTOs.Rolmar;
 using Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces;
 using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
+using JSAGROSyncServices.Shared.Helpers;
 using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Models;
 using Microsoft.Extensions.Options;
@@ -204,40 +206,22 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
 
                 var rolmarResponse = rolmarResponseArray[0];
 
-                string baseDirectory = @"C:\Program Files (x86)\Api Sync Services\RolmarImages";
-
-                Directory.CreateDirectory(baseDirectory);
-
                 foreach (var item in rolmarResponse.PhotoItems)
                 {
                     if (string.IsNullOrWhiteSpace(item.Url) || string.IsNullOrWhiteSpace(item.Index))
                         continue;
 
-                    if (!products.Any(p => p.Code == item.Index))
+                    var product = products.FirstOrDefault(p => p.Code == item.Index);
+                    if (product == null)
                         continue;
 
                     try
                     {
-                        byte[] imgBytes = await _httpClient.GetByteArrayAsync(item.Url, ct);
-
-                        string extension = Path.GetExtension(item.Url);
-                        if (string.IsNullOrWhiteSpace(extension))
-                            extension = ".jpg";
-
-                        int counter = 1;
-                        string filePath;
-
-                        do
-                        {
-                            string safeIndex = item.Index.Replace("/", "_").Replace("\\", "_");
-                            string fileName = $"{safeIndex}_{counter}{extension}";
-                            filePath = Path.Combine(baseDirectory, fileName);
-                            counter++;
-                        }
-                        while (File.Exists(filePath));
-
-                        await File.WriteAllBytesAsync(filePath, imgBytes, ct);
-                        savedCount++;
+                        var savedPath = await ImageHelper.SaveImageAsync(_httpClient, item.Url, product.Id, ServiceConstants.ImagesFolder, ct);
+                        if (!string.IsNullOrWhiteSpace(savedPath))
+                            savedCount++;
+                        else
+                            failedCount++;
                     }
                     catch (Exception ex)
                     {

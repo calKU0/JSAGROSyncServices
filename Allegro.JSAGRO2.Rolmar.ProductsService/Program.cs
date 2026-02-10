@@ -86,7 +86,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<ITokenRepository, DbTokenRepository>();
         services.AddScoped<IOfferRepository, OfferRepository>();
-        services.AddScoped<IImageRespository, ImageRepository>();
+        services.AddScoped<IImageRepository, ImageRepository>();
 
         // Services
         services.AddSingleton<ISyncStateService, FileSyncStateService>();

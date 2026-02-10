@@ -1,4 +1,5 @@
-﻿using Allegro.JSAGRO.Rolmar.ProductsService.Helpers;
+﻿using Allegro.JSAGRO.Rolmar.ProductsService.Constants;
+using Allegro.JSAGRO.Rolmar.ProductsService.Helpers;
 using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 using JSAGROSyncServices.Shared.DTOs.Allegro;
 using JSAGROSyncServices.Shared.Helpers;
@@ -20,7 +21,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
         private readonly IProductRepository _productRepo;
         private readonly IOfferRepository _offerRepo;
         private readonly IParameterRepository _parameterRepo;
-        private readonly IImageRespository _imageRepo;
+        private readonly IImageRepository _imageRepo;
         private readonly AllegroApiClient _apiClient;
         private readonly AppSettings _appSettings;
         private readonly PriceSettings _priceSettings;
@@ -35,7 +36,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
             WriteIndented = true
         };
 
-        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<PriceSettings> priceSettings, IOptions<AllegroSettings> allegroSettings, ILogger<AllegroOfferService> logger, IParameterRepository parameterRepo, IImageRespository imageRepo)
+        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<PriceSettings> priceSettings, IOptions<AllegroSettings> allegroSettings, ILogger<AllegroOfferService> logger, IParameterRepository parameterRepo, IImageRepository imageRepo)
         {
             _productRepo = productRepo;
             _offerRepo = offerRepo;
@@ -201,7 +202,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
         {
             try
             {
-                var products = await _productRepo.GetProductsToUpload(_appSettings.MinProductStock, ct);
+                var products = await _productRepo.GetProductsToUpload(_appSettings.MinProductStock, _appSettings.MinProductPrice, ct);
 
                 if (products == null || !products.Any())
                 {
@@ -221,7 +222,6 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
                         product.AllegroImages = await ImportImages(product, token);
                         if (product.AllegroImages == null || !product.AllegroImages.Any())
                         {
-                            _logger.LogWarning("Skipping product {Name} ({Code}) due to no images.", product.Name, product.Code);
                             return;
                         }
                         var offer = OfferFactory.BuildOffer(product, _appSettings, _allegroSettings, _priceSettings);
@@ -333,6 +333,10 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
                                 _logger.LogInformation("Updated parameter {ParameterId} for {Name} ({Code}) to '{CorrectValue}'", parameterId, product.Name, product.Code, correctValue);
                             }
                         }
+                        else if (err.UserMessage.Contains(@"Podany adres obrazka jest nieprawidłowy."))
+                        {
+                            await _imageRepo.DeleteProductImagesAsync(product.Id, CancellationToken.None);
+                        }
                         else if (err.UserMessage.Contains(@"bez wybierania wartości niejednoznacznej"))
                         {
                         }
@@ -391,23 +395,13 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
         {
             var imageResults = new ConcurrentBag<(string FileName, string Url)>();
 
-            var imagesFolder = @"C:\Program Files (x86)\Api Sync Services\RolmarImages";
-
-            if (!Directory.Exists(imagesFolder))
+            if (!Directory.Exists(ServiceConstants.ImagesFolder))
             {
-                _logger.LogWarning("Images folder not found: {Path}", imagesFolder);
+                _logger.LogWarning("Images folder not found: {Path}", ServiceConstants.ImagesFolder);
                 return new List<AllegroImages>();
             }
 
-            var imageFiles = Directory.EnumerateFiles(imagesFolder)
-                .Where(f =>
-                    Path.GetFileName(f)
-                        .StartsWith(product.Code + "_", StringComparison.OrdinalIgnoreCase) &&
-                    (f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-                     f.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-                     f.EndsWith(".png", StringComparison.OrdinalIgnoreCase)))
-                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            var imageFiles = ImageHelper.GetImageFiles(ServiceConstants.ImagesFolder, product.Id);
 
             if (!imageFiles.Any())
             {

@@ -6,5 +6,6 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Constants
     {
         public const IntegrationCompany Company = IntegrationCompany.Rolmar;
         public const AllegroAccount Account = AllegroAccount.JSAGRO;
+        public const string ImagesFolder = @"C:\Program Files (x86)\Api Sync Services\Product_Images";
     }
 }

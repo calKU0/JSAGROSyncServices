@@ -19,6 +19,11 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
             _deliveries = options.Value.Deliveries;
         }
 
+        public Task<bool> DeleteProduct(int productId, CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
+
         public async Task<List<RolmarProduct>> GetAllProducts(CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
@@ -47,6 +52,11 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
             return products.ToList();
         }
 
+        public Task<List<RolmarProduct>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
+
         public async Task<List<RolmarProduct>> GetProductsToUpdateParameters(CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
@@ -55,19 +65,24 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
 
             await connection.QueryAsync<
                 RolmarProduct,
-                JSAGROSyncServices.Shared.Models.ProductSpecification,
+                ProductApplication,
+                ProductSpecification,
                 RolmarProduct>(
                 "RolmarProducts_GetToUpdateParameters",
-                (product, spec) =>
+                (product, application, spec) =>
                 {
                     if (!productDict.TryGetValue(product.Id, out var existing))
                     {
                         existing = product;
-                        existing.Specifications = new List<JSAGROSyncServices.Shared.Models.ProductSpecification>();
+                        existing.Applications = new List<ProductApplication>();
+                        existing.Specifications = new List<ProductSpecification>();
                         existing.Parameters = new List<ProductParameter>();
 
                         productDict.Add(existing.Id, existing);
                     }
+
+                    if (application?.Id > 0 && !existing.Applications.Any(a => a.Id == application.Id))
+                        existing.Applications.Add(application);
 
                     if (spec?.Id > 0 && !existing.Specifications.Any(s => s.Id == spec.Id))
                         existing.Specifications.Add(spec);
@@ -75,7 +90,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
                     return existing;
                 },
                 new { IntegrationCompany = ServiceConstants.Company },
-                splitOn: "Id",
+                splitOn: "Id,Id",
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure
             );
@@ -83,7 +98,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
             return productDict.Values.ToList();
         }
 
-        public async Task<List<RolmarProduct>> GetProductsToUpload(int minProductStock, CancellationToken ct)
+        public async Task<List<RolmarProduct>> GetProductsToUpload(int minProductStock, decimal minProductPrice, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
             connection.Open();
@@ -91,17 +106,21 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
 
             await connection.QueryAsync<
                 RolmarProduct,
-                JSAGROSyncServices.Shared.Models.ProductSpecification,
+                ProductSpecification,
                 ProductParameter,
+                ProductApplication,
+                ProductPackage,
                 RolmarProduct>(
                 "RolmarProducts_GetToUpload",
-                (product, spec, param) =>
+                (product, spec, param, application, package) =>
                 {
                     if (!productDict.TryGetValue(product.Id, out var existing))
                     {
                         existing = product;
-                        existing.Specifications = new List<JSAGROSyncServices.Shared.Models.ProductSpecification>();
+                        existing.Specifications = new List<ProductSpecification>();
                         existing.Parameters = new List<ProductParameter>();
+                        existing.Applications = new List<ProductApplication>();
+                        existing.Packages = new List<ProductPackage>();
 
                         productDict.Add(existing.Id, existing);
                     }
@@ -112,10 +131,16 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
                     if (param?.Id > 0 && !existing.Parameters.Any(p => p.Id == param.Id))
                         existing.Parameters.Add(param);
 
+                    if (application?.Id > 0 && !existing.Applications.Any(p => p.Id == application.Id))
+                        existing.Applications.Add(application);
+
+                    if (package?.Id > 0 && !existing.Packages.Any(p => p.Id == package.Id))
+                        existing.Packages.Add(package);
+
                     return existing;
                 },
-                new { MinProductStock = minProductStock, IntegrationCompany = ServiceConstants.Company, Account = ServiceConstants.Account },
-                splitOn: "Id,Id",
+                new { MinProductStock = minProductStock, MinProductPrice = minProductPrice, IntegrationCompany = ServiceConstants.Company, Account = ServiceConstants.Account },
+                splitOn: "Id,Id,Id,Id",
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure
             );
@@ -157,6 +182,11 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
             );
 
             return productDict.Values.ToList();
+        }
+
+        public Task UpdateCompatibilitySet(int productId, bool value, CancellationToken ct)
+        {
+            throw new NotImplementedException();
         }
 
         public async Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct)
