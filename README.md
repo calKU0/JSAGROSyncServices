@@ -13,11 +13,10 @@
 - `Allegro.JSAGRO.Gaska.ProductsService` - synchronizes Gaska/JSAGRO products into Allegro.
 - `Allegro.JSAGRO.Gaska.OrdersService` - synchronizes Allegro orders into JSAGRO/Gaska flows.
 - `Allegro.JSAGRO.Rolmar.ProductsService` - synchronizes Rolmar products into Allegro.
+- `Allegro.JSAGRO.Erli.ProductsService` - synchronizes Allegro offers into Erli.
 - `Allegro.JSAGRO2.Gaska.ProductsService` - JSAGRO2 variant of the Gaska product sync.
 - `Allegro.JSAGRO2.Gaska.OrdersService` - JSAGRO2 variant of the order sync.
 - `Allegro.JSAGRO2.Rolmar.ProductsService` - JSAGRO2 variant of the Rolmar product sync.
-- `Allegro.Erli.ProductsService` - synchronizes Allegro offers into Erli.
-
 ### Shared Libraries
 
 - `JSAGROSyncServices.Shared` - shared models, helpers, and SQL Server migrations.
