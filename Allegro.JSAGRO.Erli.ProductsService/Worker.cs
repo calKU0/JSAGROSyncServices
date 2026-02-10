@@ -1,10 +1,10 @@
-using Allegro.Erli.ProductsService.Repositories;
-using Allegro.Erli.ProductsService.Services;
-using Allegro.Erli.ProductsService.Settings;
+using Allegro.JSAGRO.Erli.ProductsService.Repositories;
+using Allegro.JSAGRO.Erli.ProductsService.Services;
+using Allegro.JSAGRO.Erli.ProductsService.Settings;
 using JSAGROSyncServices.Shared.Data;
 using Microsoft.Extensions.Options;
 
-namespace Allegro.Erli.ProductsService
+namespace Allegro.JSAGRO.Erli.ProductsService
 {
     public class Worker : BackgroundService
     {

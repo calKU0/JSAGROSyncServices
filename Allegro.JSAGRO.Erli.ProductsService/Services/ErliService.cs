@@ -1,11 +1,11 @@
-﻿using Allegro.Erli.ProductsService.DTOs;
-using Allegro.Erli.ProductsService.Mappers;
-using Allegro.Erli.ProductsService.Repositories;
+﻿using Allegro.JSAGRO.Erli.ProductsService.DTOs;
+using Allegro.JSAGRO.Erli.ProductsService.Mappers;
+using Allegro.JSAGRO.Erli.ProductsService.Repositories;
 using JSAGROSyncServices.Shared.Models;
 using Newtonsoft.Json;
 using Serilog;
 
-namespace Allegro.Erli.ProductsService.Services
+namespace Allegro.JSAGRO.Erli.ProductsService.Services
 {
     public class ErliService
     {

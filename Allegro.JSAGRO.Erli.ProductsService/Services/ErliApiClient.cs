@@ -1,4 +1,4 @@
-﻿using Allegro.Erli.ProductsService.Settings;
+﻿using Allegro.JSAGRO.Erli.ProductsService.Settings;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
@@ -6,7 +6,7 @@ using Serilog;
 using System.Net.Http.Headers;
 using System.Text;
 
-namespace Allegro.Erli.ProductsService.Services
+namespace Allegro.JSAGRO.Erli.ProductsService.Services
 {
     public class ErliClient
     {

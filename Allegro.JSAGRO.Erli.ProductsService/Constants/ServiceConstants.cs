@@ -1,6 +1,6 @@
 using JSAGROSyncServices.Shared.Data.Enums;
 
-namespace Allegro.Erli.ProductsService.Constants
+namespace Allegro.JSAGRO.Erli.ProductsService.Constants
 {
     public static class ServiceConstants
     {

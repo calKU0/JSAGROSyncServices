@@ -1,10 +1,10 @@
-﻿using Allegro.Erli.ProductsService.Constants;
+﻿using Allegro.JSAGRO.Erli.ProductsService.Constants;
 using Dapper;
 using JSAGROSyncServices.Shared.Data;
 using JSAGROSyncServices.Shared.Models;
 using System.Data;
 
-namespace Allegro.Erli.ProductsService.Repositories
+namespace Allegro.JSAGRO.Erli.ProductsService.Repositories
 {
     public class OfferRepository
     {

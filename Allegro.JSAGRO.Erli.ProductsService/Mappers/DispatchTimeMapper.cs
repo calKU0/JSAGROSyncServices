@@ -1,7 +1,7 @@
-﻿using Allegro.Erli.ProductsService.DTOs;
+﻿using Allegro.JSAGRO.Erli.ProductsService.DTOs;
 using System.Text.RegularExpressions;
 
-namespace Allegro.Erli.ProductsService.Mappers
+namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
 {
     public static class DispatchTimeMapper
     {

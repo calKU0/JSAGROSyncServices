@@ -1,8 +1,8 @@
-﻿using Allegro.Erli.ProductsService.DTOs;
+﻿using Allegro.JSAGRO.Erli.ProductsService.DTOs;
 using JSAGROSyncServices.Shared.Models;
 using Newtonsoft.Json;
 
-namespace Allegro.Erli.ProductsService.Mappers
+namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
 {
     public static class ErliProductMapper
     {

@@ -1,14 +1,14 @@
-using Allegro.Erli.ProductsService;
-using Allegro.Erli.ProductsService.Repositories;
-using Allegro.Erli.ProductsService.Services;
-using Allegro.Erli.ProductsService.Settings;
+using Allegro.JSAGRO.Erli.ProductsService;
+using Allegro.JSAGRO.Erli.ProductsService.Repositories;
+using Allegro.JSAGRO.Erli.ProductsService.Services;
+using Allegro.JSAGRO.Erli.ProductsService.Settings;
 using JSAGROSyncServices.Shared.Data;
 using Serilog;
 
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
     {
-        options.ServiceName = "AllegroErliProductsService";
+        options.ServiceName = "AllegroJSAGROErliProductsService";
     })
     .ConfigureServices((hostContext, services) =>
     {

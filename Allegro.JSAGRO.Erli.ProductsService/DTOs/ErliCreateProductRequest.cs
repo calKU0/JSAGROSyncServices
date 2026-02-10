@@ -1,4 +1,4 @@
-﻿namespace Allegro.Erli.ProductsService.DTOs
+﻿namespace Allegro.JSAGRO.Erli.ProductsService.DTOs
 {
     public class ErliCreateProductRequest
     {

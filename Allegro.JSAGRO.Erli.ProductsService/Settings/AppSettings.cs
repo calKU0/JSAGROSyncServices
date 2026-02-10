@@ -1,4 +1,4 @@
-﻿namespace Allegro.Erli.ProductsService.Settings
+﻿namespace Allegro.JSAGRO.Erli.ProductsService.Settings
 {
     public class AppSettings
     {
