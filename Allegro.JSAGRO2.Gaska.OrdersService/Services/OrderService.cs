@@ -48,7 +48,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             try
             {
                 var shippingRates = await _allegroApiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
-                var deliveryNames = (_appSettings.AllegroDeliveryName ?? string.Empty)
+                var deliveryNames = (_appSettings.AllegroDeliveryNames ?? string.Empty)
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -59,7 +59,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
 
                 if (gaskaShippingRateIds.Count == 0)
                 {
-                    _logger.LogError("Failed to find Allegro Shipping Rate IDs for delivery methods '{DeliveryName}'. Aborting order sync.", _appSettings.AllegroDeliveryName);
+                    _logger.LogError("Failed to find Allegro Shipping Rate IDs for delivery methods '{DeliveryName}'. Aborting order sync.", _appSettings.AllegroDeliveryNames);
                     return;
                 }
 
@@ -100,7 +100,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
 
                             if (!allItemsUseGaska)
                             {
-                                _logger.LogInformation("Skipping order {OrderId} - not all items use {ShippingRate} shipping method.", order.Id, _appSettings.AllegroDeliveryName);
+                                _logger.LogInformation("Skipping order {OrderId} - not all items use {ShippingRate} shipping method.", order.Id, _appSettings.AllegroDeliveryNames);
                                 continue;
                             }
 

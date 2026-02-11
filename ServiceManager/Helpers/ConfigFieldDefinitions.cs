@@ -54,9 +54,9 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "AppSettings:FetchIntervalMinutes", Label = "Co ile wywoływać synchronizację (min)", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:OfferProcessingDelayMinutes", Label = "Opóźnienie złożenia zamówienia (min)", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:NotificationsEmail", Label = "Adresy email do powiadomień (rodzielone średnikiem)", Group = "Ustawienia serwisu" },
+            new ConfigField { Key = "AppSettings:AllegroDeliveryNames", Label = "Nazwy cenników dostawy Allegro", Group = "Ustawienia serwisu" },
 
             // Allegro Settings
-            new ConfigField { Key = "AllegroSettings:AllegroDeliveryName", Label = "Nazwa cennika dostawy Allegro", Group = "Ustawienia Allegro" },
             new ConfigField { Key = "AllegroSettings:AllegroHandlingTime", Label = "Czas realizacji", Group = "Ustawienia Allegro" },
             new ConfigField { Key = "AllegroSettings:AllegroHandlingTimeCustomProducts", Label = "Czas realizacji produktów niestandardowych", Group = "Ustawienia Allegro" },
             new ConfigField { Key = "AllegroSettings:AllegroSafetyMeasures", Label = "Tekst bezpieczeństwa", Group = "Ustawienia Allegro" },
