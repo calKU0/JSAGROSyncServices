@@ -47,14 +47,18 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
             try
             {
                 var shippingRates = await _allegroApiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
-                var gaskaShippingRateId = shippingRates.ShippingRates
-                    .Where(sr => sr.Name == _appSettings.AllegroDeliveryName)
-                    .Select(sr => sr.Id)
-                    .FirstOrDefault();
+                var deliveryNames = (_appSettings.AllegroDeliveryName ?? string.Empty)
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                if (string.IsNullOrEmpty(gaskaShippingRateId))
+                var gaskaShippingRateIds = shippingRates.ShippingRates
+                    .Where(sr => deliveryNames.Contains(sr.Name))
+                    .Select(sr => sr.Id)
+                    .ToHashSet();
+
+                if (gaskaShippingRateIds.Count == 0)
                 {
-                    _logger.LogError("Failed to find Allegro Shipping Rate ID for delivery method '{DeliveryName}'. Aborting order sync.", _appSettings.AllegroDeliveryName);
+                    _logger.LogError("Failed to find Allegro Shipping Rate IDs for delivery methods '{DeliveryName}'. Aborting order sync.", _appSettings.AllegroDeliveryName);
                     return;
                 }
 
@@ -91,7 +95,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                             // Check if all items use the Gąska shipping method
                             bool allItemsUseGaska = offers
                                 .Select(o => o.Delivery.ShippingRates.Id)
-                                .All(id => id == gaskaShippingRateId);
+                                .All(id => gaskaShippingRateIds.Contains(id));
 
                             if (!allItemsUseGaska)
                             {
