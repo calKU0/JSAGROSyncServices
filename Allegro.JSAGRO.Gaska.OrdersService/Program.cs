@@ -9,6 +9,7 @@ using JSAGROSyncServices.Infrastructure.Data;
 using JSAGROSyncServices.Infrastructure.Logging;
 using JSAGROSyncServices.Infrastructure.Services;
 using Serilog;
+using System.Net.Http.Headers;
 
 var host = Host.CreateDefaultBuilder(args)
     .UseWindowsService(options =>
@@ -59,13 +60,31 @@ var host = Host.CreateDefaultBuilder(args)
         Log.Information("Database migration completed successfully.");
 
         // ------------------ Dependency Injection ------------------
-
         // Configure options
         services.Configure<GaskaApiCredentials>(configuration.GetSection("GaskaApiCredentials"));
         services.Configure<AllegroApiCredentials>(configuration.GetSection("AllegroApiCredentials"));
         services.Configure<CourierSettings>(configuration.GetSection("CourierSettings"));
         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
         services.Configure<SmtpSettings>(configuration.GetSection("SmtpSettings"));
+
+        // HttpClient configuration for external APIs
+        services.AddHttpClient<AllegroAuthService>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["AllegroApiCredentials:AuthBaseUrl"]);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-www-form-urlencoded"));
+        });
+
+        services.AddHttpClient<AllegroApiClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["AllegroApiCredentials:BaseUrl"]);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
+        });
+
+        services.AddHttpClient<GaskaApiClient>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["GaskaApiCredentials:BaseUrl"]);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        });
 
         // Register Dapper context
         services.AddSingleton(sp => new DapperContext(connectionString));
@@ -74,12 +93,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<ITokenRepository, DbTokenRepository>();
 
-        // Register HttpClients
-        services.AddHttpClient<AllegroApiClient>();
-        services.AddHttpClient<GaskaApiClient>();
-
         // Register services
-        services.AddScoped<AllegroAuthService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IOrderService, OrderService>();
 
