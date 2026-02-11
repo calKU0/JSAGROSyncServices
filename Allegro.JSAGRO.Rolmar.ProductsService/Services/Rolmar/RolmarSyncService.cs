@@ -5,7 +5,7 @@ using Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces;
 using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
-using JSAGROSyncServices.Shared.Helpers;
+using JSAGROSyncServices.Infrastructure.Helpers;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using System.Text.Json;

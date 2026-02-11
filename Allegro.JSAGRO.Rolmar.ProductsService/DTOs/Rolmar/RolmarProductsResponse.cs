@@ -1,5 +1,5 @@
 ﻿using System.Text.Json.Serialization;
-using static JSAGROSyncServices.Shared.Helpers.Converters;
+using static JSAGROSyncServices.Infrastructure.Helpers.Converters;
 
 namespace Allegro.JSAGRO.Rolmar.ProductsService.DTOs
 {

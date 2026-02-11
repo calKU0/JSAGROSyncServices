@@ -68,7 +68,8 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
                         "AllegroOffers_Upsert",
                         batch,
                         transaction,
-                        commandType: CommandType.StoredProcedure);
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900);
                 }
 
                 transaction.Commit();

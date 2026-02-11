@@ -2,7 +2,7 @@
 using JSAGROSyncServices.Contracts.DTOs.Allegro;
 using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
-using JSAGROSyncServices.Shared.Helpers;
+using JSAGROSyncServices.Infrastructure.Helpers;
 using System.Globalization;
 using System.Text;
 

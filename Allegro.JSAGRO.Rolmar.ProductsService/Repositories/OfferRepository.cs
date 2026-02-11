@@ -5,7 +5,7 @@ using JSAGROSyncServices.Contracts.DTOs.Allegro;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
-using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Infrastructure.Data;
 using Microsoft.Extensions.Options;
 using System.Data;
 using System.Globalization;
@@ -68,7 +68,8 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                         "AllegroOffers_Upsert",
                         batch,
                         transaction,
-                        commandType: CommandType.StoredProcedure);
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900);
                 }
 
                 transaction.Commit();
@@ -89,7 +90,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetAll",
                 new { Account = ServiceConstants.Account },
-                commandType: CommandType.StoredProcedure)).ToList();
+                commandType: CommandType.StoredProcedure, commandTimeout: 900)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
