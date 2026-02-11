@@ -5,7 +5,7 @@ using Allegro.JSAGRO.Gaska.ProductsService.Settings;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
-using JSAGROSyncServices.Shared.Helpers;
+using JSAGROSyncServices.Infrastructure.Helpers;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 

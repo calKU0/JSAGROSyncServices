@@ -1,7 +1,7 @@
 using Allegro.JSAGRO.Erli.ProductsService.Repositories;
 using Allegro.JSAGRO.Erli.ProductsService.Services;
 using Allegro.JSAGRO.Erli.ProductsService.Settings;
-using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Infrastructure.Data;
 using Microsoft.Extensions.Options;
 
 namespace Allegro.JSAGRO.Erli.ProductsService

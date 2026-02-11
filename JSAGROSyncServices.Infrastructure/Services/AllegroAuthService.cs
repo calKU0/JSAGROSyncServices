@@ -8,7 +8,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace JSAGROSyncServices.Shared.Services
+namespace JSAGROSyncServices.Infrastructure.Services
 {
     public class AllegroAuthService
     {

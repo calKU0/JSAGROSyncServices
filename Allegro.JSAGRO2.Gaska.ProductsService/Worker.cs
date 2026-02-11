@@ -1,6 +1,6 @@
 using Allegro.JSAGRO2.Gaska.ProductsService.Settings;
 using JSAGROSyncServices.Contracts.Interfaces;
-using JSAGROSyncServices.Shared.Services;
+using JSAGROSyncServices.Infrastructure.Services;
 using Microsoft.Extensions.Options;
 
 public class Worker : BackgroundService

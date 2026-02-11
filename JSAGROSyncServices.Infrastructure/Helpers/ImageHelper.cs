@@ -1,4 +1,4 @@
-﻿namespace JSAGROSyncServices.Shared.Helpers
+﻿namespace JSAGROSyncServices.Infrastructure.Helpers
 {
     public static class ImageHelper
     {

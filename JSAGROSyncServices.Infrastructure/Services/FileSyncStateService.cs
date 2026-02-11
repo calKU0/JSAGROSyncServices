@@ -2,7 +2,7 @@
 using JSAGROSyncServices.Contracts.Models;
 using System.Text.Json;
 
-namespace JSAGROSyncServices.Shared.Services
+namespace JSAGROSyncServices.Infrastructure.Services
 {
     public class FileSyncStateService : ISyncStateService
     {

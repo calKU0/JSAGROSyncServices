@@ -1,7 +1,7 @@
 ﻿using Microsoft.Data.SqlClient;
 using System.Data;
 
-namespace JSAGROSyncServices.Shared.Data
+namespace JSAGROSyncServices.Infrastructure.Data
 {
     public class DapperContext
     {

@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\JSAGROSyncServices.Shared\JSAGROSyncServices.Shared.csproj" />
     <ProjectReference Include="..\JSAGROSyncServices.Contracts\JSAGROSyncServices.Contracts.csproj" />
+    <ProjectReference Include="..\JSAGROSyncServices.Infrastructure\JSAGROSyncServices.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

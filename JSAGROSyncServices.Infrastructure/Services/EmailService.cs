@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
 
-namespace JSAGROSyncServices.Shared.Services
+namespace JSAGROSyncServices.Infrastructure.Services
 {
     public class EmailService : IEmailService
     {

@@ -5,7 +5,7 @@ using JSAGROSyncServices.Contracts.DTOs.Allegro;
 using JSAGROSyncServices.Contracts.DTOs.Allegro.GaskaApi;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
-using JSAGROSyncServices.Shared.Services;
+using JSAGROSyncServices.Infrastructure.Services;
 using Microsoft.Extensions.Options;
 using System.Globalization;
 using System.Text.Json;

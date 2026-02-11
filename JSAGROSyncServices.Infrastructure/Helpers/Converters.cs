@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace JSAGROSyncServices.Shared.Helpers
+namespace JSAGROSyncServices.Infrastructure.Helpers
 {
     public static class Converters
     {

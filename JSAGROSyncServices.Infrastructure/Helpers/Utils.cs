@@ -2,7 +2,7 @@
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 
-namespace JSAGROSyncServices.Shared.Helpers
+namespace JSAGROSyncServices.Infrastructure.Helpers
 {
     public static class Utils
     {

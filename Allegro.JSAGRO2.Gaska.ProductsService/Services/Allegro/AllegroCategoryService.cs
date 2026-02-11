@@ -1,7 +1,7 @@
 ﻿using JSAGROSyncServices.Contracts.DTOs.Allegro;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
-using JSAGROSyncServices.Shared.Services;
+using JSAGROSyncServices.Infrastructure.Services;
 
 namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
 {

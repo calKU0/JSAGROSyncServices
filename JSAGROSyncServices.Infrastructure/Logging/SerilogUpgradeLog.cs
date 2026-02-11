@@ -1,6 +1,6 @@
 ﻿using DbUp.Engine.Output;
 
-namespace JSAGROSyncServices.Shared.Logging
+namespace JSAGROSyncServices.Infrastructure.Logging
 {
     public class SerilogUpgradeLog : IUpgradeLog
     {

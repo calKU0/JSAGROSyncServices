@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace JSAGROSyncServices.Shared.Services
+namespace JSAGROSyncServices.Infrastructure.Services
 {
     public class AllegroApiClient
     {

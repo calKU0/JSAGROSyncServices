@@ -1,7 +1,7 @@
 ﻿using Dapper;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
-using JSAGROSyncServices.Shared.Data;
+using JSAGROSyncServices.Infrastructure.Data;
 using System.Data;
 
 namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
