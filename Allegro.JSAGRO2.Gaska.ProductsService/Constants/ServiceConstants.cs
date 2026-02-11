@@ -1,4 +1,4 @@
-using JSAGROSyncServices.Shared.Data.Enums;
+using JSAGROSyncServices.Contracts.Data.Enums;
 
 namespace Allegro.JSAGRO2.Gaska.ProductsService.Constants
 {

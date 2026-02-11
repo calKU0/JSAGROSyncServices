@@ -1,4 +1,4 @@
-﻿using JSAGROSyncServices.Shared.Settings;
+﻿using JSAGROSyncServices.Contracts.Settings;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Settings
 {

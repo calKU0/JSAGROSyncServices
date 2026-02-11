@@ -1,6 +1,6 @@
 using Allegro.JSAGRO.Gaska.ProductsService.Services.Gaska.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
-using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
 

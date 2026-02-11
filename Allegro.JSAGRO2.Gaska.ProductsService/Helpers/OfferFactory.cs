@@ -1,7 +1,8 @@
 ﻿using Allegro.JSAGRO2.Gaska.ProductsService.Settings;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Helpers;
-using JSAGROSyncServices.Shared.Models;
 using System.Globalization;
 using System.Text;
 
@@ -107,7 +108,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 Description = BuildDescription(product),
                 External = new External { Id = product.Code },
                 Publication = new Publication { Status = available < 1 ? "ENDED" : publicationStatus, StartingAt = startingAt },
-                Delivery = new JSAGROSyncServices.Shared.DTOs.Allegro.Delivery
+                Delivery = new Delivery
                 {
                     ShippingRates = new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
                     HandlingTime = product.DeliveryType == 0
@@ -506,7 +507,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
             return description;
         }
 
-        private static string GetDelivery(RolmarProduct product, List<Settings.Delivery> deliveries)
+        private static string GetDelivery(RolmarProduct product, List<DeliverySettings> deliveries)
         {
             if (deliveries == null || deliveries.Count == 0)
                 return null;

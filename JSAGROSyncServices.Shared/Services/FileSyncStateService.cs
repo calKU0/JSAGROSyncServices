@@ -1,5 +1,5 @@
-﻿using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
+﻿using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
 using System.Text.Json;
 
 namespace JSAGROSyncServices.Shared.Services

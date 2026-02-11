@@ -3,11 +3,11 @@ using Allegro.JSAGRO2.Gaska.OrdersService.Repositories;
 using Allegro.JSAGRO2.Gaska.OrdersService.Services;
 using Allegro.JSAGRO2.Gaska.OrdersService.Settings;
 using DbUp;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Data;
-using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Logging;
 using JSAGROSyncServices.Shared.Services;
-using JSAGROSyncServices.Shared.Settings;
 using Serilog;
 
 var host = Host.CreateDefaultBuilder(args)

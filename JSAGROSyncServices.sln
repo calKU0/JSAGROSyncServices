@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO2.Gaska.Order
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO2.Rolmar.ProductsService", "Allegro.JSAGRO2.Rolmar.ProductsService\Allegro.JSAGRO2.Rolmar.ProductsService.csproj", "{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSAGROSyncServices.Contracts", "JSAGROSyncServices.Contracts\JSAGROSyncServices.Contracts.csproj", "{AE6E2A4B-DF76-40D8-96C1-ED6DE7C29956}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -63,6 +65,10 @@ Global
 		{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D7C40EAE-CA43-4BF8-9623-B3BF482D787A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE6E2A4B-DF76-40D8-96C1-ED6DE7C29956}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE6E2A4B-DF76-40D8-96C1-ED6DE7C29956}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE6E2A4B-DF76-40D8-96C1-ED6DE7C29956}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE6E2A4B-DF76-40D8-96C1-ED6DE7C29956}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

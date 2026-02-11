@@ -1,5 +1,5 @@
-﻿using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Settings;
+﻿using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Settings;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Logging;

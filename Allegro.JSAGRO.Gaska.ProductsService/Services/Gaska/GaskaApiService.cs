@@ -2,10 +2,10 @@
 using Allegro.JSAGRO.Gaska.ProductsService.DTOs;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.Gaska.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Helpers;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
-using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 

@@ -1,7 +1,8 @@
 ﻿using Allegro.JSAGRO2.Rolmar.ProductsService.Settings;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Helpers;
-using JSAGROSyncServices.Shared.Models;
 using System.Globalization;
 using System.Text;
 
@@ -45,7 +46,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Helpers
                     Status = "ACTIVE",
                     StartingAt = DateTime.UtcNow,
                 },
-                Delivery = new JSAGROSyncServices.Shared.DTOs.Allegro.Delivery
+                Delivery = new Delivery
                 {
                     ShippingRates = new ShippingRates
                     {
@@ -120,7 +121,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Helpers
                     Status = offer.Product.InStock >= appSettings.MinProductStock ? "ACTIVE" : "ENDED",
                     StartingAt = null,
                 },
-                Delivery = new JSAGROSyncServices.Shared.DTOs.Allegro.Delivery
+                Delivery = new Delivery
                 {
                     ShippingRates = new ShippingRates
                     {
@@ -494,7 +495,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Helpers
             return Math.Max(calculatedPrice, 1.00m);
         }
 
-        private static string GetDelivery(RolmarProduct product, List<Settings.Delivery> deliveries)
+        private static string GetDelivery(RolmarProduct product, List<DeliverySettings> deliveries)
         {
             if (deliveries == null || deliveries.Count == 0)
                 return null;

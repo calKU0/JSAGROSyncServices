@@ -1,5 +1,5 @@
-﻿using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
+﻿using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 {

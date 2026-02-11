@@ -1,5 +1,5 @@
 using Allegro.JSAGRO2.Gaska.OrdersService.Settings;
-using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Contracts.Interfaces;
 using Microsoft.Extensions.Options;
 
 namespace Allegro.JSAGRO.Gaska.OrdersService

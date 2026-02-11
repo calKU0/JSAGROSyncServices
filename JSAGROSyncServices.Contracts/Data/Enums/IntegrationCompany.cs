@@ -1,0 +1,8 @@
+﻿namespace JSAGROSyncServices.Contracts.Data.Enums
+{
+    public enum IntegrationCompany
+    {
+        Rolmar = 1,
+        Gaska = 2,
+    }
+}

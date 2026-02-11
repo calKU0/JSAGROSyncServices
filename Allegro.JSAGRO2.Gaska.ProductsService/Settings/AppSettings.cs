@@ -1,4 +1,6 @@
-﻿namespace Allegro.JSAGRO2.Gaska.ProductsService.Settings
+﻿using JSAGROSyncServices.Contracts.Settings;
+
+namespace Allegro.JSAGRO2.Gaska.ProductsService.Settings
 {
     public class AppSettings
     {
@@ -8,6 +10,6 @@
         public decimal BundleProductsUnderPriceNet { get; set; }
         public int LogsExpirationDays { get; set; }
         public int FetchIntervalMinutes { get; set; }
-        public List<Delivery> Deliveries { get; set; } = new List<Delivery>();
+        public List<DeliverySettings> Deliveries { get; set; } = new List<DeliverySettings>();
     }
 }

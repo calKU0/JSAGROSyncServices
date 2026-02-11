@@ -3,9 +3,9 @@ using Allegro.JSAGRO.Rolmar.ProductsService.DTOs;
 using Allegro.JSAGRO.Rolmar.ProductsService.DTOs.Rolmar;
 using Allegro.JSAGRO.Rolmar.ProductsService.Services.Interfaces;
 using Allegro.JSAGRO.Rolmar.ProductsService.Settings;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Shared.Helpers;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -258,7 +258,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
                 PriceNet = priceNet,
                 PriceGross = priceNet * 1.23m,
                 Package = package,
-                Specifications = product.Specifications?.Select(s => new JSAGROSyncServices.Shared.Models.ProductSpecification
+                Specifications = product.Specifications?.Select(s => new JSAGROSyncServices.Contracts.Models.ProductSpecification
                 {
                     Name = s.Name,
                     Value = s.Value,

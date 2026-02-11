@@ -2,11 +2,11 @@ using Allegro.JSAGRO2.Gaska.ProductsService.Repositories;
 using Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro;
 using Allegro.JSAGRO2.Gaska.ProductsService.Settings;
 using DbUp;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Data;
-using JSAGROSyncServices.Shared.Interfaces;
 using JSAGROSyncServices.Shared.Logging;
 using JSAGROSyncServices.Shared.Services;
-using JSAGROSyncServices.Shared.Settings;
 using Serilog;
 using System.Net.Http.Headers;
 

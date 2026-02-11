@@ -1,5 +1,5 @@
-﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
-using JSAGROSyncServices.Shared.Interfaces;
+﻿using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Shared.Services;
 
 namespace Allegro.JSAGRO2.Rolmar.ProductsService.Services.Allegro

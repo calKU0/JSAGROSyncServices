@@ -1,8 +1,8 @@
 ﻿using Allegro.JSAGRO.Gaska.ProductsService.Settings;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Helpers;
-using JSAGROSyncServices.Shared.Models;
-using JSAGROSyncServices.Shared.Settings;
 using System.Globalization;
 using System.Text;
 

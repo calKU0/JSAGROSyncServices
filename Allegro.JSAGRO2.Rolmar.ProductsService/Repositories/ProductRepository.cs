@@ -1,9 +1,10 @@
 ﻿using Allegro.JSAGRO2.Rolmar.ProductsService.Constants;
 using Allegro.JSAGRO2.Rolmar.ProductsService.Settings;
 using Dapper;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Data;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
 using Microsoft.Extensions.Options;
 using System.Data;
 
@@ -12,7 +13,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
     public class ProductRepository : IProductRepository
     {
         private readonly DapperContext _context;
-        private readonly List<Settings.Delivery> _deliveries;
+        private readonly List<DeliverySettings> _deliveries;
         public ProductRepository(DapperContext dbContext, IOptions<AppSettings> options)
         {
             _context = dbContext;
@@ -156,7 +157,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
 
             await connection.QueryAsync<
                 RolmarProduct,
-                JSAGROSyncServices.Shared.Models.ProductSpecification,
+                ProductSpecification,
                 RolmarProduct>(
                 "RolmarProducts_GetWithoutDefaultCategory",
                 (product, spec) =>
@@ -164,7 +165,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
                     if (!productDict.TryGetValue(product.Id, out var existing))
                     {
                         existing = product;
-                        existing.Specifications = new List<JSAGROSyncServices.Shared.Models.ProductSpecification>();
+                        existing.Specifications = new List<ProductSpecification>();
                         existing.Parameters = new List<ProductParameter>(); // puste
 
                         productDict.Add(existing.Id, existing);

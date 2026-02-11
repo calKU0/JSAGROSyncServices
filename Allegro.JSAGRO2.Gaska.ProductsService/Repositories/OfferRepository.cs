@@ -1,10 +1,11 @@
 ﻿using Allegro.JSAGRO2.Gaska.ProductsService.Constants;
 using Allegro.JSAGRO2.Gaska.ProductsService.Settings;
 using Dapper;
+using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Data;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
 using Microsoft.Extensions.Options;
 using System.Data;
 using System.Globalization;
@@ -14,7 +15,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
     public class OfferRepository : IOfferRepository
     {
         private readonly DapperContext _context;
-        private readonly List<Settings.Delivery> _deliveries;
+        private readonly List<DeliverySettings> _deliveries;
         private readonly ILogger<OfferRepository> _logger;
 
         public OfferRepository(ILogger<OfferRepository> logger, DapperContext context, IOptions<AppSettings> options)

@@ -1,10 +1,10 @@
 ﻿using Allegro.JSAGRO2.Rolmar.ProductsService.Constants;
 using Allegro.JSAGRO2.Rolmar.ProductsService.Helpers;
 using Allegro.JSAGRO2.Rolmar.ProductsService.Settings;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Shared.Helpers;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
 using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;

@@ -1,5 +1,5 @@
 ﻿using Allegro.JSAGRO.Erli.ProductsService.DTOs;
-using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Contracts.Models;
 using Newtonsoft.Json;
 
 namespace Allegro.JSAGRO.Erli.ProductsService.Mappers

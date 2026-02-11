@@ -1,11 +1,11 @@
 ﻿using Allegro.JSAGRO.Gaska.ProductsService.Constants;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
 using Dapper;
+using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Shared.Data;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
-using JSAGROSyncServices.Shared.Settings;
 using Microsoft.Extensions.Options;
 using System.Data;
 using System.Globalization;

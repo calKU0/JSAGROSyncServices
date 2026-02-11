@@ -1,8 +1,8 @@
 ﻿using Allegro.JSAGRO.Gaska.ProductsService.Constants;
 using Dapper;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Shared.Data;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
 using System.Data;
 using System.Text.RegularExpressions;
 
@@ -219,7 +219,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
 
             await connection.QueryAsync<
                 RolmarProduct,
-                JSAGROSyncServices.Shared.Models.ProductSpecification,
+                ProductSpecification,
                 RolmarProduct>(
                 "RolmarProducts_GetWithoutDefaultCategory",
                 (product, spec) =>
@@ -227,7 +227,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     if (!productDict.TryGetValue(product.Id, out var existing))
                     {
                         existing = product;
-                        existing.Specifications = new List<JSAGROSyncServices.Shared.Models.ProductSpecification>();
+                        existing.Specifications = new List<ProductSpecification>();
                         existing.Parameters = new List<ProductParameter>(); // puste
 
                         productDict.Add(existing.Id, existing);

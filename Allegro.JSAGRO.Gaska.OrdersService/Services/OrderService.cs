@@ -1,10 +1,10 @@
 ﻿using Allegro.JSAGRO.Gaska.OrdersService.Constants;
 using Allegro.JSAGRO.Gaska.OrdersService.Settings;
-using JSAGROSyncServices.Shared.Data.Enums;
-using JSAGROSyncServices.Shared.DTOs.Allegro;
-using JSAGROSyncServices.Shared.DTOs.Allegro.GaskaApi;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Contracts.Data.Enums;
+using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.DTOs.Allegro.GaskaApi;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
 using System.Globalization;

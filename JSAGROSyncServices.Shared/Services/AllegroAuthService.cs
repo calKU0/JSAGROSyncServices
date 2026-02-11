@@ -1,6 +1,6 @@
-﻿using JSAGROSyncServices.Shared.DTOs.Allegro;
-using JSAGROSyncServices.Shared.Interfaces;
-using JSAGROSyncServices.Shared.Settings;
+﻿using JSAGROSyncServices.Contracts.DTOs.Allegro;
+using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;

@@ -1,5 +1,5 @@
 using Allegro.JSAGRO2.Rolmar.ProductsService.Settings;
-using JSAGROSyncServices.Shared.Interfaces;
+using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Shared.Services;
 using Microsoft.Extensions.Options;
 

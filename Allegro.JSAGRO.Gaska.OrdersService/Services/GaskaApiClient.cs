@@ -1,4 +1,4 @@
-﻿using JSAGROSyncServices.Shared.Settings;
+﻿using JSAGROSyncServices.Contracts.Settings;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;

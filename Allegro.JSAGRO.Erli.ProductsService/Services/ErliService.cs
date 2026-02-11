@@ -1,7 +1,7 @@
 ﻿using Allegro.JSAGRO.Erli.ProductsService.DTOs;
 using Allegro.JSAGRO.Erli.ProductsService.Mappers;
 using Allegro.JSAGRO.Erli.ProductsService.Repositories;
-using JSAGROSyncServices.Shared.Models;
+using JSAGROSyncServices.Contracts.Models;
 using Newtonsoft.Json;
 using Serilog;
 

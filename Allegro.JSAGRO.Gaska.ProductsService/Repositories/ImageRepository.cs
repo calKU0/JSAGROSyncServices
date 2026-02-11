@@ -1,7 +1,7 @@
 ﻿using Allegro.JSAGRO.Gaska.ProductsService.Constants;
 using Dapper;
+using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Shared.Data;
-using JSAGROSyncServices.Shared.Interfaces;
 using System.Data;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
