@@ -185,7 +185,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    SELECT Id AS ProductId, Code
+    SELECT IntegrationId AS ProductId, Code
     FROM RolmarProducts
     WHERE Code = @Code AND IntegrationCompany = @IntegrationCompany;
 END
