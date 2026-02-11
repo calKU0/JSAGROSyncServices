@@ -10,16 +10,17 @@
 
 ### Worker Services (`net10.0`)
 
-- `Allegro.JSAGRO.Gaska.ProductsService` - synchronizes Gaska/JSAGRO products into Allegro.
-- `Allegro.JSAGRO.Gaska.OrdersService` - synchronizes Allegro orders into JSAGRO/Gaska flows.
-- `Allegro.JSAGRO.Rolmar.ProductsService` - synchronizes Rolmar products into Allegro.
-- `Allegro.JSAGRO.Erli.ProductsService` - synchronizes Allegro offers into Erli.
-- `Allegro.JSAGRO2.Gaska.ProductsService` - JSAGRO2 variant of the Gaska product sync.
-- `Allegro.JSAGRO2.Gaska.OrdersService` - JSAGRO2 variant of the order sync.
-- `Allegro.JSAGRO2.Rolmar.ProductsService` - JSAGRO2 variant of the Rolmar product sync.
+- `Allegro.JSAGRO.Gaska.ProductsService` - synchronizes Gaska products into JSAGRO Allegro account.
+- `Allegro.JSAGRO.Gaska.OrdersService` - synchronizes Allegro from JSAGRO account orders and creates orders in Gąska supplier.
+- `Allegro.JSAGRO.Rolmar.ProductsService` - synchronizes Rolmar products into JSAGRO Allegro account.
+- `Allegro.JSAGRO.Erli.ProductsService` - synchronizes JSAGRO Allegro offers into Erli.
+- `Allegro.JSAGRO2.Gaska.ProductsService` - synchronizes Gaska products into JSAGRO2 Allegro account.
+- `Allegro.JSAGRO2.Gaska.OrdersService` - synchronizes Allegro orders from JSAGRO2 account and creates orders in Gąska supplier.
+- `Allegro.JSAGRO2.Rolmar.ProductsService` - synchronizes Rolmar products into JSAGRO2 Allegro account.
 ### Shared Libraries
 
-- `JSAGROSyncServices.Shared` - shared models, helpers, and SQL Server migrations.
+- `JSAGROSyncServices.Contracts` - shared contracts (DTOs, models, settings, interfaces, enums).
+- `JSAGROSyncServices.Infrastructure` - shared infrastructure (logging, data access, SQL Server migrations).
 
 ### Desktop Tooling (`net8.0-windows`)
 
