@@ -80,6 +80,7 @@ var host = Host.CreateDefaultBuilder(args)
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
         });
 
+
         services.AddHttpClient<IGaskaApiService, GaskaApiService>((sp, client) =>
         {
             var gaskaApi = sp.GetRequiredService<IOptions<GaskaApiCredentials>>().Value;

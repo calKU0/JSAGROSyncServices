@@ -68,7 +68,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                         "AllegroOffers_Upsert",
                         batch,
                         transaction,
-                        commandType: CommandType.StoredProcedure);
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900);
                 }
 
                 transaction.Commit();
@@ -126,7 +127,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     "AllegroOffers_UpsertDetails",
                     allegroOffers,
                     transaction,
-                    commandType: CommandType.StoredProcedure);
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900);
 
                 // ---- Descriptions ----
                 var descriptions = new List<object>();
@@ -158,7 +160,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                         "AllegroOfferDescriptions_Insert",
                         descriptions,
                         transaction,
-                        commandType: CommandType.StoredProcedure);
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900);
                 }
 
                 // ---- Attributes ----

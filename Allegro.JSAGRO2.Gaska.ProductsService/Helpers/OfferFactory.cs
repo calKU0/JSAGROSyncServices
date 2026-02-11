@@ -31,7 +31,8 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 categoryId: product.DefaultAllegroCategory.ToString(),
                 name: product.Name,
                 stockOverride: null,
-                includeCategory: true);
+                includeCategory: true,
+                includeProductParameters: true);
         }
 
         public static ProductOfferRequest PatchOffer(
@@ -56,7 +57,8 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 categoryId: null,          // nie nadpisujemy kategorii przy patchu
                 name: null,                // nie nadpisujemy nazwy przy patchu
                 stockOverride: Convert.ToInt32(Math.Floor(product.InStock)),
-                includeCategory: false);
+                includeCategory: false,
+                includeProductParameters: false);
         }
 
         private static ProductOfferRequest CreateOffer(
@@ -71,7 +73,8 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
             string? categoryId,
             string? name,
             int? stockOverride,
-            bool includeCategory)
+            bool includeCategory,
+            bool includeProductParameters)
         {
             var price = CalculatePrice(
                 product.PriceGross,
@@ -89,7 +92,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
 
             var offer = new ProductOfferRequest
             {
-                ProductSet = BuildProductSet(product, quantity, allegroSettings),
+                ProductSet = BuildProductSet(product, quantity, allegroSettings, includeProductParameters),
                 Stock = new Stock
                 {
                     Available = available,
@@ -171,6 +174,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
             RolmarProduct product,
             int quantity,
             AllegroSettings allegroSettings,
+            bool includeProductParameters = true,
             string fallbackCat = "319123")
         {
             var categoryId = product.DefaultAllegroCategory.ToString();
@@ -179,7 +183,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 Name = product.Name,
                 Category = new Category { Id = categoryId == "0" ? fallbackCat : categoryId },
                 Images = product.AllegroImages.Select(i => i.Url).ToList(),
-                Parameters = BuildParameters(product.Parameters, isForProduct: true),
+                Parameters = includeProductParameters ? BuildParameters(product.Parameters, isForProduct: true) : null,
             };
 
             return new List<ProductSet>
