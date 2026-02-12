@@ -368,22 +368,22 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
         private GaskaCreateOrderRequest MapAllegroOrderToGaskaOrderRequest(AllegroOrder order, int addressId)
         {
             // Determine the delivery method
-            string deliveryMethod = NormalizeCourierName(order.DeliveryMethodName);
+            string deliveryMethod = NormalizeCourierName("FEDEX");
 
             if (DateTime.Now.DayOfWeek != DayOfWeek.Saturday && DateTime.Now.DayOfWeek != DayOfWeek.Sunday)
             {
                 var nowHour = DateTime.Now.Hour;
 
                 // Check if we need to switch courier
-                deliveryMethod = order.DeliveryMethodName switch
+                deliveryMethod = deliveryMethod switch
                 {
-                    var name when name.Contains("DPD", StringComparison.OrdinalIgnoreCase)
-                        && nowHour >= _courierSettings.DpdFinalOrderHour
-                        => NormalizeCourierName(GetNextAvailableCourier("DPD", nowHour)),
-
                     var name when name.Contains("FEDEX", StringComparison.OrdinalIgnoreCase)
                         && nowHour >= _courierSettings.FedexFinalOrderHour
                         => NormalizeCourierName(GetNextAvailableCourier("FEDEX", nowHour)),
+
+                    var name when name.Contains("DPD", StringComparison.OrdinalIgnoreCase)
+                        && nowHour >= _courierSettings.DpdFinalOrderHour
+                        => NormalizeCourierName(GetNextAvailableCourier("DPD", nowHour)),
 
                     var name when name.Contains("GLS", StringComparison.OrdinalIgnoreCase)
                         && nowHour >= _courierSettings.GlsFinalOrderHour
@@ -408,7 +408,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             {
                 CustomerNumber = $"{order.RecipientFirstName.Trim()} {order.RecipientLastName.Trim()}".Trim(),
                 DeliveryAddressId = addressId,
-                DeliveryMethod = deliveryMethod,
+                DeliveryMethod = "GLS",
                 Items = order.Items?.Select(i => new GaskaCreateOrderItemRequest
                 {
                     Id = i.ProductId,

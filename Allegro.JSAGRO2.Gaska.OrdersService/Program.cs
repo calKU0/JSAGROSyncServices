@@ -85,6 +85,10 @@ var host = Host.CreateDefaultBuilder(args)
         {
             client.BaseAddress = new Uri(configuration["GaskaApiCredentials:BaseUrl"]);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
         });
 
         // Register Dapper context
