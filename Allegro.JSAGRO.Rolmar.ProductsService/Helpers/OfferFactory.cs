@@ -480,6 +480,8 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
             if (calculatedPrice < 30m)
                 shippingCost = Math.Min(1.99m, Math.Round((calculatedPrice / 30m) * 1.99m, 2));
             else if (calculatedPrice >= 30m && calculatedPrice <= 44.99m)
+                shippingCost = 1.99m;
+            else if (calculatedPrice >= 45m && calculatedPrice <= 64.99m)
                 shippingCost = 3.99m;
             else if (calculatedPrice >= 65m && calculatedPrice <= 99.99m)
                 shippingCost = 5.79m;
