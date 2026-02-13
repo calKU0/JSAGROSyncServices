@@ -516,6 +516,12 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
             if (deliveries == null || deliveries.Count == 0)
                 return null;
 
+            if (product.DeliveryType != 0)
+                return deliveries.OrderByDescending(d => d.Weight)
+                    .ThenByDescending(d => d.Length * d.Width * d.Height)
+                    .First()
+                    .DeliveryName;
+
             var productWeight = (decimal)product.Weight;
 
             var length = GetDimensionCm(product, "Długość");
