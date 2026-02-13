@@ -69,7 +69,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService
 
                 await MeasureStepAsync("Sync orders from Allegro", () => orderService.SyncOrdersFromAllegro());
                 await MeasureStepAsync("Create orders in Gaska", () => orderService.CreateOrdersInGaska());
-                await MeasureStepAsync("Update Gaska order info", () => orderService.UpdateOrderGaskaInfo());
+                // await MeasureStepAsync("Update Gaska order info", () => orderService.UpdateOrderGaskaInfo());
                 await MeasureStepAsync("Update orders in Allegro", () => orderService.UpdateOrdersInAllegro());
 
                 totalSw.Stop();

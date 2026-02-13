@@ -76,7 +76,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Repositories
                 param: new
                 {
                     NewStatus = AllegroOrderStatus.NEW,
-                    ProcessingStatus = AllegroOrderStatus.NEW,
+                    ProcessingStatus = AllegroOrderStatus.PROCESSING,
                     ReadyForShipmentStatus = AllegroOrderStatus.NEW,
                     ReadyForPickupStatus = AllegroOrderStatus.NEW,
                     SentStatus = AllegroOrderStatus.NEW,
