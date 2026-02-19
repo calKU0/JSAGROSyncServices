@@ -7,6 +7,7 @@ using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Infrastructure.Helpers;
 using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
@@ -267,12 +268,41 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
         {
             return parameters?
                 .Where(p => !string.IsNullOrWhiteSpace(p.AttributeName))
-                .Select(p => new ProductSpecification
+                .Select(p =>
                 {
-                    Name = p.AttributeName,
-                    Value = p.AttributeValue
+                    var (name, unit) = SplitAttributeNameAndUnit(p.AttributeName);
+
+                    return new ProductSpecification
+                    {
+                        Name = name,
+                        Value = p.AttributeValue?.Trim() ?? string.Empty,
+                        UnitName = unit
+                    };
                 })
                 .ToList() ?? new List<ProductSpecification>();
+        }
+
+        private static (string Name, string Unit) SplitAttributeNameAndUnit(string attributeName)
+        {
+            if (string.IsNullOrWhiteSpace(attributeName))
+                return (string.Empty, string.Empty);
+
+            var trimmed = attributeName.Trim();
+
+            // Match unit in trailing parentheses, e.g. "Szerokość (mm)" -> ("Szerokość", "mm")
+            var match = Regex.Match(trimmed, @"^(?<name>.*)\s*\((?<unit>[^()]*)\)\s*$");
+            if (!match.Success)
+                return (trimmed, string.Empty);
+
+            var unit = match.Groups["unit"].Value?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(unit))
+                return (trimmed, string.Empty);
+
+            var name = match.Groups["name"].Value?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name))
+                name = trimmed;
+
+            return (name, unit);
         }
 
         private static List<RolmarCategory> MapCategories(IEnumerable<ApiCategory>? categories)

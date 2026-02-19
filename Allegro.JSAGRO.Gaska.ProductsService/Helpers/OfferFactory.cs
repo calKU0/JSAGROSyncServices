@@ -76,18 +76,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             bool includeCategory,
             bool includeProductParameters)
         {
-            var price = CalculatePrice(
-                product.PriceGross,
-                priceSettings.BulkyDeliveryPriceNet,
-                priceSettings.CustomDeliveryPriceNet,
-                priceSettings.DropshippingPriceNet,
-                product.DeliveryType,
-                quantity,
-                priceSettings.OwnMarginPercent,
-                priceSettings.AllegroMarginUnder5PLN,
-                priceSettings.AllegroMarginBetween5and1000PLNPercent,
-                priceSettings.AllegroMarginMoreThan1000PLN);
-
+            var price = CalculatePrice(product, priceSettings, quantity);
             var available = CalculateAvailableStock(stockOverride, product.InStock, quantity);
 
             var offer = new ProductOfferRequest
@@ -387,7 +376,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             {
                 var attributesList = string.Join("",
                     product.Specifications.Select(p =>
-                        $"<li>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.Name))}: {RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.Value))}</li>"));
+                        $"<li>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.Name))}: {RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.Value))} {RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(p.UnitName))}</li>"));
                 parametersHtml = $"<p><b>Parametry/Wymiary:</b></p><ul>{attributesList}</ul>";
             }
 
@@ -566,49 +555,39 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             };
         }
 
-        private static decimal CalculatePrice(
-            decimal priceGross,
-            decimal bulkyDeliveryPriceNet,
-            decimal customDeliveryPriceNet,
-            decimal dropshippingFeeNet,
-            int productType,
-            int quantity,
-            decimal ownMarginPercent,
-            decimal marginLessThan5PLN,
-            decimal marginMoreThan5PLNPercent,
-            decimal marginMoreThan1000PLN)
+        private static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings, int quantity)
         {
-            var calculatedPrice = priceGross;
+            var calculatedPrice = product.PriceGross;
 
-            var effectiveMargin = ownMarginPercent;
-            calculatedPrice = priceGross * quantity * (1 + effectiveMargin / 100m);
+            var effectiveMargin = priceSettings.OwnMarginPercent;
+            calculatedPrice = product.PriceGross * quantity * (1 + effectiveMargin / 100m);
 
-            calculatedPrice += productType switch
+            calculatedPrice += product.DeliveryType switch
             {
-                1 => bulkyDeliveryPriceNet * 1.23m,  // bulky
-                2 => customDeliveryPriceNet * 1.23m, // custom
+                1 => priceSettings.BulkyDeliveryPriceNet * 1.23m,  // bulky
+                2 => priceSettings.CustomDeliveryPriceNet * 1.23m, // custom
                 _ => 0m
             };
 
-            calculatedPrice += dropshippingFeeNet * 1.23m;
+            calculatedPrice += priceSettings.DropshippingPriceNet * 1.23m;
 
             if (calculatedPrice < 5m)
             {
-                var withSmallMargin = calculatedPrice + marginLessThan5PLN;
+                var withSmallMargin = calculatedPrice + priceSettings.AllegroMarginUnder5PLN;
                 calculatedPrice = withSmallMargin < 5m
                     ? withSmallMargin
-                    : calculatedPrice * (1 + marginMoreThan5PLNPercent / 100m);
+                    : calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
             }
             else if (calculatedPrice <= 1000m)
             {
-                var tempPrice = calculatedPrice * (1 + marginMoreThan5PLNPercent / 100m);
+                var tempPrice = calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
                 calculatedPrice = tempPrice > 1000m
-                    ? calculatedPrice + marginMoreThan1000PLN
+                    ? calculatedPrice + priceSettings.AllegroMarginMoreThan1000PLN
                     : tempPrice;
             }
             else
             {
-                calculatedPrice += marginMoreThan1000PLN;
+                calculatedPrice += priceSettings.AllegroMarginMoreThan1000PLN;
             }
 
             return calculatedPrice;
