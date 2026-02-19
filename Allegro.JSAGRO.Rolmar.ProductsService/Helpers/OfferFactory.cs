@@ -31,7 +31,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = (CalculatePrice(product.PriceGross, productQuantity, priceSettings.OwnMarginPercent, priceSettings.AllegroMarginUnder5PLN, priceSettings.OwnMarginPercentUnder10PLN, priceSettings.AllegroMarginBetween5and1000PLNPercent, priceSettings.AllegroMarginMoreThan1000PLN)).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(product, priceSettings).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -46,7 +46,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                     Status = "ACTIVE",
                     StartingAt = DateTime.UtcNow,
                 },
-                Delivery = new JSAGROSyncServices.Contracts.DTOs.Allegro.Delivery
+                Delivery = new Delivery
                 {
                     ShippingRates = new ShippingRates
                     {
@@ -106,7 +106,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = (CalculatePrice(offer.Product.PriceGross, productQuantity, priceSettings.OwnMarginPercent, priceSettings.OwnMarginPercentUnder10PLN, priceSettings.AllegroMarginUnder5PLN, priceSettings.AllegroMarginBetween5and1000PLNPercent, priceSettings.AllegroMarginMoreThan1000PLN)).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(offer.Product, priceSettings).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -426,52 +426,32 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
             return description;
         }
 
-        private static decimal CalculatePrice(
-            decimal initialPrice,
-            int quantity,
-            decimal ownMarginPercent,
-            decimal ownMarginPercentLessThan10PLN,
-            decimal marginLessThan5PLN,
-            decimal marginMoreThan5PLNPercent,
-            decimal marginMoreThan1000PLN)
+        private static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings)
         {
-            var calculatedPrice = initialPrice;
+            var calculatedPrice = product.PriceGross;
 
             // Apply own margin
-            decimal effectiveMargin = ownMarginPercent;
-            if (initialPrice < 10m)
-                effectiveMargin = ownMarginPercentLessThan10PLN;
-
-            calculatedPrice = initialPrice * (1 + (effectiveMargin / 100m));
+            decimal effectiveMargin = priceSettings.OwnMarginPercent;
+            calculatedPrice = product.PriceGross * (1 + (effectiveMargin / 100m));
 
             // Tiered pricing rules
             if (calculatedPrice < 5m)
             {
-                var withSmallMargin = calculatedPrice + marginLessThan5PLN;
-                if (withSmallMargin < 5m)
-                {
-                    calculatedPrice = withSmallMargin;
-                }
-                else
-                {
-                    calculatedPrice *= (1 + marginMoreThan5PLNPercent / 100m);
-                }
+                var withSmallMargin = calculatedPrice + priceSettings.AllegroMarginUnder5PLN;
+                calculatedPrice = withSmallMargin < 5m
+                    ? withSmallMargin
+                    : calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
             }
             else if (calculatedPrice <= 1000m)
             {
-                var tempPrice = calculatedPrice * (1 + marginMoreThan5PLNPercent / 100m);
-                if (tempPrice > 1000m)
-                {
-                    calculatedPrice += marginMoreThan1000PLN;
-                }
-                else
-                {
-                    calculatedPrice = tempPrice;
-                }
+                var tempPrice = calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
+                calculatedPrice = tempPrice > 1000m
+                    ? calculatedPrice + priceSettings.AllegroMarginMoreThan1000PLN
+                    : tempPrice;
             }
             else
             {
-                calculatedPrice += marginMoreThan1000PLN;
+                calculatedPrice += priceSettings.AllegroMarginMoreThan1000PLN;
             }
 
             // ----- New step: Add DPD shipping cost -----
