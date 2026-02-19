@@ -164,6 +164,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
 
                         // Fetch order data from Gąska to update local record
                         await FetchAndUpdateGaskaOrder(order, ct);
+                        await UpdateOrderStatusInAllegro(order);
                         _logger.LogInformation("Created Order {GaskaOrderId} in Gąska for Allegro Order {AllegroOrderId}.", order.ExternalOrderNumber, order.AllegroId);
 
                         // Send success email
@@ -191,21 +192,6 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             }
         }
 
-        public async Task UpdateOrderGaskaInfo(CancellationToken ct = default!)
-        {
-            try
-            {
-                var orders = await _orderRepo.GetOrdersToUpdateExternalInfo();
-                foreach (var order in orders)
-                {
-                    await FetchAndUpdateGaskaOrder(order, ct);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to update orders from Gąska API.");
-            }
-        }
 
         private async Task FetchAndUpdateGaskaOrder(AllegroOrder order, CancellationToken ct = default!)
         {
@@ -246,45 +232,36 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             }
         }
 
-        public async Task UpdateOrdersInAllegro(CancellationToken ct = default)
+        private async Task UpdateOrderStatusInAllegro(AllegroOrder order)
         {
             try
             {
-                var orders = await _orderRepo.GetOrdersToUpdateInAllegro();
-                foreach (var order in orders)
+                // --- Update Order Status ---
+                try
                 {
-                    // --- Update Order Status ---
-                    try
-                    {
-                        var status = MapGaskaStatusToAllegro(order.ExternalOrderStatus);
-                        if (status != order.RealizeStatus && status != AllegroOrderStatus.NEW)
-                        {
-                            var statusRequest = new AllegroSetOrderStatusRequest
-                            {
-                                Status = status
-                            };
 
-                            var response = await _allegroApiClient.SendWithResponseAsync($"/order/checkout-forms/{order.AllegroId}/fulfillment", HttpMethod.Put, statusRequest, ct);
-                            if (!response.IsSuccessStatusCode)
-                            {
-                                var body = await response.Content.ReadAsStringAsync(ct);
-                                LogAllegroErrors(response, body, "status", order.AllegroId);
-                            }
-                            else
-                            {
-                                _logger.LogInformation("Updated Order Status to {Status} for Allegro Order {AllegroOrderId}.", status, order.AllegroId);
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogInformation("No status change for Allegro order {AllegroOrderId}.", order.AllegroId);
-                        }
-                    }
-                    catch (Exception ex)
+                    var statusRequest = new AllegroSetOrderStatusRequest
                     {
-                        _logger.LogError(ex, "Failed to update Order Status {AllegroOrderId} in Allegro.", order.AllegroId);
+                        Status = AllegroOrderStatus.PROCESSING
+                    };
+
+                    var response = await _allegroApiClient.SendWithResponseAsync($"/order/checkout-forms/{order.AllegroId}/fulfillment", HttpMethod.Put, statusRequest);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var body = await response.Content.ReadAsStringAsync();
+                        LogAllegroErrors(response, body, "status", order.AllegroId);
                     }
+                    else
+                    {
+                        _logger.LogInformation("Updated Order Status to {Status} for Allegro Order {AllegroOrderId}.", AllegroOrderStatus.PROCESSING, order.AllegroId);
+                    }
+
                 }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to update Order Status {AllegroOrderId} in Allegro.", order.AllegroId);
+                }
+
             }
             catch (Exception ex)
             {
@@ -417,23 +394,6 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             };
         }
 
-        private AllegroOrderStatus MapGaskaStatusToAllegro(string status)
-        {
-            if (string.IsNullOrWhiteSpace(status))
-                return AllegroOrderStatus.PROCESSING;
-
-            // Normalize input for case-insensitive matching
-            status = status.Trim().ToLowerInvariant();
-
-            return status switch
-            {
-                "spakowane" or "czeka na kuriera" => AllegroOrderStatus.READY_FOR_SHIPMENT,
-                "wysłane" or "w drodze" => AllegroOrderStatus.SENT,
-                "dostarczone" => AllegroOrderStatus.PICKED_UP,
-                _ => AllegroOrderStatus.PROCESSING
-            };
-        }
-
         private void LogAllegroErrors(HttpResponseMessage response, string body, string action, string orderId)
         {
             try
@@ -536,6 +496,16 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
                 </html>";
 
             return html;
+        }
+
+        public Task UpdateOrdersInAllegro(CancellationToken ct = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task UpdateOrderGaskaInfo(CancellationToken ct = default)
+        {
+            throw new NotImplementedException();
         }
     }
 }

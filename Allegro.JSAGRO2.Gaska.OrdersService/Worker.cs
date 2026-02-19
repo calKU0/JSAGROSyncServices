@@ -67,10 +67,13 @@ namespace Allegro.JSAGRO.Gaska.OrdersService
                     _logger.LogInformation($"{stepName} completed in {FormatDuration(sw.Elapsed)}.");
                 }
 
-                await MeasureStepAsync("Sync orders from Allegro", () => orderService.SyncOrdersFromAllegro());
-                await MeasureStepAsync("Create orders in Gaska", () => orderService.CreateOrdersInGaska());
-                // await MeasureStepAsync("Update Gaska order info", () => orderService.UpdateOrderGaskaInfo());
-                await MeasureStepAsync("Update orders in Allegro", () => orderService.UpdateOrdersInAllegro());
+                if (DateTime.Now.Hour >= _appSettings.StartHour && DateTime.Now.Hour < _appSettings.EndHour)
+                {
+                    await MeasureStepAsync("Sync orders from Allegro", () => orderService.SyncOrdersFromAllegro());
+                    await MeasureStepAsync("Create orders in Gaska", () => orderService.CreateOrdersInGaska());
+                    //await MeasureStepAsync("Update Gaska order info", () => orderService.UpdateOrderGaskaInfo());
+                    //await MeasureStepAsync("Update orders in Allegro", () => orderService.UpdateOrdersInAllegro());
+                }
 
                 totalSw.Stop();
 

@@ -2,6 +2,8 @@
 {
     public class AppSettings
     {
+        public int StartHour { get; set; }
+        public int EndHour { get; set; }
         public int LogsExpirationDays { get; set; }
         public int FetchIntervalMinutes { get; set; }
         public string AllegroDeliveryNames { get; set; } = string.Empty;

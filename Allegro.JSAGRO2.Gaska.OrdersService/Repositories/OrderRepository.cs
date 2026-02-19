@@ -77,10 +77,10 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Repositories
                 {
                     NewStatus = AllegroOrderStatus.NEW,
                     ProcessingStatus = AllegroOrderStatus.PROCESSING,
-                    ReadyForShipmentStatus = AllegroOrderStatus.NEW,
-                    ReadyForPickupStatus = AllegroOrderStatus.NEW,
-                    SentStatus = AllegroOrderStatus.NEW,
-                    ReadyStatus = AllegroOrderStatus.NEW,
+                    ReadyForShipmentStatus = AllegroOrderStatus.READY_FOR_SHIPMENT,
+                    ReadyForPickupStatus = AllegroOrderStatus.READY_FOR_PICKUP,
+                    SentStatus = AllegroOrderStatus.SENT,
+                    ReadyStatus = AllegroCheckoutFormStatus.READY_FOR_PROCESSING,
                     Account = ServiceConstants.Account,
                     IntegrationCompany = ServiceConstants.Company
                 },

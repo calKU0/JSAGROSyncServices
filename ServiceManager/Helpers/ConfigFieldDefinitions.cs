@@ -45,6 +45,8 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "PriceSettings:DropshippingPriceNet", Label = "Cena netto dropshippingu", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
 
             // AppSettings
+            new ConfigField { Key = "AppSettings:StartHour", Label = "Godzina rozpoczęcia synchronizacji", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int},
+            new ConfigField { Key = "AppSettings:EndHour", Label = "Godzina zakończenia synchronizacji", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int},
             new ConfigField { Key = "AppSettings:CategoriesId", Label = "ID synchronizowanych kategorii", Group = "Ustawienia serwisu" },
             new ConfigField { Key = "AppSettings:CategoriesName", Label = "Nazwy synchronizowanych kategorii", Group = "Ustawienia serwisu" },
             new ConfigField { Key = "AppSettings:MinProductStock", Label = "Minimalny stan produktu", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },
