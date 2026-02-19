@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -126,6 +125,9 @@
     <None Update="Migrations\20260210_11_AddErliOfferStoredProcedures.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Migrations\20260219_01_FixGetOrdersToUpdateInAllegroSP.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Migrations\20261102_01_ChangeRolmarProducts_GetByCodeSp.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -133,5 +135,4 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
 </Project>
