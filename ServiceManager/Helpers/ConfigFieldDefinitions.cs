@@ -35,8 +35,6 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "CourierSettings:GlsFinalOrderHour", Label = "Ostateczna godzina GLS", Group = "Ustawienia Kurierów", IsEnabled = true, FieldType = ConfigFieldType.Int },
 
             // Price Settings
-            new ConfigField { Key = "PriceSettings:OwnMarginPercent", Label = "Własna marża (%)", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
-            new ConfigField { Key = "PriceSettings:OwnMarginPercentUnder10PLN", Label = "Własna marża poniżej 10 PLN (%)", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:AllegroMarginUnder5PLN", Label = "Prowizja allegro poniżej 5 PLN", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:AllegroMarginBetween5and1000PLNPercent", Label = "Prowizja allegro 5-1000 PLN (%)", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:AllegroMarginMoreThan1000PLN", Label = "Prowizja allegro powyżej 1000 PLN", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },

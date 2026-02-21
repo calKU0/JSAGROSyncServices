@@ -98,7 +98,7 @@
                 <ComboBox x:Name="CbAccountSelectorOverlay"
                           Width="260"
                           Margin="0,0,0,20"
-                          SelectionChanged="CbAccountSelector_SelectionChanged" />
+                          SelectedItem="{Binding SelectedAccount, Mode=TwoWay}" />
                 <TextBlock Text="Wybierz serwis do obserwacji" FontSize="20" FontWeight="Bold" Margin="0,0,0,20" HorizontalAlignment="Center" />
                 <ItemsControl x:Name="IcAvailableServices"
                               ItemsSource="{Binding AvailableServices}"
@@ -110,11 +110,11 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Button Click="ServiceButton_Click"
-                                    Margin="10"
+                            <Button Margin="10"
                                     Padding="6"
                                     Width="240" Height="240"
-                                    Tag="{Binding Id}">
+                                    Command="{Binding DataContext.SelectServiceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding}">
                                 <StackPanel>
                                     <Image Source="{Binding LogoPath}" Width="180" Height="180" HorizontalAlignment="Center" />
                                     <TextBlock Text="{Binding Name}" HorizontalAlignment="Center" Margin="0,6,0,0" />
@@ -148,7 +148,7 @@
                                       HorizontalAlignment="Stretch"
                                       VerticalAlignment="Top"
                                       Margin="0,0,6,0"
-                                      SelectionChanged="CbAccountSelector_SelectionChanged" />
+                                      SelectedItem="{Binding SelectedAccount, Mode=TwoWay}" />
                             <ComboBox x:Name="CbServiceSelector"
                                       Grid.Column="1"
                                       HorizontalAlignment="Stretch"
@@ -156,17 +156,17 @@
                                       Margin="6,0,0,0"
                                       DisplayMemberPath="Name"
                                       SelectedValuePath="Id"
-                                      SelectionChanged="CbServiceSelector_SelectionChanged" />
+                                      SelectedItem="{Binding SelectedService, Mode=TwoWay}" />
                         </Grid>
                         <TextBlock x:Name="ServiceNameTextBox" Text="..." FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" Margin="6,6,6,0" />
                         <TextBlock Text="Panel" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
 
                         <!-- Nav buttons -->
                         <StackPanel Margin="6,20,6,6">
-                            <RadioButton x:Name="BtnShowLogs" Style="{StaticResource NavRadioButtonStyle}" GroupName="NavGroup" Click="BtnShowLogs_Click">
+                            <RadioButton x:Name="BtnShowLogs" Style="{StaticResource NavRadioButtonStyle}" GroupName="NavGroup" Command="{Binding ShowLogsCommand}">
                                 Podgląd logów
                             </RadioButton>
-                            <RadioButton x:Name="BtnShowConfig" Style="{StaticResource NavRadioButtonStyle}" GroupName="NavGroup" Click="BtnShowConfig_Click">
+                            <RadioButton x:Name="BtnShowConfig" Style="{StaticResource NavRadioButtonStyle}" GroupName="NavGroup" Command="{Binding ShowConfigCommand}">
                                 Konfiguracja serwisu
                             </RadioButton>
                         </StackPanel>
@@ -177,21 +177,21 @@
 
                         <!-- Service control buttons in one row -->
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                            <Button x:Name="BtnStartService" Width="50" Height="40" Margin="4" Click="BtnStartService_Click">
+                            <Button x:Name="BtnStartService" Width="50" Height="40" Margin="4" Command="{Binding StartServiceCommand}">
                                 <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                     <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE768;" FontSize="16" HorizontalAlignment="Center" />
                                     <!-- Play icon -->
                                     <TextBlock Text="Start" FontSize="10" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
-                            <Button x:Name="BtnStopService" Width="50" Height="40" Margin="4" Click="BtnStopService_Click">
+                            <Button x:Name="BtnStopService" Width="50" Height="40" Margin="4" Command="{Binding StopServiceCommand}">
                                 <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                     <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE71A;" FontSize="16" HorizontalAlignment="Center" />
                                     <!-- Stop icon -->
                                     <TextBlock Text="Stop" FontSize="10" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
-                            <Button x:Name="BtnRestartService" Width="50" Height="40" Margin="4" Click="BtnRestartService_Click">
+                            <Button x:Name="BtnRestartService" Width="50" Height="40" Margin="4" Command="{Binding RestartServiceCommand}">
                                 <StackPanel Orientation="Vertical" HorizontalAlignment="Center">
                                     <TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE72C;" FontSize="16" HorizontalAlignment="Center" />
                                     <!-- Refresh icon -->
@@ -229,7 +229,8 @@
                             <Border Grid.Column="0" BorderBrush="#D1D5DB" BorderThickness="1" CornerRadius="6" Padding="6" Margin="0,0,8,0" Background="White" SnapsToDevicePixels="True">
                                 <StackPanel>
                                     <TextBlock Text="Pliki logów" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
-                                    <ListView x:Name="LvLogFiles" SelectionChanged="LvLogFiles_SelectionChanged"
+                                    <ListView x:Name="LvLogFiles"
+                                      SelectedItem="{Binding SelectedLogFile, Mode=TwoWay}"
                                       Background="White" BorderThickness="0"
                                       AlternationCount="2"
                                       ItemContainerStyle="{StaticResource ListViewItemStyle}">
@@ -257,8 +258,7 @@
                                         <TextBlock x:Name="TxtSelectedFileName" Text="(brak)" VerticalAlignment="Center" Margin="0,0,16,0" />
                                         <CheckBox x:Name="ChkShowOnlyWarningsAndErrors" Content="Pokaż tylko ostrzeżenia i błędy"
                                           VerticalAlignment="Center"
-                                          Checked="ChkShowOnlyWarningsAndErrors_Changed"
-                                          Unchecked="ChkShowOnlyWarningsAndErrors_Changed" />
+                                          IsChecked="{Binding ShowOnlyWarningsAndErrors, Mode=TwoWay}" />
                                     </StackPanel>
 
                                     <ListBox Grid.Row="1"
