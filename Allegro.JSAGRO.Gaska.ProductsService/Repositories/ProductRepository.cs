@@ -494,6 +494,11 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     name = $"{name} a".Trim();
                 }
 
+                if (newWords.Length < 13)
+                {
+                    name = $"{name} {crossNumbers?.LastOrDefault() ?? code} JAG".Trim();
+                }
+
                 // 5. If longer than 75 chars → remove last words until < 75
                 while (name.Length > 75)
                 {

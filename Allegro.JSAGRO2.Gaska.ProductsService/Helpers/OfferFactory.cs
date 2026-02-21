@@ -565,7 +565,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
         {
             var calculatedPrice = product.PriceGross;
 
-            var effectiveMargin = priceSettings.OwnMarginPercent;
+            var effectiveMargin = ResolveMargin(priceSettings, product.PriceGross);
             calculatedPrice = product.PriceGross * quantity * (1 + effectiveMargin / 100m);
 
             calculatedPrice += product.DeliveryType switch
@@ -622,6 +622,17 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
             calculatedPrice += shippingCost;
 
             return Math.Max(calculatedPrice, 1.00m);
+        }
+
+        private static decimal ResolveMargin(PriceSettings priceSettings, decimal grossPrice)
+        {
+            var range = priceSettings.MarginRanges
+                .FirstOrDefault(r => grossPrice >= r.Min && grossPrice <= r.Max);
+
+            if (range == null)
+                return priceSettings.MarginRanges.Last().Margin;
+
+            return range.Margin;
         }
 
         private static string RemoveHiddenAscii(string input) =>
