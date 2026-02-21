@@ -93,10 +93,17 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
 
                             var offers = await Task.WhenAll(offerTasks);
 
+                            var shippingRateNames = shippingRates.ShippingRates
+                                .Where(sr => deliveryNames.Contains(sr.Name)) // optional: only keep your delivery names
+                                .ToDictionary(sr => sr.Id, sr => sr.Name, StringComparer.OrdinalIgnoreCase);
+
+                            var offerShippingRates = offers.ToDictionary(
+                                o => o.Id,
+                                o => shippingRateNames.TryGetValue(o.Delivery.ShippingRates.Id, out var name) ? name : "Unknown"
+                            );
+
                             // Check if all items use the Gąska shipping method
-                            bool allItemsUseGaska = offers
-                                .Select(o => o.Delivery.ShippingRates.Id)
-                                .All(id => gaskaShippingRateIds.Contains(id));
+                            bool allItemsUseGaska = offerShippingRates.Values.All(name => deliveryNames.Contains(name));
 
                             if (!allItemsUseGaska)
                             {
@@ -105,7 +112,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
                             }
 
                             // Save the order
-                            var model = MapAllegroOrderToModel(order);
+                            var model = MapAllegroOrderToModel(order, offerShippingRates);
                             await _orderRepo.SaveAllegroOrder(model);
                             _logger.LogInformation("Order {OrderId} synced from Allegro.", order.Id);
                         }
@@ -140,18 +147,31 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
                 {
                     try
                     {
-                        // Get default delivery address from Gąska
-                        var getAddressesResponse = await _gaskaApiClient.GetAsync<GaskaGetDeliveryAddressesResponse>("deliveryAddresses", ct);
-                        if (getAddressesResponse.Result != 0)
-                            throw new Exception(getAddressesResponse.Message);
+                        int addressId = 0;
 
-                        if (getAddressesResponse.AdressDetails == null || !getAddressesResponse.AdressDetails.Any())
-                            throw new Exception("Nie znalezniono żadnych adresów dostawy w Gąsce.");
+                        if (order.Items.Any(item => item.ShippingRate is not null && item.ShippingRate.Contains("JAG API")))
+                        {
+                            var addressRequest = MapAllegroOrderToGaskaDeliveryRequest(order);
+                            var addressResponse = await _gaskaApiClient.PostAsync<GaskaCreateDeliveryAddressResponse>("addDeliveryAddress", addressRequest, ct);
+                            if (addressResponse.Result != 0)
+                                throw new Exception(addressResponse.Message);
 
-                        var addressId = getAddressesResponse.AdressDetails.Where(a => a.Default == true).Select(a => a.Id).FirstOrDefault();
+                            addressId = addressResponse.AddressId;
+                        }
+                        else
+                        {
+                            var getAddressesResponse = await _gaskaApiClient.GetAsync<GaskaGetDeliveryAddressesResponse>("deliveryAddresses", ct);
+                            if (getAddressesResponse.Result != 0)
+                                throw new Exception(getAddressesResponse.Message);
+
+                            if (getAddressesResponse.AdressDetails == null || !getAddressesResponse.AdressDetails.Any())
+                                throw new Exception("Nie znalezniono żadnych adresów dostawy w Gąsce.");
+
+                            addressId = getAddressesResponse.AdressDetails.Where(a => a.Default == true).Select(a => a.Id).FirstOrDefault();
+                        }
 
                         if (addressId == 0)
-                            throw new Exception("Nie znalezniono domyślnego adresu dostawy w Gąsce.");
+                            throw new Exception("Nie znalezniono adresu dostawy w Gąsce.");
 
                         // Create Order in Gąska
                         var orderRequest = MapAllegroOrderToGaskaOrderRequest(order, addressId);
@@ -164,7 +184,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
 
                         // Fetch order data from Gąska to update local record
                         await FetchAndUpdateGaskaOrder(order, ct);
-                        await UpdateOrderStatusInAllegro(order);
+                        await SetProcessingStatusInAllegro(order);
                         _logger.LogInformation("Created Order {GaskaOrderId} in Gąska for Allegro Order {AllegroOrderId}.", order.ExternalOrderNumber, order.AllegroId);
 
                         // Send success email
@@ -232,14 +252,13 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             }
         }
 
-        private async Task UpdateOrderStatusInAllegro(AllegroOrder order)
+        private async Task SetProcessingStatusInAllegro(AllegroOrder order)
         {
             try
             {
                 // --- Update Order Status ---
                 try
                 {
-
                     var statusRequest = new AllegroSetOrderStatusRequest
                     {
                         Status = AllegroOrderStatus.PROCESSING
@@ -269,7 +288,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             }
         }
 
-        private AllegroOrder MapAllegroOrderToModel(AllegroGetOrdersResponse.CheckoutForm allegroOrder)
+        private AllegroOrder MapAllegroOrderToModel(AllegroGetOrdersResponse.CheckoutForm allegroOrder, Dictionary<string, string> offerShippingRates)
         {
             var address = allegroOrder.Delivery?.Address ?? allegroOrder.Buyer?.Address;
             var fulfillment = allegroOrder.Fulfillment;
@@ -327,6 +346,8 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
                         quantity = quantity * productQuantity.Value;
                     }
 
+                    offerShippingRates.TryGetValue(item.Offer.Id, out var shippingRate);
+
                     return new AllegroOrderItem
                     {
                         ExternalId = item.Offer?.External?.Id,
@@ -336,18 +357,36 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
                         OfferName = item.Offer?.Name,
                         OfferId = item.Offer?.Id,
                         OrderItemId = item.Id,
+                        ShippingRate = shippingRate,
                         BoughtAt = item.BoughtAt,
                     };
                 }).ToList() ?? new List<AllegroOrderItem>()
             };
         }
 
+        private GaskaCreateDeliveryAddressRequest MapAllegroOrderToGaskaDeliveryRequest(AllegroOrder order) =>
+            new()
+            {
+                Name1 = $"{order.RecipientFirstName} {order.RecipientLastName}",
+                Street = order.RecipientStreet,
+                City = order.RecipientCity,
+                PostalCode = order.RecipientPostalCode,
+                Country = order.RecipientCountry,
+                Phone = order.RecipientPhoneNumber,
+                Email = "jsagro@wp.pl",
+                OneUse = true
+            };
+
         private GaskaCreateOrderRequest MapAllegroOrderToGaskaOrderRequest(AllegroOrder order, int addressId)
         {
             // Determine the delivery method
-            string deliveryMethod = NormalizeCourierName("FEDEX");
+            bool sendToClient = false;
+            if (order.Items.Any(item => item.ShippingRate is not null && item.ShippingRate.Contains("JAG API")))
+                sendToClient = true;
 
-            if (DateTime.Now.DayOfWeek != DayOfWeek.Saturday && DateTime.Now.DayOfWeek != DayOfWeek.Sunday)
+            string deliveryMethod = sendToClient ? NormalizeCourierName(order.DeliveryMethodName) : NormalizeCourierName("FEDEX");
+
+            if (DateTime.Now.DayOfWeek != DayOfWeek.Saturday && DateTime.Now.DayOfWeek != DayOfWeek.Sunday && !(order.PaymentType == AllegroPaymentType.CASH_ON_DELIVERY && sendToClient))
             {
                 var nowHour = DateTime.Now.Hour;
 
@@ -385,7 +424,10 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             {
                 CustomerNumber = $"{order.RecipientFirstName.Trim()} {order.RecipientLastName.Trim()}".Trim(),
                 DeliveryAddressId = addressId,
-                DeliveryMethod = "GLS",
+                DeliveryMethod = (order.PaymentType == AllegroPaymentType.CASH_ON_DELIVERY && sendToClient) ? "FedEx Dropshipping Pobranie" : deliveryMethod,
+                DropshippingAmount = (order.PaymentType == AllegroPaymentType.CASH_ON_DELIVERY && sendToClient)
+                    ? order.Amount
+                    : null,
                 Items = order.Items?.Select(i => new GaskaCreateOrderItemRequest
                 {
                     Id = i.ProductId,
@@ -498,14 +540,146 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             return html;
         }
 
-        public Task UpdateOrdersInAllegro(CancellationToken ct = default)
+        public async Task UpdateOrdersInAllegro(CancellationToken ct = default)
         {
-            throw new NotImplementedException();
+            try
+            {
+                var orders = await _orderRepo.GetOrdersToUpdateInAllegro();
+                foreach (var order in orders)
+                {
+                    // --- Update Order Status ---
+                    try
+                    {
+                        var status = MapGaskaStatusToAllegro(order.ExternalOrderStatus);
+                        if (status != order.RealizeStatus && status != AllegroOrderStatus.NEW)
+                        {
+                            var statusRequest = new AllegroSetOrderStatusRequest
+                            {
+                                Status = status
+                            };
+
+                            var response = await _allegroApiClient.SendWithResponseAsync($"/order/checkout-forms/{order.AllegroId}/fulfillment", HttpMethod.Put, statusRequest, ct);
+                            if (!response.IsSuccessStatusCode)
+                            {
+                                var body = await response.Content.ReadAsStringAsync(ct);
+                                LogAllegroErrors(response, body, "status", order.AllegroId);
+                            }
+                            else
+                            {
+                                _logger.LogInformation("Updated Order Status to {Status} for Allegro Order {AllegroOrderId}.", status, order.AllegroId);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("No status change for Allegro order {AllegroOrderId}.", order.AllegroId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to update Order Status {AllegroOrderId} in Allegro.", order.AllegroId);
+                    }
+
+                    // --- Update Tracking Number ---
+                    try
+                    {
+                        var items = order.Items;
+                        if (items == null || !items.Any())
+                            continue;
+
+                        // Group items by tracking number (ignore those without tracking)
+                        var groups = items
+                            .Where(i => !string.IsNullOrWhiteSpace(i.ExternalTrackingNumber))
+                            .GroupBy(i => i.ExternalTrackingNumber);
+
+                        foreach (var group in groups)
+                        {
+                            var trackingNumber = group.Key;
+                            var lineItems = group.Select(i => new AllegroAddTrackingNumberRequest.LineItem
+                            {
+                                Id = i.OrderItemId
+                            }).ToList();
+
+                            var carrierId = group.First().ExternalCourier;
+
+                            carrierId = carrierId?.ToUpperInvariant() switch
+                            {
+                                var s when s.Contains("DPD") => "DPD",
+                                var s when s.Contains("FEDEX") => "FEDEX",
+                                var s when s.Contains("GLS") => "GLS",
+                                _ => carrierId
+                            };
+
+                            var request = new AllegroAddTrackingNumberRequest
+                            {
+                                CarrierId = carrierId,
+                                Waybill = trackingNumber,
+                                LineItems = lineItems
+                            };
+
+                            var response = await _allegroApiClient.SendWithResponseAsync($"/order/checkout-forms/{order.AllegroId}/shipments", HttpMethod.Post, request, ct);
+
+                            if (!response.IsSuccessStatusCode)
+                            {
+                                var body = await response.Content.ReadAsStringAsync(ct);
+                                LogAllegroErrors(response, body, "tracking numbers", order.AllegroId);
+                            }
+                            else
+                            {
+                                _logger.LogInformation("Updated tracking number {TrackingNumber} for Allegro Order {AllegroOrderId} (Items: {Count}).", trackingNumber, order.AllegroId, lineItems.Count);
+                            }
+                        }
+
+                        if (!groups.Any())
+                        {
+                            _logger.LogInformation("No tracking numbers found for Allegro order {AllegroOrderId}.", order.AllegroId);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to update Order Tracking Number {AllegroOrderId} in Allegro.", order.AllegroId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update orders in Allegro.");
+            }
         }
 
-        public Task UpdateOrderGaskaInfo(CancellationToken ct = default)
+        private AllegroOrderStatus MapGaskaStatusToAllegro(string status)
         {
-            throw new NotImplementedException();
+            if (string.IsNullOrWhiteSpace(status))
+                return AllegroOrderStatus.PROCESSING;
+
+            // Normalize input for case-insensitive matching
+            status = status.Trim().ToLowerInvariant();
+
+            return status switch
+            {
+                "spakowane" or "czeka na kuriera" or "zrealizowane" => AllegroOrderStatus.READY_FOR_SHIPMENT,
+                "wysłane" or "w drodze" => AllegroOrderStatus.SENT,
+                "dostarczone" => AllegroOrderStatus.PICKED_UP,
+                "w realizacji" => AllegroOrderStatus.PROCESSING,
+                _ => AllegroOrderStatus.PROCESSING
+            };
+        }
+
+        public async Task UpdateOrderGaskaInfo(CancellationToken ct = default!)
+        {
+            try
+            {
+                var gaskaShippingRate = _appSettings.AllegroDeliveryNames.Split(',', StringSplitOptions.TrimEntries).Last();
+                var shippingRates = new List<string> { gaskaShippingRate };
+                var orders = await _orderRepo.GetOrdersToUpdateExternalInfo(shippingRates);
+                foreach (var order in orders)
+                {
+                    await FetchAndUpdateGaskaOrder(order, ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update orders from Gąska API.");
+            }
         }
     }
 }

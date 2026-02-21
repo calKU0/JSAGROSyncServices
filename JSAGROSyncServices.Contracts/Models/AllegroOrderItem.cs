@@ -14,6 +14,7 @@
         public int Quantity { get; set; }
         public string? ExternalCourier { get; set; }
         public string? ExternalTrackingNumber { get; set; }
+        public string? ShippingRate { get; set; }
         public DateTime BoughtAt { get; set; }
     }
 }

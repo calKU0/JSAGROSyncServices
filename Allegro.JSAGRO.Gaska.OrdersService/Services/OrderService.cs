@@ -92,10 +92,17 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
 
                             var offers = await Task.WhenAll(offerTasks);
 
+                            var shippingRateNames = shippingRates.ShippingRates
+                                .Where(sr => deliveryNames.Contains(sr.Name)) // optional: only keep your delivery names
+                                .ToDictionary(sr => sr.Id, sr => sr.Name, StringComparer.OrdinalIgnoreCase);
+
+                            var offerShippingRates = offers.ToDictionary(
+                                o => o.Id,
+                                o => shippingRateNames.TryGetValue(o.Delivery.ShippingRates.Id, out var name) ? name : "Unknown"
+                            );
+
                             // Check if all items use the Gąska shipping method
-                            bool allItemsUseGaska = offers
-                                .Select(o => o.Delivery.ShippingRates.Id)
-                                .All(id => gaskaShippingRateIds.Contains(id));
+                            bool allItemsUseGaska = offerShippingRates.Values.All(name => deliveryNames.Contains(name));
 
                             if (!allItemsUseGaska)
                             {
@@ -104,7 +111,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                             }
 
                             // Save the order
-                            var model = MapAllegroOrderToModel(order);
+                            var model = MapAllegroOrderToModel(order, offerShippingRates);
                             await _orderRepo.SaveAllegroOrder(model);
                             _logger.LogInformation("Order {OrderId} synced from Allegro.", order.Id);
                         }
@@ -156,6 +163,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
 
                         // Fetch order data from Gąska to update local record
                         await FetchAndUpdateGaskaOrder(order, ct);
+                        await SetProcessingStatusInAllegro(order);
                         _logger.LogInformation("Created Order {GaskaOrderId} in Gąska for Allegro Order {AllegroOrderId}.", order.ExternalOrderNumber, order.AllegroId);
 
                         // Send success email
@@ -187,7 +195,8 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
         {
             try
             {
-                var orders = await _orderRepo.GetOrdersToUpdateExternalInfo();
+                var shippingRates = _appSettings.AllegroDeliveryNames.Split(',', StringSplitOptions.TrimEntries).ToList();
+                var orders = await _orderRepo.GetOrdersToUpdateExternalInfo(shippingRates);
                 foreach (var order in orders)
                 {
                     await FetchAndUpdateGaskaOrder(order, ct);
@@ -235,6 +244,43 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to update Order {AllegroOrderId} with Gąska info.", order.AllegroId);
+            }
+        }
+
+        private async Task SetProcessingStatusInAllegro(AllegroOrder order)
+        {
+            try
+            {
+                // --- Update Order Status ---
+                try
+                {
+
+                    var statusRequest = new AllegroSetOrderStatusRequest
+                    {
+                        Status = AllegroOrderStatus.PROCESSING
+                    };
+
+                    var response = await _allegroApiClient.SendWithResponseAsync($"/order/checkout-forms/{order.AllegroId}/fulfillment", HttpMethod.Put, statusRequest);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        var body = await response.Content.ReadAsStringAsync();
+                        LogAllegroErrors(response, body, "status", order.AllegroId);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Updated Order Status to {Status} for Allegro Order {AllegroOrderId}.", AllegroOrderStatus.PROCESSING, order.AllegroId);
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to update Order Status {AllegroOrderId} in Allegro.", order.AllegroId);
+                }
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update orders in Allegro.");
             }
         }
 
@@ -344,7 +390,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
             }
         }
 
-        private AllegroOrder MapAllegroOrderToModel(AllegroGetOrdersResponse.CheckoutForm allegroOrder)
+        private AllegroOrder MapAllegroOrderToModel(AllegroGetOrdersResponse.CheckoutForm allegroOrder, Dictionary<string, string> offerShippingRates)
         {
             var address = allegroOrder.Delivery?.Address ?? allegroOrder.Buyer?.Address;
             var fulfillment = allegroOrder.Fulfillment;
@@ -402,6 +448,8 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                         quantity = quantity * productQuantity.Value;
                     }
 
+                    offerShippingRates.TryGetValue(item.Offer.Id, out var shippingRate);
+
                     return new AllegroOrderItem
                     {
                         ExternalId = item.Offer?.External?.Id,
@@ -411,6 +459,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                         OfferName = item.Offer?.Name,
                         OfferId = item.Offer?.Id,
                         OrderItemId = item.Id,
+                        ShippingRate = shippingRate,
                         BoughtAt = item.BoughtAt,
                     };
                 }).ToList() ?? new List<AllegroOrderItem>()
@@ -497,9 +546,10 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
 
             return status switch
             {
-                "spakowane" or "czeka na kuriera" => AllegroOrderStatus.READY_FOR_SHIPMENT,
+                "spakowane" or "czeka na kuriera" or "zrealizowane" => AllegroOrderStatus.READY_FOR_SHIPMENT,
                 "wysłane" or "w drodze" => AllegroOrderStatus.SENT,
                 "dostarczone" => AllegroOrderStatus.PICKED_UP,
+                "w realizacji" => AllegroOrderStatus.PROCESSING,
                 _ => AllegroOrderStatus.PROCESSING
             };
         }

@@ -17,13 +17,16 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
             _context = context;
         }
 
-        public async Task<List<AllegroOrder>> GetOrdersToUpdateExternalInfo()
+        public async Task<List<AllegroOrder>> GetOrdersToUpdateExternalInfo(List<string> shippingRates)
         {
             using var conn = _context.CreateConnection();
             conn.Open();
             var storedProcedure = "dbo.AllegroOrders_GetToUpdateExternalInfo";
 
             var orderDict = new Dictionary<int, AllegroOrder>();
+
+            var dt = new DataTable();
+            dt.Columns.Add("ShippingRate", typeof(string));
 
             var orders = await conn.QueryAsync<AllegroOrder, AllegroOrderItem, AllegroOrder>(
                 storedProcedure,
@@ -41,7 +44,13 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
 
                     return currentOrder;
                 },
-                new { IntegrationCompany = ServiceConstants.Company, Account = ServiceConstants.Account, NotWithExternalOrderStatus = "Zrealizowane" },
+                new
+                {
+                    IntegrationCompany = ServiceConstants.Company,
+                    Account = ServiceConstants.Account,
+                    NotWithExternalOrderStatus = "Zrealizowane",
+                    ShippingRates = dt.AsTableValuedParameter("dbo.ShippingRateList")
+                },
                 splitOn: "Id",
                 commandType: CommandType.StoredProcedure
             );
@@ -216,6 +225,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Repositories
                         Quantity = item.Quantity,
                         ExternalCourier = item.ExternalCourier,
                         ExternalTrackingNumber = item.ExternalTrackingNumber,
+                        ShippingRate = item.ShippingRate,
                         BoughtAt = item.BoughtAt
                     };
 

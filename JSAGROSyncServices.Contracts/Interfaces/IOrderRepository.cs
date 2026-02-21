@@ -8,7 +8,7 @@ namespace JSAGROSyncServices.Contracts.Interfaces
 
         public Task MarkAsOrderedInExternalCompany(int orderId, int externalOrderId);
 
-        public Task<List<AllegroOrder>> GetOrdersToUpdateExternalInfo();
+        public Task<List<AllegroOrder>> GetOrdersToUpdateExternalInfo(List<string> shippingRates);
 
         public Task<List<AllegroOrder>> GetPendingOrdersForExternalCompany(int delayMinutes);
 
