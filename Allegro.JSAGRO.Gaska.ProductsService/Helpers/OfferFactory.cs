@@ -171,7 +171,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             {
                 Name = product.Name,
                 Category = new Category { Id = categoryId == "0" ? fallbackCat : categoryId },
-                Images = product.AllegroImages.Select(i => i.Url).ToList(),
+                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
                 Parameters = includeProductParameters ? BuildParameters(product.Parameters, isForProduct: true) : null,
             };
 
