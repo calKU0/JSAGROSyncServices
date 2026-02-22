@@ -499,6 +499,31 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     name = $"{name} {crossNumbers?.LastOrDefault() ?? code} JAG".Trim();
                 }
 
+                // Insert space inside words longer than or equal to 30 characters
+                name = Regex.Replace(name, @"\S{30,}", m =>
+                {
+                    var word = m.Value;
+
+                    // Try to find a natural split near position 30
+                    int splitPos = -1;
+
+                    // look for separator between 20 and 35 chars
+                    for (int i = Math.Min(35, word.Length - 1); i >= Math.Max(20, 1); i--)
+                    {
+                        if (word[i] == '-' || word[i] == '/' || word[i] == '_' || word[i] == '.')
+                        {
+                            splitPos = i + 1;
+                            break;
+                        }
+                    }
+
+                    // fallback: hard split at 30
+                    if (splitPos == -1)
+                        splitPos = 30;
+
+                    return word.Substring(0, splitPos) + " " + word.Substring(splitPos);
+                });
+
                 // 5. If longer than 75 chars → remove last words until < 75
                 while (name.Length > 75)
                 {

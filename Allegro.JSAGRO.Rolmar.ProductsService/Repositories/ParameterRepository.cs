@@ -57,5 +57,20 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             if (affectedRows == 0)
                 throw new InvalidOperationException($"Parameter with Id {id} not found.");
         }
+
+        public async Task DeleteParameter(string parameterName, int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            await connection.ExecuteAsync(
+                "RolmarProductParameters_DeleteByParameterName",
+                new
+                {
+                    ProductId = productId,
+                    CategoryParameterName = parameterName
+                },
+                commandType: CommandType.StoredProcedure);
+        }
     }
 }

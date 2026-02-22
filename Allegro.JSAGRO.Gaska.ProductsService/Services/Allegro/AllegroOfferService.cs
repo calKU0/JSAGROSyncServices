@@ -360,6 +360,16 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                                 _logger.LogInformation("Updated parameter {ParameterId} for {Code} to '{CorrectValue}'", parameterId, product.Code, correctValue);
                             }
                         }
+                        else if (err.Code == "ProductValidationException"
+                             && !string.IsNullOrEmpty(err.UserMessage)
+                             && err.UserMessage.Contains("Tworzenie produktu z wartością", StringComparison.OrdinalIgnoreCase)
+                             && err.UserMessage.Contains("parametrze Producent części", StringComparison.OrdinalIgnoreCase))
+                        {
+                            await _parameterRepo.UpdateParameter(product.Id, 127415, "JAG", CancellationToken.None);
+                            await _parameterRepo.UpdateParameter(product.Id, 247835, "JAG", CancellationToken.None);
+
+                            _logger.LogInformation("Updated parameter Producent części to 'JAG' for {Code}", product.Code);
+                        }
                         else if (err.UserMessage.Contains(@"Podany adres obrazka jest nieprawidłowy."))
                         {
                             await _imageRepo.DeleteProductImagesAsync(product.Id, CancellationToken.None);
@@ -370,6 +380,20 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                         else if (err.Message.Contains(@"The type of this ""Compatible with"" "))
                         {
                             await _productRepo.UpdateCompatibilitySet(product.Id, false, CancellationToken.None);
+                        }
+                        else if (err.Code == "ParameterNameNotFoundException" && !string.IsNullOrEmpty(err.UserMessage))
+                        {
+                            var parameterName = ExtractParameterNameFromNotFoundMessage(err.UserMessage);
+
+                            if (!string.IsNullOrEmpty(parameterName))
+                            {
+                                await _parameterRepo.DeleteParameter(parameterName, product.Id, CancellationToken.None);
+
+                                _logger.LogInformation(
+                                    "Deleted parameter '{ParameterName}' for product {Code} because it does not exist in category",
+                                    parameterName,
+                                    product.Code);
+                            }
                         }
                         else if (err.Code == "OfferNotFoundException" && response.StatusCode == System.Net.HttpStatusCode.NotFound)
                         {
@@ -390,6 +414,10 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             }
             catch (Exception exParse)
             {
+                if (body.Contains(@"The type of this ""Compatible with"" "))
+                {
+                    await _productRepo.UpdateCompatibilitySet(product.Id, false, CancellationToken.None);
+                }
                 _logger.LogError(exParse, $"Failed to parse Allegro error ({response.StatusCode}) while {action} offer for {product.Code}. Body={body}");
             }
         }
@@ -513,6 +541,23 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                 return allMatches[^1].Groups[1].Value;
 
             return allMatches.Count == 1 ? allMatches[0].Groups[1].Value : null;
+        }
+
+        private string ExtractParameterNameFromNotFoundMessage(string message)
+        {
+            const string prefix = "Parameter ";
+            const string suffix = " not found";
+
+            var start = message.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+            var end = message.IndexOf(suffix, StringComparison.OrdinalIgnoreCase);
+
+            if (start >= 0 && end > start)
+            {
+                start += prefix.Length;
+                return message.Substring(start, end - start).Trim();
+            }
+
+            return null;
         }
 
         private string ExtractCorrectParameterValue(string message)

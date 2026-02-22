@@ -15,6 +15,21 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             _context = context;
         }
 
+        public async Task DeleteParameter(string parameterName, int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            await connection.ExecuteAsync(
+                "RolmarProductParameters_DeleteByParameterName",
+                new
+                {
+                    ProductId = productId,
+                    CategoryParameterName = parameterName
+                },
+                commandType: CommandType.StoredProcedure);
+        }
+
         public async Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct)
         {
             if (parameters == null || parameters.Count == 0)
