@@ -8,6 +8,8 @@ namespace ServiceManager
 {
     public partial class MainWindow
     {
+        private CancellationTokenSource _serviceStatusCts = new();
+
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LoadAvailableServices();
@@ -78,11 +80,16 @@ namespace ServiceManager
         {
             if (service == null) return;
 
+            // Cancel any ongoing status refresh
+            _serviceStatusCts.Cancel();
+            _serviceStatusCts.Dispose();
+            _serviceStatusCts = new CancellationTokenSource();
+
             _serviceControllerService.SetService(service.ServiceName);
 
             ResetLogView();
             InitLogWatcher();
-            _ = RefreshServiceStatusAsync();
+            _ = RefreshServiceStatusAsync(_serviceStatusCts.Token);
             _ = LoadLogFilesAsync();
             LoadConfig();
             ServiceNameTextBox.Text = service.Name;
@@ -98,19 +105,23 @@ namespace ServiceManager
             ShowMainNavigation();
             HideContentViews();
             ResetNavSelection();
+            _ = RefreshServiceStatusAsync(_serviceStatusCts.Token);
         }
 
-        private async Task RefreshServiceStatusAsync()
+        private async Task RefreshServiceStatusAsync(CancellationToken cancellationToken)
         {
             try
             {
                 var status = await _serviceControllerService.GetStatusAsync();
+                if (cancellationToken.IsCancellationRequested)
+                    return;
                 if (status.HasValue)
                     ApplyServiceStatus(status.Value);
             }
             catch (Exception ex)
             {
-                ApplyServiceError(ex);
+                if (!cancellationToken.IsCancellationRequested)
+                    ApplyServiceError(ex);
             }
         }
 
@@ -181,7 +192,7 @@ namespace ServiceManager
             }
             finally
             {
-                await RefreshServiceStatusAsync();
+                await RefreshServiceStatusAsync(_serviceStatusCts.Token);
             }
         }
 
@@ -190,7 +201,7 @@ namespace ServiceManager
             await RunServiceOperationAsync(sc =>
             {
                 sc.Start();
-                sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(5));
+                sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(15));
             });
         }
 
@@ -199,8 +210,12 @@ namespace ServiceManager
             await RunServiceOperationAsync(sc =>
             {
                 sc.Stop();
-                sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(5));
+                sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(15));
             });
+
+            // Reinitialize controller for the current service
+            if (SelectedService != null)
+                _serviceControllerService.SetService(SelectedService.ServiceName);
         }
 
         private async Task RestartServiceAsync()
@@ -208,11 +223,14 @@ namespace ServiceManager
             await RunServiceOperationAsync(sc =>
             {
                 sc.Stop();
-                sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(5));
+                sc.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(15));
 
                 sc.Start();
-                sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(5));
+                sc.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(15));
             });
+            // Reinitialize controller for the current service
+            if (SelectedService != null)
+                _serviceControllerService.SetService(SelectedService.ServiceName);
         }
     }
 }

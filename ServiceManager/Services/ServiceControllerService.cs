@@ -21,14 +21,22 @@ namespace ServiceManager.Services
             if (_controller == null)
                 return null;
 
-            return await Task.Run(() =>
+            try
             {
-                lock (_lock)
+                return await Task.Run(() =>
                 {
-                    _controller.Refresh();
-                    return _controller.Status;
-                }
-            });
+                    lock (_lock)
+                    {
+                        _controller.Refresh();
+                        return _controller.Status;
+                    }
+                });
+            }
+            catch (ObjectDisposedException)
+            {
+                // Controller was disposed, return null to avoid error
+                return null;
+            }
         }
 
         public async Task RunOperationAsync(Action<ServiceController> operation)
@@ -36,13 +44,21 @@ namespace ServiceManager.Services
             if (_controller == null)
                 return;
 
-            await Task.Run(() =>
+            try
             {
-                lock (_lock)
+                await Task.Run(() =>
                 {
-                    operation(_controller);
-                }
-            });
+                    lock (_lock)
+                    {
+                        operation(_controller);
+                    }
+                });
+            }
+            catch (ObjectDisposedException)
+            {
+                // Controller was disposed, skip operation
+                return;
+            }
         }
 
         public void Dispose()

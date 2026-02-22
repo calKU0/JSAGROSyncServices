@@ -55,7 +55,7 @@ namespace ServiceManager
 
         private async Task RefreshTimer_TickAsync()
         {
-            await RefreshServiceStatusAsync();
+            await RefreshServiceStatusAsync(CancellationToken.None);
 
             if (LogsViewContainer.Visibility != Visibility.Visible ||
                 SelectedLogFile is not LogFileItem item ||
