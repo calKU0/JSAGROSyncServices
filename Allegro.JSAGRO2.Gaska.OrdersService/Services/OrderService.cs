@@ -405,7 +405,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
                         && nowHour >= _courierSettings.GlsFinalOrderHour
                         => NormalizeCourierName(GetNextAvailableCourier("GLS", nowHour)),
 
-                    _ => NormalizeCourierName(order.DeliveryMethodName)
+                    _ => NormalizeCourierName(deliveryMethod)
                 };
             }
 
