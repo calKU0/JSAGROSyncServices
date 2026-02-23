@@ -76,7 +76,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
                 new
                 {
                     ProductId = productId,
-                    CategoryParameterName = parameterName
+                    ParameterName = parameterName
                 },
                 commandType: CommandType.StoredProcedure);
         }

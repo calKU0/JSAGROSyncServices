@@ -215,6 +215,13 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
                     if (product == null)
                         continue;
 
+                    // Validate URL
+                    if (!Uri.TryCreate(item.Url, UriKind.Absolute, out var uriResult) || (uriResult.Scheme != Uri.UriSchemeHttp && uriResult.Scheme != Uri.UriSchemeHttps))
+                    {
+                        _logger.LogWarning("Invalid image URL for product {Index}: {Url}", item.Index, item.Url);
+                        continue;
+                    }
+
                     try
                     {
                         var savedPath = await ImageHelper.SaveImageAsync(_httpClient, item.Url, product.Id, ServiceConstants.ImagesFolder, ct);

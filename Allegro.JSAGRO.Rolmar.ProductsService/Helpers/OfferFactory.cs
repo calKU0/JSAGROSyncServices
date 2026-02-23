@@ -35,7 +35,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                         Currency = "PLN"
                     }
                 },
-                Images = product.AllegroImages.Select(i => i.Url).ToList(),
+                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
                 Description = BuildDescription(product),
                 External = new External
                 {
@@ -145,7 +145,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
             var Product = new ProductObject
             {
                 Id = product.AllegroId,
-                Images = product.AllegroImages.Select(i => i.Url).ToList(),
+                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
             };
 
             ProductSets.Add(new ProductSet
@@ -260,6 +260,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
             // 0. First image full-width on top
             if (product.AllegroImages.Any())
             {
+                product.AllegroImages = product.AllegroImages.DistinctBy(i => i.Url).ToList();
                 description.Sections.Add(new Section
                 {
                     SectionItems = new List<SectionItem>

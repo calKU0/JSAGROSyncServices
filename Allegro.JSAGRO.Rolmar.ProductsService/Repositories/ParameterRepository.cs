@@ -68,7 +68,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                 new
                 {
                     ProductId = productId,
-                    CategoryParameterName = parameterName
+                    ParameterName = parameterName
                 },
                 commandType: CommandType.StoredProcedure);
         }

@@ -100,6 +100,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Fatal error while fetching and saving offers.");
+                throw;
             }
         }
 
@@ -569,7 +570,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 
         private string ExtractParameterIdFromConstraintMessage(string message)
         {
-            var match = Regex.Match(message, @"id:\s*(\d+)", RegexOptions.IgnoreCase);
+            // Matches either "id: 123" or "(123)"
+            var match = Regex.Match(message, @"(?:id:\s*|[(])(\d+)[)]", RegexOptions.IgnoreCase);
             return match.Success ? match.Groups[1].Value : null;
         }
     }

@@ -506,15 +506,16 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
             return name;
         }
 
-        public Task UpdateCompatibilitySet(int productId, bool value, CancellationToken ct)
+        public async Task UpdateCompatibilitySet(int productId, bool value, CancellationToken ct)
         {
             var sql = @"
-                UPDATE Products
+                UPDATE RolmarProducts
                 SET BuildCompatibilitySet = @Value
                 WHERE Id = @ProductId;";
 
             using var conn = _context.CreateConnection();
-            return conn.ExecuteAsync(sql, new { Value = value, ProductId = productId });
+            conn.Open();
+            await conn.ExecuteAsync(sql, new { Value = value, ProductId = productId });
         }
 
         public Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct)

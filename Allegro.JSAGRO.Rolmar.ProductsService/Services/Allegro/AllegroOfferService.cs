@@ -99,6 +99,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Fatal error while fetching and saving offers.");
+                throw;
             }
         }
 

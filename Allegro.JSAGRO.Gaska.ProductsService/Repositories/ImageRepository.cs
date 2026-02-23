@@ -37,11 +37,11 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             );
         }
 
-        public Task<int> DeleteProductImagesAsync(int productId, CancellationToken ct)
+        public async Task<int> DeleteProductImagesAsync(int productId, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
             connection.Open();
-            return connection.ExecuteScalarAsync<int>(
+            return await connection.ExecuteScalarAsync<int>(
                 "AllegroImages_DeleteByProductId",
                 new { ProductId = productId, Account = ServiceConstants.Account },
                 commandType: CommandType.StoredProcedure

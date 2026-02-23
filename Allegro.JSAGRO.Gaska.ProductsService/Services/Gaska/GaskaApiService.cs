@@ -7,8 +7,8 @@ using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Infrastructure.Helpers;
 using Microsoft.Extensions.Options;
-using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
 {
@@ -160,7 +160,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
 
                     if (apiResponse?.Product == null) continue;
 
-                    await SaveProductImagesAsync(apiResponse.Product, product.Id, ct);
+                    await SaveProductImagesAsync(apiResponse.Product, ct);
                     await _productRepo.UpsertProductAsync(MapToRolmarProduct(product, apiResponse.Product), ct);
                     _logger.LogInformation($"Successfully fetched and updated details of product {product.Code}");
                 }
@@ -175,7 +175,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
             }
         }
 
-        private async Task SaveProductImagesAsync(ApiProduct product, int productId, CancellationToken ct)
+        private async Task SaveProductImagesAsync(ApiProduct product, CancellationToken ct)
         {
             if (product.Images == null || !product.Images.Any())
                 return;
@@ -185,15 +185,22 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
                 if (string.IsNullOrWhiteSpace(image?.Url))
                     continue;
 
+                // Validate URL
+                if (!Uri.TryCreate(image.Url, UriKind.Absolute, out var uriResult) || (uriResult.Scheme != Uri.UriSchemeHttp && uriResult.Scheme != Uri.UriSchemeHttps))
+                {
+                    _logger.LogWarning("Invalid image URL for product {Code}: {Url}", product.CodeGaska, image.Url);
+                    continue;
+                }
+
                 try
                 {
-                    var savedPath = await ImageHelper.SaveImageAsync(_http, image.Url, productId, ServiceConstants.ImagesFolder, ct);
+                    var savedPath = await ImageHelper.SaveImageAsync(_http, image.Url, product.Id, ServiceConstants.ImagesFolder, ct);
                     if (string.IsNullOrWhiteSpace(savedPath))
-                        _logger.LogWarning("Failed to save image for product {ProductId}. Url: {Url}", productId, image.Url);
+                        _logger.LogWarning("Failed to save image for product {Code}. Url: {Url}", product.CodeGaska, image.Url);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to save image for product {ProductId}. Url: {Url}", productId, image.Url);
+                    _logger.LogWarning(ex, "Failed to save image for product {Code}. Url: {Url}", product.CodeGaska, image.Url);
                 }
             }
         }
