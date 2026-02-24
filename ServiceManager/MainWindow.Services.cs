@@ -103,8 +103,9 @@ namespace ServiceManager
             SelectService(service);
             CbServiceSelector.Visibility = Visibility.Visible;
             ShowMainNavigation();
-            HideContentViews();
-            ResetNavSelection();
+
+            BtnShowLogs.IsChecked = true;
+            _ = ShowLogsViewAsync();
             _ = RefreshServiceStatusAsync(_serviceStatusCts.Token);
         }
 
