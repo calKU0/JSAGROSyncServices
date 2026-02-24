@@ -40,6 +40,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService
 
                     async Task MeasureStepAsync(string stepName, Func<Task> action)
                     {
+                        _logger.LogInformation($"Starting {stepName}...");
                         var sw = System.Diagnostics.Stopwatch.StartNew();
                         await action();
                         sw.Stop();

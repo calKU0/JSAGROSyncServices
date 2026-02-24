@@ -422,6 +422,57 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                 _logger.LogError(exParse, $"Failed to parse Allegro error ({response.StatusCode}) while {action} offer for {product.Code}. Body={body}");
             }
         }
+
+        private string ExtractParameterNameFromNotFoundMessage(string message)
+        {
+            const string prefix = "Parameter ";
+            const string suffix = " not found";
+
+            var start = message.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+            var end = message.IndexOf(suffix, StringComparison.OrdinalIgnoreCase);
+
+            if (start >= 0 && end > start)
+            {
+                start += prefix.Length;
+                return message.Substring(start, end - start).Trim();
+            }
+
+            return null;
+        }
+        private string ExtractCorrectCategoryId(string message)
+        {
+            // Try to match specifically "produktu (123456)" first (preferred pattern)
+            var correctMatch = Regex.Match(message, @"produktu\s*\((\d+)\)", RegexOptions.IgnoreCase);
+            if (correctMatch.Success)
+                return correctMatch.Groups[1].Value;
+
+            // Fallback: if message contains multiple category IDs, assume the last one is correct
+            var allMatches = Regex.Matches(message, @"\((\d+)\)");
+            if (allMatches.Count > 1)
+                return allMatches[^1].Groups[1].Value;
+
+            return allMatches.Count == 1 ? allMatches[0].Groups[1].Value : null;
+        }
+
+        private string ExtractCorrectParameterValue(string message)
+        {
+            // Matches "is: "JAG"", "to: "JAG"", or Polish "to: "JAG""
+            // Look for the last quoted string in the message
+            var matches = Regex.Matches(message, @"[""“‘`]([^""”’`]+)[""“‘`]");
+            if (matches.Count > 0)
+            {
+                return matches[^1].Groups[1].Value; // Take the last quoted value (usually the "correct" one)
+            }
+            return null;
+        }
+
+        private string ExtractParameterIdFromConstraintMessage(string message)
+        {
+            // Matches either "id: 123" or "(123)"
+            var match = Regex.Match(message, @"(?:id:\s*|[(])(\d+)[)]", RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups[1].Value : null;
+        }
+
         private async Task<List<AllegroImages>> ImportImages(RolmarProduct product, CancellationToken ct)
         {
             var imageResults = new ConcurrentBag<(string FileName, string Url)>();
@@ -526,51 +577,6 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
             }
 
             return result;
-        }
-
-        private string ExtractParameterNameFromNotFoundMessage(string message)
-        {
-            const string prefix = "Parameter ";
-            const string suffix = " not found";
-
-            var start = message.IndexOf(prefix, StringComparison.OrdinalIgnoreCase);
-            var end = message.IndexOf(suffix, StringComparison.OrdinalIgnoreCase);
-
-            if (start >= 0 && end > start)
-            {
-                start += prefix.Length;
-                return message.Substring(start, end - start).Trim();
-            }
-
-            return null;
-        }
-        private string ExtractCorrectCategoryId(string message)
-        {
-            // Try to match specifically "produktu (123456)" first (preferred pattern)
-            var correctMatch = Regex.Match(message, @"produktu\s*\((\d+)\)", RegexOptions.IgnoreCase);
-            if (correctMatch.Success)
-                return correctMatch.Groups[1].Value;
-
-            // Fallback: if message contains multiple category IDs, assume the last one is correct
-            var allMatches = Regex.Matches(message, @"\((\d+)\)");
-            if (allMatches.Count > 1)
-                return allMatches[^1].Groups[1].Value;
-
-            return allMatches.Count == 1 ? allMatches[0].Groups[1].Value : null;
-        }
-
-        private string ExtractCorrectParameterValue(string message)
-        {
-            // Handles: "change the value to `JAG`" OR `"JAG"` OR similar phrases
-            var match = Regex.Match(message, @"value\s*(?:to|is)\s*[`""]([^`""]+)[`""]", RegexOptions.IgnoreCase);
-            return match.Success ? match.Groups[1].Value : null;
-        }
-
-        private string ExtractParameterIdFromConstraintMessage(string message)
-        {
-            // Matches either "id: 123" or "(123)"
-            var match = Regex.Match(message, @"(?:id:\s*|[(])(\d+)[)]", RegexOptions.IgnoreCase);
-            return match.Success ? match.Groups[1].Value : null;
         }
     }
 }

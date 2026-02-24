@@ -96,6 +96,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Helpers
             return new ProductOfferRequest
             {
                 //Name = offer.Product.Name,
+                //ProductSet = BuildProductSet(offer.Product, productQuantity, allegroSettings),
                 Stock = new Stock
                 {
                     Available = Convert.ToInt32(Math.Floor(offer.Product.InStock)),

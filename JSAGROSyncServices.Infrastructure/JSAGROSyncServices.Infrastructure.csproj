@@ -137,6 +137,9 @@
     <None Update="Migrations\20260222_01_AddDeleteParameterStoredProcedure.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Migrations\20260224_01_OptimizeUpsertOffersStoredProcedure.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Migrations\20261102_01_ChangeRolmarProducts_GetByCodeSp.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
