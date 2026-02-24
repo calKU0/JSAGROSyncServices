@@ -160,7 +160,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
 
                     if (apiResponse?.Product == null) continue;
 
-                    await SaveProductImagesAsync(apiResponse.Product, ct);
+                    await SaveProductImagesAsync(apiResponse.Product, product.Id, ct);
                     await _productRepo.UpsertProductAsync(MapToRolmarProduct(product, apiResponse.Product), ct);
                     _logger.LogInformation($"Successfully fetched and updated details of product {product.Code}");
                 }
@@ -175,34 +175,23 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
             }
         }
 
-        private async Task SaveProductImagesAsync(ApiProduct product, CancellationToken ct)
+        private async Task SaveProductImagesAsync(ApiProduct product, int productId, CancellationToken ct)
         {
             if (product.Images == null || !product.Images.Any())
                 return;
 
-            foreach (var image in product.Images)
-            {
-                if (string.IsNullOrWhiteSpace(image?.Url))
-                    continue;
+            var urls = product.Images
+                .Where(i => !string.IsNullOrWhiteSpace(i.Url))
+                .Select(i => i.Url)
+                .ToList();
 
-                // Validate URL
-                if (!Uri.TryCreate(image.Url, UriKind.Absolute, out var uriResult) || (uriResult.Scheme != Uri.UriSchemeHttp && uriResult.Scheme != Uri.UriSchemeHttps))
-                {
-                    _logger.LogWarning("Invalid image URL for product {Code}: {Url}", product.CodeGaska, image.Url);
-                    continue;
-                }
+            if (!urls.Any())
+                return;
 
-                try
-                {
-                    var savedPath = await ImageHelper.SaveImageAsync(_http, image.Url, product.Id, ServiceConstants.ImagesFolder, ct);
-                    if (string.IsNullOrWhiteSpace(savedPath))
-                        _logger.LogWarning("Failed to save image for product {Code}. Url: {Url}", product.CodeGaska, image.Url);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to save image for product {Code}. Url: {Url}", product.CodeGaska, image.Url);
-                }
-            }
+            var savedPaths = await ImageHelper.SaveImagesAsync(_http, urls, productId, ServiceConstants.ImagesFolder, ct);
+
+            if (savedPaths == null || savedPaths.Count == 0)
+                _logger.LogWarning("Failed to save images for product {Code}", product.CodeGaska);
         }
 
         private static RolmarProduct MapToRolmarProduct(ApiProducts product)

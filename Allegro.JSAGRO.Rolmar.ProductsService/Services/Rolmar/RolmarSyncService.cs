@@ -195,8 +195,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
                 var response = await _httpClient.PostAsJsonAsync(requestUri, body, ct);
                 response.EnsureSuccessStatusCode();
 
-                var rolmarResponseArray =
-                    await response.Content.ReadFromJsonAsync<List<RolmarImagesResponse>>(ct);
+                var rolmarResponseArray = await response.Content.ReadFromJsonAsync<List<RolmarImagesResponse>>(ct);
 
                 if (rolmarResponseArray == null || !rolmarResponseArray.Any())
                 {
@@ -206,34 +205,51 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
 
                 var rolmarResponse = rolmarResponseArray[0];
 
-                foreach (var item in rolmarResponse.PhotoItems)
+                var groupedImages = rolmarResponse.PhotoItems
+                    .Where(item => !string.IsNullOrWhiteSpace(item.Url) && !string.IsNullOrWhiteSpace(item.Index))
+                    .GroupBy(item => item.Index);
+
+                foreach (var group in groupedImages)
                 {
-                    if (string.IsNullOrWhiteSpace(item.Url) || string.IsNullOrWhiteSpace(item.Index))
-                        continue;
+                    var productIndex = group.Key;
 
-                    var product = products.FirstOrDefault(p => p.Code == item.Index);
+                    var product = products.FirstOrDefault(p => p.Code == productIndex);
                     if (product == null)
-                        continue;
-
-                    // Validate URL
-                    if (!Uri.TryCreate(item.Url, UriKind.Absolute, out var uriResult) || (uriResult.Scheme != Uri.UriSchemeHttp && uriResult.Scheme != Uri.UriSchemeHttps))
                     {
-                        _logger.LogWarning("Invalid image URL for product {Index}: {Url}", item.Index, item.Url);
+                        _logger.LogDebug("Product with code {Index} not found in database. Skipping.", productIndex);
+                        continue;
+                    }
+
+                    var validUrls = group
+                        .Select(item => item.Url)
+                        .Where(url => Uri.TryCreate(url, UriKind.Absolute, out var uriResult) &&
+                                     (uriResult.Scheme == Uri.UriSchemeHttp || uriResult.Scheme == Uri.UriSchemeHttps))
+                        .ToList();
+
+                    if (!validUrls.Any())
+                    {
+                        _logger.LogWarning("No valid URLs for product {Index}", productIndex);
                         continue;
                     }
 
                     try
                     {
-                        var savedPath = await ImageHelper.SaveImageAsync(_httpClient, item.Url, product.Id, ServiceConstants.ImagesFolder, ct);
-                        if (!string.IsNullOrWhiteSpace(savedPath))
-                            savedCount++;
+                        var savedPaths = await ImageHelper.SaveImagesAsync(_httpClient, validUrls, product.Id, ServiceConstants.ImagesFolder, ct);
+
+                        if (savedPaths != null && savedPaths.Any())
+                        {
+                            savedCount += savedPaths.Count;
+                        }
                         else
-                            failedCount++;
+                        {
+                            _logger.LogWarning("Failed to save images for product {Code}", product.Code);
+                            failedCount += validUrls.Count;
+                        }
                     }
                     catch (Exception ex)
                     {
-                        failedCount++;
-                        _logger.LogWarning(ex, "Failed to save image for Index: {Index}, Url: {Url}", item.Index, item.Url);
+                        failedCount += validUrls.Count;
+                        _logger.LogWarning(ex, "Failed to save group of images for Product: {Index}", productIndex);
                     }
                 }
 
