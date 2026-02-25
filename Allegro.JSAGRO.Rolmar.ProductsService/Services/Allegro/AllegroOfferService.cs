@@ -78,6 +78,12 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
                 // Merge both lists
                 latestOffers.AddRange(groupedByName);
 
+                var parallelOptions = new ParallelOptions
+                {
+                    CancellationToken = ct,
+                    MaxDegreeOfParallelism = 25
+                };
+
                 // Update shipping info & categories
                 foreach (var offer in latestOffers)
                 {
@@ -109,40 +115,48 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
             try
             {
                 var allOffers = await _offerRepo.GetOffersWithoutDetails(ct);
-                var offersDetails = new List<AllegroOfferDetails.Root>();
 
+                var offersDetails = new ConcurrentBag<AllegroOfferDetails.Root>();
                 int processedCount = 0;
 
-                foreach (var offer in allOffers)
+                var parallelOptions = new ParallelOptions
+                {
+                    CancellationToken = ct,
+                    MaxDegreeOfParallelism = 25
+                };
+
+                await Parallel.ForEachAsync(allOffers, parallelOptions, async (offer, token) =>
                 {
                     try
                     {
                         var detailedOffer = await _apiClient.GetAsync<AllegroOfferDetails.Root>(
-                            $"/sale/product-offers/{offer.Id}", ct);
+                            $"/sale/product-offers/{offer.Id}", token);
 
                         if (detailedOffer == null)
-                            continue;
+                            return;
 
                         detailedOffer.Delivery.ShippingRates.Id = offer.DeliveryName;
+
                         offersDetails.Add(detailedOffer);
 
-                        processedCount++;
+                        var current = Interlocked.Increment(ref processedCount);
 
-                        // Log every 500 offers
-                        if (processedCount % 500 == 0)
+                        if (current % 500 == 0)
                         {
-                            _logger.LogInformation("Processed {ProcessedCount} / {TotalCount} offers. Details collected so far: {DetailsCount}", processedCount, allOffers.Count, offersDetails.Count);
+                            _logger.LogInformation("Processed {ProcessedCount} / {TotalCount} offers. Details collected so far: {DetailsCount}", current, allOffers.Count, offersDetails.Count);
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Exception while fetching details for offer ID {OfferId}. Processed so far: {ProcessedCount}", offer.Id, processedCount);
-                    }
-                }
+                        var current = Interlocked.Increment(ref processedCount);
 
-                if (offersDetails.Count >= 1)
+                        _logger.LogError(ex, "Exception while fetching details for offer ID {OfferId}. Processed so far: {ProcessedCount}", offer.Id, current);
+                    }
+                });
+
+                if (!offersDetails.IsEmpty)
                 {
-                    await _offerRepo.UpsertOfferDetails(offersDetails, ct);
+                    await _offerRepo.UpsertOfferDetails(offersDetails.ToList(), ct);
                 }
 
                 _logger.LogInformation("Finished syncing Allegro offer details. Processed {ProcessedCount} offers. Saved {SavedCount} details.", processedCount, offersDetails.Count);
@@ -155,44 +169,75 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
 
         private async Task<List<Offer>> FetchAllOffers(CancellationToken ct)
         {
-            var allOffers = new List<Offer>();
-            int limit = 500;
-            int offset = 0;
+            const int limit = 100;
+            const int maxParallelism = 25;
 
-            while (!ct.IsCancellationRequested)
+            var allOffers = new ConcurrentBag<Offer>();
+
+            try
             {
-                try
+                var firstPage = await _apiClient.GetAsync<OffersResponse>($"/sale/offers?limit={limit}&offset=0", ct);
+
+                if (firstPage?.Offers == null || firstPage.Offers.Count == 0)
+                {
+                    _logger.LogInformation("No offers found.");
+                    return new List<Offer>();
+                }
+
+                foreach (var offer in firstPage.Offers)
+                    allOffers.Add(offer);
+
+                int totalCount = firstPage.TotalCount;
+                int totalPages = (int)Math.Ceiling((double)totalCount / limit);
+
+                _logger.LogInformation("Fetched page 1 with {PageCount} offers. Total offers reported: {TotalCount}. Total pages: {TotalPages}", firstPage.Offers.Count, totalCount, totalPages);
+
+                var offsets = Enumerable.Range(1, totalPages - 1)
+                    .Select(page => page * limit)
+                    .ToList();
+
+                var parallelOptions = new ParallelOptions
+                {
+                    CancellationToken = ct,
+                    MaxDegreeOfParallelism = maxParallelism
+                };
+
+                int processedPages = 1;
+
+                await Parallel.ForEachAsync(offsets, parallelOptions, async (offset, token) =>
                 {
                     int pageNumber = (offset / limit) + 1;
 
-                    var page = await _apiClient.GetAsync<OffersResponse>(
-                        $"/sale/offers?limit={limit}&offset={offset}", ct);
+                    try
+                    {
+                        var page = await _apiClient.GetAsync<OffersResponse>(
+                            $"/sale/offers?limit={limit}&offset={offset}", token);
 
-                    if (page?.Offers == null || !page.Offers.Any())
-                        break;
+                        if (page?.Offers == null)
+                            return;
 
-                    allOffers.AddRange(page.Offers);
+                        foreach (var offer in page.Offers)
+                            allOffers.Add(offer);
 
-                    _logger.LogInformation("Fetched page {PageNumber} with {PageCount} offers. Total fetched so far: {TotalCount}", pageNumber, page.Offers.Count, allOffers.Count);
+                        var currentPage = Interlocked.Increment(ref processedPages);
 
-                    if (page.Offers.Count < limit)
-                        break;
+                        _logger.LogInformation("Fetched page {PageNumber} with {PageCount} offers. Progress: {ProcessedPages}/{TotalPages}. Total collected: {TotalCollected}", pageNumber, page.Offers.Count, currentPage, totalPages, allOffers.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Exception while fetching page {PageNumber}", pageNumber);
+                    }
+                });
 
-                    offset += limit;
-                }
-                catch (Exception ex)
-                {
-                    int pageNumber = (offset / limit) + 1;
+                _logger.LogInformation("Finished fetching offers. Total fetched: {TotalCount}", allOffers.Count);
 
-                    _logger.LogError(ex, "Exception while fetching page {PageNumber}. Total fetched so far: {TotalCount}", pageNumber, allOffers.Count);
-
-                    break;
-                }
+                return allOffers.ToList();
             }
-
-            _logger.LogInformation("Finished fetching offers. Total fetched: {TotalCount}", allOffers.Count);
-
-            return allOffers;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Fatal error while fetching offers.");
+                throw;
+            }
         }
 
         public async Task UpdateOffers(CancellationToken ct = default)
@@ -411,8 +456,8 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
                         }
                         else
                         {
-                            _logger.LogError("Offer {Action} error for {Name}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}",
-                                action, product.Name, err.Code, err.Message, err.UserMessage ?? "N/A", err.Path ?? "N/A", err.Details ?? "N/A");
+                            _logger.LogError("Offer {Action} error for {ProductCode}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}",
+                                action, product.Code, err.Code, err.Message, err.UserMessage ?? "N/A", err.Path ?? "N/A", err.Details ?? "N/A");
                         }
                     }
                 }
