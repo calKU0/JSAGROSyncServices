@@ -181,14 +181,129 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             _logger.LogInformation("Deleted Allegro offer for product {Code}.", code);
         }
 
-        public Task<List<AllegroOffer>> GetOffersWithoutDetails(CancellationToken ct)
+        public async Task<List<AllegroOffer>> GetOffersWithoutDetails(CancellationToken ct)
         {
-            throw new NotImplementedException();
+            using var connection = _context.CreateConnection();
+            return (await connection.QueryAsync<AllegroOffer>(
+                "AllegroOffers_GetWithoutDetails",
+                commandType: CommandType.StoredProcedure)).ToList();
         }
 
-        public Task UpsertOfferDetails(List<AllegroOfferDetails.Root> offers, CancellationToken ct)
+        public async Task UpsertOfferDetails(List<AllegroOfferDetails.Root> offers, CancellationToken ct)
         {
-            throw new NotImplementedException();
+            if (offers == null || !offers.Any()) return;
+
+            using var connection = _context.CreateConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            try
+            {
+                var allegroOffers = offers.Select(o =>
+                {
+                    decimal price = 0;
+                    decimal.TryParse(o?.SellingMode?.Price?.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out price);
+
+                    int categoryId = 0;
+                    int.TryParse(o?.Category?.Id, out categoryId);
+
+                    return new
+                    {
+                        Id = o.Id,
+                        Account = ServiceConstants.Account,
+                        Name = o.Name ?? string.Empty,
+                        CategoryId = categoryId,
+                        Price = price,
+                        Stock = o?.Stock?.Available ?? 0,
+                        Status = o?.Publication?.Status ?? "UNKNOWN",
+                        DeliveryName = o?.Delivery?.ShippingRates?.Id,
+                        ExternalId = o?.External?.Id,
+                        Weight = 0,
+                        Images = o?.Images != null ? System.Text.Json.JsonSerializer.Serialize(o.Images) : null,
+                        StartingAt = o?.Publication?.StartingAt ?? new DateTime(1753, 1, 1),
+                        HandlingTime = o?.Delivery?.HandlingTime,
+                        ResponsiblePerson = o?.ProductSet?.FirstOrDefault()?.ResponsiblePerson?.Id ?? string.Empty,
+                        ResponsibleProducer = o?.ProductSet?.FirstOrDefault()?.ResponsibleProducer?.Id ?? string.Empty
+                    };
+                }).ToList();
+
+                await connection.ExecuteAsync(
+                    "AllegroOffers_UpsertDetails",
+                    allegroOffers,
+                    transaction,
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900);
+
+                // ---- Descriptions ----
+                var descriptions = new List<object>();
+                foreach (var o in offers)
+                {
+                    int sectionIndex = 1;
+                    if (o.Description?.Sections != null)
+                    {
+                        foreach (var section in o.Description.Sections)
+                        {
+                            foreach (var item in section.Items)
+                            {
+                                descriptions.Add(new
+                                {
+                                    OfferId = o.Id,
+                                    Type = item.Type,
+                                    Content = item.Type == "TEXT" ? item.Content : item.Url,
+                                    SectionId = sectionIndex
+                                });
+                            }
+                            sectionIndex++;
+                        }
+                    }
+                }
+
+                if (descriptions.Any())
+                {
+                    await connection.ExecuteAsync(
+                        "AllegroOfferDescriptions_Insert",
+                        descriptions,
+                        transaction,
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900);
+                }
+
+                // ---- Attributes ----
+                var attributes = new List<object>();
+                foreach (var o in offers)
+                {
+                    if (o.Parameters != null)
+                    {
+                        foreach (var param in o.Parameters)
+                        {
+                            attributes.Add(new
+                            {
+                                OfferId = o.Id,
+                                AttributeId = param.Id,
+                                Type = param.ValuesIds?.Any() == true ? "dictionary" : "string",
+                                ValuesJson = System.Text.Json.JsonSerializer.Serialize(param.Values ?? new List<string>()),
+                                ValuesIdsJson = System.Text.Json.JsonSerializer.Serialize(param.ValuesIds ?? new List<string>())
+                            });
+                        }
+                    }
+                }
+
+                if (attributes.Any())
+                {
+                    await connection.ExecuteAsync(
+                        "AllegroOfferAttributes_Insert",
+                        attributes,
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
+                }
+
+                transaction.Commit();
+            }
+            catch (Exception ex)
+            {
+                transaction.Rollback();
+                throw;
+            }
         }
     }
 }
