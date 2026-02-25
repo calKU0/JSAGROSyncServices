@@ -93,6 +93,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Services.Allegro
                     }
                 }
 
+                _logger.LogInformation("Attempting to update database offers.");
                 await _offerRepo.UpsertOffers(latestOffers, ct);
                 _logger.LogInformation("Fetched and saved {Count} offers from Allegro.", latestOffers.Count);
             }
@@ -106,28 +107,41 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Services.Allegro
         private async Task<List<Offer>> FetchAllOffers(CancellationToken ct)
         {
             var allOffers = new List<Offer>();
-            int limit = 1000;
+            int limit = 500;
             int offset = 0;
 
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
-                    var page = await _apiClient.GetAsync<OffersResponse>($"/sale/offers?limit={limit}&offset={offset}", ct);
+                    int pageNumber = (offset / limit) + 1;
 
-                    if (page?.Offers == null || !page.Offers.Any()) break;
+                    var page = await _apiClient.GetAsync<OffersResponse>(
+                        $"/sale/offers?limit={limit}&offset={offset}", ct);
+
+                    if (page?.Offers == null || !page.Offers.Any())
+                        break;
 
                     allOffers.AddRange(page.Offers);
-                    if (page.Offers.Count < limit) break;
+
+                    _logger.LogInformation("Fetched page {PageNumber} with {PageCount} offers. Total fetched so far: {TotalCount}", pageNumber, page.Offers.Count, allOffers.Count);
+
+                    if (page.Offers.Count < limit)
+                        break;
 
                     offset += limit;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Exception while fetching offers at offset {Offset}", offset);
+                    int pageNumber = (offset / limit) + 1;
+
+                    _logger.LogError(ex, "Exception while fetching page {PageNumber}. Total fetched so far: {TotalCount}", pageNumber, allOffers.Count);
+
                     break;
                 }
             }
+
+            _logger.LogInformation("Finished fetching offers. Total fetched: {TotalCount}", allOffers.Count);
 
             return allOffers;
         }

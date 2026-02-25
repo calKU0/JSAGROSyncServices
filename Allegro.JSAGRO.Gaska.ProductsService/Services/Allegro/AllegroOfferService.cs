@@ -94,6 +94,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                     }
                 }
 
+                _logger.LogInformation("Attempting to update database offers.");
                 await _offerRepo.UpsertOffers(latestOffers, ct);
                 _logger.LogInformation("Fetched and saved {Count} offers from Allegro.", latestOffers.Count);
             }
@@ -108,33 +109,44 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
         {
             try
             {
-                _logger.LogInformation("Starting offer details fetch.");
                 var allOffers = await _offerRepo.GetOffersWithoutDetails(ct);
                 var offersDetails = new List<AllegroOfferDetails.Root>();
+
+                int processedCount = 0;
+
                 foreach (var offer in allOffers)
                 {
                     try
                     {
-                        var detailedOffer = await _apiClient.GetAsync<AllegroOfferDetails.Root>($"/sale/product-offers/{offer.Id}", ct);
+                        var detailedOffer = await _apiClient.GetAsync<AllegroOfferDetails.Root>(
+                            $"/sale/product-offers/{offer.Id}", ct);
+
                         if (detailedOffer == null)
                             continue;
 
                         detailedOffer.Delivery.ShippingRates.Id = offer.DeliveryName;
-                        if (detailedOffer != null)
+                        offersDetails.Add(detailedOffer);
+
+                        processedCount++;
+
+                        // Log every 500 offers
+                        if (processedCount % 500 == 0)
                         {
-                            offersDetails.Add(detailedOffer);
+                            _logger.LogInformation("Processed {ProcessedCount} / {TotalCount} offers. Details collected so far: {DetailsCount}", processedCount, allOffers.Count, offersDetails.Count);
                         }
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Exception while fetching details for offer ID {OfferId}", offer.Id);
+                        _logger.LogError(ex, "Exception while fetching details for offer ID {OfferId}. Processed so far: {ProcessedCount}", offer.Id, processedCount);
                     }
                 }
+
                 if (offersDetails.Count >= 1)
                 {
                     await _offerRepo.UpsertOfferDetails(offersDetails, ct);
                 }
-                _logger.LogInformation("Fetched and saved {Count} offer details from Allegro.", offersDetails.Count);
+
+                _logger.LogInformation("Finished syncing Allegro offer details. Processed {ProcessedCount} offers. Saved {SavedCount} details.", processedCount, offersDetails.Count);
             }
             catch (Exception ex)
             {
@@ -145,28 +157,41 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
         private async Task<List<Offer>> FetchAllOffers(CancellationToken ct)
         {
             var allOffers = new List<Offer>();
-            int limit = 1000;
+            int limit = 500;
             int offset = 0;
 
             while (!ct.IsCancellationRequested)
             {
                 try
                 {
-                    var page = await _apiClient.GetAsync<OffersResponse>($"/sale/offers?limit={limit}&offset={offset}", ct);
+                    int pageNumber = (offset / limit) + 1;
 
-                    if (page?.Offers == null || !page.Offers.Any()) break;
+                    var page = await _apiClient.GetAsync<OffersResponse>(
+                        $"/sale/offers?limit={limit}&offset={offset}", ct);
+
+                    if (page?.Offers == null || !page.Offers.Any())
+                        break;
 
                     allOffers.AddRange(page.Offers);
-                    if (page.Offers.Count < limit) break;
+
+                    _logger.LogInformation("Fetched page {PageNumber} with {PageCount} offers. Total fetched so far: {TotalCount}", pageNumber, page.Offers.Count, allOffers.Count);
+
+                    if (page.Offers.Count < limit)
+                        break;
 
                     offset += limit;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Exception while fetching offers at offset {Offset}", offset);
+                    int pageNumber = (offset / limit) + 1;
+
+                    _logger.LogError(ex, "Exception while fetching page {PageNumber}. Total fetched so far: {TotalCount}", pageNumber, allOffers.Count);
+
                     break;
                 }
             }
+
+            _logger.LogInformation("Finished fetching offers. Total fetched: {TotalCount}", allOffers.Count);
 
             return allOffers;
         }
