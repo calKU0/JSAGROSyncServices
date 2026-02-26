@@ -93,7 +93,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Services.Allegro
                         offer.Delivery.ShippingRates.Name = name;
                     }
 
-                    if (offer.External?.Id != null)
+                    if (offer.External?.Id != null && offer.Publication.Status != "ENDED")
                     {
                         await _productRepo.UpdateProductAllegroCategory(offer.External.Id, offer.Category.Id, ct);
                     }
