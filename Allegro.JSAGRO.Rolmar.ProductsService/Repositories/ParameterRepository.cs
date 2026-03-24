@@ -26,9 +26,17 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
 
             try
             {
+                var parameterRows = parameters.Select(p => new
+                {
+                    p.ProductId,
+                    p.CategoryParameterId,
+                    p.Value,
+                    p.IsForProduct
+                });
+
                 await connection.ExecuteAsync(
                     "RolmarProductParameters_Insert",
-                    parameters,
+                    parameterRows,
                     transaction,
                     commandType: CommandType.StoredProcedure);
                 transaction.Commit();

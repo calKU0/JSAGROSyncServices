@@ -201,7 +201,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
                     ProductId = productId,
                     CategoryId = categoryId
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure, commandTimeout: 900);
         }
 
         public async Task UpdateProductAllegroCategory(string productCode, string categoryId, CancellationToken ct)
@@ -215,7 +215,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
                     ProductCode = productCode,
                     CategoryId = categoryId
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure, commandTimeout: 900);
         }
 
         public async Task UpdateProductAllegroId(int productId, string allegroProductId, string allegroCategoryId, CancellationToken ct)

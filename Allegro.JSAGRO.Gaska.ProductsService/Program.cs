@@ -98,11 +98,17 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IOfferRepository, OfferRepository>();
         services.AddScoped<IImageRepository, ImageRepository>();
         services.AddScoped<IParameterRepository, ParameterRepository>();
+        services.AddScoped<IAllegroResponsibleProducerRepository, AllegroResponsibleProducerRepository>();
+        services.AddScoped<IAllegroResponsiblePersonRepository, AllegroResponsiblePersonRepository>();
+        services.AddScoped<IAllegroDeliveryMethodRepository, AllegroDeliveryMethodRepository>();
 
         // Services
         services.AddScoped<IAllegroOfferService, AllegroOfferService>();
         services.AddScoped<IAllegroCategoryService, AllegroCategoryService>();
         services.AddScoped<IAllegroParametersService, AllegroParametersService>();
+        services.AddScoped<IAllegroResponsibleProducerService, AllegroResponsibleProducerService>();
+        services.AddScoped<IAllegroResponsiblePersonService, AllegroResponsiblePersonService>();
+        services.AddScoped<IAllegroShippingRateService, AllegroShippingRateService>();
 
         // Background worker
         services.AddHostedService<Worker>();

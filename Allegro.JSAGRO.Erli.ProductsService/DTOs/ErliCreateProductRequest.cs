@@ -18,8 +18,8 @@
         public ErliDispatchTime DispatchTime { get; set; }
         public int Weight { get; set; }
         public string InvoiceType { get; set; }
-        public ErliResponsiblePerson ExternalResponsiblePerson { get; set; }
-        public ErliResponsibleProducer ExternalResponsibleProducer { get; set; }
+        public List<ErliResponsiblePerson> ExternalResponsiblePerson { get; set; }
+        public List<ErliResponsibleProducer> ExternalResponsibleProducer { get; set; }
     }
 
     public class ErliResponsiblePerson

@@ -99,7 +99,8 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetAll",
                 new { Account = ServiceConstants.Account },
-                commandType: CommandType.StoredProcedure, commandTimeout: 900)).ToList();
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
@@ -186,7 +187,8 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             using var connection = _context.CreateConnection();
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetWithoutDetails",
-                commandType: CommandType.StoredProcedure)).ToList();
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900)).ToList();
         }
 
         public async Task UpsertOfferDetails(List<AllegroOfferDetails.Root> offers, CancellationToken ct)

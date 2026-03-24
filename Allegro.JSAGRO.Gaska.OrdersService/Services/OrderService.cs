@@ -46,7 +46,7 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
 
             try
             {
-                var shippingRates = await _allegroApiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
+                var shippingRates = await _allegroApiClient.GetAsync<AllegroShippingRatesResponse>("/sale/shipping-rates", ct);
                 var deliveryNames = (_appSettings.AllegroDeliveryNames ?? string.Empty)
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);

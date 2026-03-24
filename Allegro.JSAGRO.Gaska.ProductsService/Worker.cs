@@ -56,6 +56,9 @@ public class Worker : BackgroundService
         var allegroApiClient = services.GetRequiredService<AllegroApiClient>();
         var allegroAuthService = services.GetRequiredService<AllegroAuthService>();
 
+        var responsibleProducerService = services.GetRequiredService<IAllegroResponsibleProducerService>();
+        var responsiblePersonService = services.GetRequiredService<IAllegroResponsiblePersonService>();
+        var deliveryMethodService = services.GetRequiredService<IAllegroShippingRateService>();
         var offerService = services.GetRequiredService<IAllegroOfferService>();
         var categoryService = services.GetRequiredService<IAllegroCategoryService>();
         var parametersService = services.GetRequiredService<IAllegroParametersService>();
@@ -77,6 +80,9 @@ public class Worker : BackgroundService
                 _logger.LogInformation($"{stepName} completed in {FormatDuration(sw.Elapsed)}.");
             }
 
+            await MeasureStepAsync("Allegro responsible producers sync", () => responsibleProducerService.SyncResponsibleProducers());
+            await MeasureStepAsync("Allegro responsible persons sync", () => responsiblePersonService.SyncResponsiblePersons());
+            await MeasureStepAsync("Allegro delivery methods", () => deliveryMethodService.SyncShippingRates());
             await MeasureStepAsync("Basic product sync", () => gaskaApiService.SyncProducts());
             await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());
             await MeasureStepAsync("Allegro offers details", () => offerService.SyncAllegroOffersDetails());

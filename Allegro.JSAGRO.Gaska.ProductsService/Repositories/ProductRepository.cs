@@ -299,7 +299,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     ProductId = productId,
                     CategoryId = categoryId
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900);
         }
 
         public async Task UpdateProductAllegroCategory(string productCode, string categoryId, CancellationToken ct)
@@ -313,7 +314,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     ProductCode = productCode,
                     CategoryId = categoryId
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure, commandTimeout: 900);
         }
 
         public async Task<List<RolmarProduct>> GetProductsToUpload(int minProductStock, decimal minProductPrice, CancellationToken ct)

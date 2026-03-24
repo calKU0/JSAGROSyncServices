@@ -55,7 +55,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Services.Allegro
             {
                 var allOffers = await FetchAllOffers(ct);
 
-                var shippingRates = await _apiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
+                var shippingRates = await _apiClient.GetAsync<AllegroShippingRatesResponse>("/sale/shipping-rates", ct);
                 var shippingDict = shippingRates?.ShippingRates?.ToDictionary(s => s.Id, s => s.Name) ?? new Dictionary<string, string>();
 
                 // Split offers into two sets

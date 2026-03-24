@@ -149,5 +149,11 @@
     <None Update="Migrations\20261202_01_FixGetOffersToUpdateStoredProcedure.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Migrations\20260324_01_CreateAllegroResponsibleAndDeliveryMethodTables.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Migrations\20260324_02_AddAllegroResponsibleAndDeliveryMethodStoredProcedures.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

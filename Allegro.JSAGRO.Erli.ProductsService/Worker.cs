@@ -48,6 +48,9 @@ namespace Allegro.JSAGRO.Erli.ProductsService
                         _logger.LogInformation($"{stepName} completed in {FormatDuration(sw.Elapsed)}.");
                     }
 
+                    await MeasureStepAsync("Sync responsible producers in Erli", () => erliService.SyncResponsibleProducersWithErli());
+                    await MeasureStepAsync("Sync responsible persons in Erli", () => erliService.SyncResponsiblePersonsWithErli());
+                    await MeasureStepAsync("Sync deliveries in Erli", () => erliService.SyncDeliveriesWithErli());
                     await MeasureStepAsync("Sync offers with Erli", () => erliService.SyncOffersWithErli());
                     await MeasureStepAsync("Create products in Erli", () => erliService.CreateProductsInErli());
                     await MeasureStepAsync("Update products in Erli", () => erliService.UpdateProductsInErli());

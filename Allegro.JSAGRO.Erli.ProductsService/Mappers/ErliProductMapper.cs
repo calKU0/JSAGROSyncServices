@@ -100,18 +100,23 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
                 InvoiceType = "vatInvoice",
                 DeliveryPriceList = offer.DeliveryName,
                 ExternalResponsiblePerson = !string.IsNullOrEmpty(offer.ResponsiblePerson)
-                    ? new ErliResponsiblePerson
+                    ? new List<ErliResponsiblePerson>
                     {
-                        ExternalId = offer.ResponsiblePerson,
-                        Source = "allegro"
+                        new ErliResponsiblePerson
+                        {
+                            ExternalId = offer.ResponsiblePerson,
+                            Source = "allegro"
+                        }
                     }
                     : null,
 
                 ExternalResponsibleProducer = !string.IsNullOrEmpty(offer.ResponsibleProducer)
-                    ? new ErliResponsibleProducer
-                    {
+                    ? new List<ErliResponsibleProducer>
+                    {   new ErliResponsibleProducer
+                        {
                         ExternalId = offer.ResponsibleProducer,
                         Source = "allegro"
+                    }
                     }
                     : null
             };

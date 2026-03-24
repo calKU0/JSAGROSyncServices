@@ -226,7 +226,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             await connection.ExecuteAsync(
                 "RolmarProducts_UpdateAllegroId",
                 new { AllegroId = allegroProductId, ProductId = productId, CategoryId = allegroCategoryId },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure, commandTimeout: 900);
         }
 
         public async Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct)
@@ -240,7 +240,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                     ProductCode = productCode,
                     Stock = stock
                 },
-                commandType: CommandType.StoredProcedure
+                commandType: CommandType.StoredProcedure, commandTimeout: 900
             );
 
             return affectedRows > 0;

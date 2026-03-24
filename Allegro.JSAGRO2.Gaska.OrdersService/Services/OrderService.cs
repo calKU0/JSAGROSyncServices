@@ -47,7 +47,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
 
             try
             {
-                var shippingRates = await _allegroApiClient.GetAsync<ShippingRatesReponse>("/sale/shipping-rates", ct);
+                var shippingRates = await _allegroApiClient.GetAsync<AllegroShippingRatesResponse>("/sale/shipping-rates", ct);
                 var deliveryNames = (_appSettings.AllegroDeliveryNames ?? string.Empty)
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -384,7 +384,7 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
             if (order.Items.Any(item => item.ShippingRate is not null && item.ShippingRate.Contains("JAG API")))
                 sendToClient = true;
 
-            string deliveryMethod = sendToClient ? NormalizeCourierName(order.DeliveryMethodName) : NormalizeCourierName("FEDEX");
+            string deliveryMethod = sendToClient ? NormalizeCourierName(order.DeliveryMethodName) : NormalizeCourierName("GLS");
 
             if (DateTime.Now.DayOfWeek != DayOfWeek.Saturday && DateTime.Now.DayOfWeek != DayOfWeek.Sunday && !(order.PaymentType == AllegroPaymentType.CASH_ON_DELIVERY && sendToClient))
             {
@@ -393,6 +393,10 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
                 // Check if we need to switch courier
                 deliveryMethod = deliveryMethod switch
                 {
+                    var name when name.Contains("GLS", StringComparison.OrdinalIgnoreCase)
+                        && nowHour >= _courierSettings.GlsFinalOrderHour
+                        => NormalizeCourierName(GetNextAvailableCourier("GLS", nowHour)),
+
                     var name when name.Contains("FEDEX", StringComparison.OrdinalIgnoreCase)
                         && nowHour >= _courierSettings.FedexFinalOrderHour
                         => NormalizeCourierName(GetNextAvailableCourier("FEDEX", nowHour)),
@@ -400,10 +404,6 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Services
                     var name when name.Contains("DPD", StringComparison.OrdinalIgnoreCase)
                         && nowHour >= _courierSettings.DpdFinalOrderHour
                         => NormalizeCourierName(GetNextAvailableCourier("DPD", nowHour)),
-
-                    var name when name.Contains("GLS", StringComparison.OrdinalIgnoreCase)
-                        && nowHour >= _courierSettings.GlsFinalOrderHour
-                        => NormalizeCourierName(GetNextAvailableCourier("GLS", nowHour)),
 
                     _ => NormalizeCourierName(deliveryMethod)
                 };

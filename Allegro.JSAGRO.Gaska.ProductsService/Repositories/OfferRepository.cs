@@ -220,7 +220,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetAll",
                 new { Account = ServiceConstants.Account },
-                commandType: CommandType.StoredProcedure)).ToList();
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersWithoutDetails(CancellationToken ct)
@@ -228,7 +229,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             using var connection = _context.CreateConnection();
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetWithoutDetails",
-                commandType: CommandType.StoredProcedure)).ToList();
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)

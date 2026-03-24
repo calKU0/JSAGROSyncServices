@@ -2,6 +2,7 @@ using Allegro.JSAGRO.Erli.ProductsService;
 using Allegro.JSAGRO.Erli.ProductsService.Repositories;
 using Allegro.JSAGRO.Erli.ProductsService.Services;
 using Allegro.JSAGRO.Erli.ProductsService.Settings;
+using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Infrastructure.Data;
 using Serilog;
 
@@ -39,6 +40,9 @@ var host = Host.CreateDefaultBuilder(args)
         var connectionString = configuration.GetConnectionString("MyDbContext");
         services.AddSingleton(sp => new DapperContext(connectionString));
         services.AddScoped<OfferRepository>();
+        services.AddScoped<IAllegroResponsibleProducerRepository, AllegroResponsibleProducerRepository>();
+        services.AddScoped<IAllegroResponsiblePersonRepository, AllegroResponsiblePersonRepository>();
+        services.AddScoped<IAllegroDeliveryMethodRepository, AllegroDeliveryMethodRepository>();
         services.AddScoped<ErliClient>();
         services.AddScoped<ErliService>();
 
