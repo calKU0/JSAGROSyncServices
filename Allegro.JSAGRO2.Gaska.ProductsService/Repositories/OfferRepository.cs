@@ -104,99 +104,27 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
 
             try
             {
-                var allegroOffers = offers.Select(o =>
-                {
-                    decimal price = 0;
-                    decimal.TryParse(o?.SellingMode?.Price?.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out price);
-
-                    int categoryId = 0;
-                    int.TryParse(o?.Category?.Id, out categoryId);
-
-                    return new
+                var productIdUpdates = offers
+                    .Select(o => new
                     {
-                        Id = o.Id,
+                        OfferId = o.Id,
+                        ProductId = o?.ProductSet?.FirstOrDefault()?.Product?.Id,
+                    })
+                    .Where(x => !string.IsNullOrWhiteSpace(x.OfferId) && !string.IsNullOrWhiteSpace(x.ProductId))
+                    .GroupBy(x => new { x.OfferId, x.ProductId })
+                    .Select(g => new
+                    {
+                        g.Key.OfferId,
+                        g.Key.ProductId,
                         Account = ServiceConstants.Account,
-                        Name = o.Name ?? string.Empty,
-                        CategoryId = categoryId,
-                        Price = price,
-                        Stock = o?.Stock?.Available ?? 0,
-                        Status = o?.Publication?.Status ?? "UNKNOWN",
-                        DeliveryName = o?.Delivery?.ShippingRates?.Id,
-                        ExternalId = o?.External?.Id,
-                        Weight = 0,
-                        Images = o?.Images != null ? System.Text.Json.JsonSerializer.Serialize(o.Images) : null,
-                        StartingAt = o?.Publication?.StartingAt ?? new DateTime(1753, 1, 1),
-                        HandlingTime = o?.Delivery?.HandlingTime,
-                        ResponsiblePerson = o?.ProductSet?.FirstOrDefault()?.ResponsiblePerson?.Id ?? string.Empty,
-                        ResponsibleProducer = o?.ProductSet?.FirstOrDefault()?.ResponsibleProducer?.Id ?? string.Empty
-                    };
-                }).ToList();
+                    })
+                    .ToList();
 
-                await connection.ExecuteAsync(
-                    "AllegroOffers_UpsertDetails",
-                    allegroOffers,
-                    transaction,
-                    commandType: CommandType.StoredProcedure,
-                    commandTimeout: 900);
-
-                // ---- Descriptions ----
-                var descriptions = new List<object>();
-                foreach (var o in offers)
-                {
-                    int sectionIndex = 1;
-                    if (o.Description?.Sections != null)
-                    {
-                        foreach (var section in o.Description.Sections)
-                        {
-                            foreach (var item in section.Items)
-                            {
-                                descriptions.Add(new
-                                {
-                                    OfferId = o.Id,
-                                    Type = item.Type,
-                                    Content = item.Type == "TEXT" ? item.Content : item.Url,
-                                    SectionId = sectionIndex
-                                });
-                            }
-                            sectionIndex++;
-                        }
-                    }
-                }
-
-                if (descriptions.Any())
+                if (productIdUpdates.Any())
                 {
                     await connection.ExecuteAsync(
-                        "AllegroOfferDescriptions_Insert",
-                        descriptions,
-                        transaction,
-                        commandType: CommandType.StoredProcedure);
-                }
-
-                // ---- Attributes ----
-                var attributes = new List<object>();
-                foreach (var o in offers)
-                {
-                    if (o.Parameters != null)
-                    {
-                        foreach (var param in o.Parameters)
-                        {
-                            attributes.Add(new
-                            {
-                                OfferId = o.Id,
-                                AttributeId = param.Id,
-                                Type = param.ValuesIds?.Any() == true ? "dictionary" : "string",
-                                ValuesJson = System.Text.Json.JsonSerializer.Serialize(param.Values ?? new List<string>()),
-                                ValuesIdsJson = System.Text.Json.JsonSerializer.Serialize(param.ValuesIds ?? new List<string>())
-                            });
-                        }
-                    }
-                }
-
-                if (attributes.Any())
-                {
-                    await connection.ExecuteAsync(
-                        "AllegroOfferAttributes_Insert",
-                        attributes,
+                        "AllegroOffers_UpsertAllegroId",
+                        productIdUpdates,
                         transaction,
                         commandType: CommandType.StoredProcedure,
                         commandTimeout: 900);
@@ -228,6 +156,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
             using var connection = _context.CreateConnection();
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetWithoutDetails",
+                new { Account = ServiceConstants.Account },
                 commandType: CommandType.StoredProcedure)).ToList();
         }
 
@@ -324,6 +253,18 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
             // akceptuj zarówno kropkę, jak i przecinek przy wprowadzaniu; zapisuj zawsze w formacie InvariantCulture
             return decimal.TryParse(input, NumberStyles.Any, CultureInfo.InvariantCulture, out result) ||
             decimal.TryParse(input, NumberStyles.Any, CultureInfo.CurrentCulture, out result);
+        }
+
+        public async Task UpdateProductId(string offerId, string? value, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            await connection.ExecuteAsync(
+                "AllegroOffers_UpsertAllegroId",
+                new { OfferId = offerId, ProductId = value, Account = ServiceConstants.Account },
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900);
         }
     }
 }

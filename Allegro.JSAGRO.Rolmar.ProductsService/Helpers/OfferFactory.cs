@@ -119,7 +119,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                 Publication = new Publication
                 {
                     Status = offer.Product.InStock >= appSettings.MinProductStock ? "ACTIVE" : "ENDED",
-                    StartingAt = null,
+                    StartingAt = offer.Status == "INACTIVE" ? DateTime.UtcNow : null
                 },
                 Delivery = new Delivery
                 {

@@ -6,7 +6,7 @@ namespace JSAGROSyncServices.Contracts.Models
     {
         public string Id { get; set; }
         public AllegroAccount Account { get; set; }
-        public int? ProductId { get; set; }
+        public string? ProductId { get; set; }
         public string ExternalId { get; set; }
         public string Name { get; set; }
         public int CategoryId { get; set; }

@@ -139,6 +139,32 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 900);
 
+                var productIdUpdates = offers
+                    .Select(o => new
+                    {
+                        OfferId = o.Id,
+                        ProductId = o?.ProductSet?.FirstOrDefault()?.Product?.Id,
+                    })
+                    .Where(x => !string.IsNullOrWhiteSpace(x.OfferId) && !string.IsNullOrWhiteSpace(x.ProductId))
+                    .GroupBy(x => new { x.OfferId, x.ProductId })
+                    .Select(g => new
+                    {
+                        g.Key.OfferId,
+                        g.Key.ProductId,
+                        Account = ServiceConstants.Account,
+                    })
+                    .ToList();
+
+                if (productIdUpdates.Any())
+                {
+                    await connection.ExecuteAsync(
+                        "AllegroOffers_UpsertAllegroId",
+                        productIdUpdates,
+                        transaction,
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900);
+                }
+
                 // ---- Descriptions ----
                 var descriptions = new List<object>();
                 foreach (var o in offers)
@@ -202,6 +228,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                         commandType: CommandType.StoredProcedure);
                 }
 
+
                 transaction.Commit();
                 _logger.LogInformation("Upsert of offer details completed");
             }
@@ -229,6 +256,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             using var connection = _context.CreateConnection();
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetWithoutDetails",
+                new { Account = ServiceConstants.Account },
                 commandType: CommandType.StoredProcedure,
                 commandTimeout: 900)).ToList();
         }
@@ -326,6 +354,18 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             // akceptuj zarówno kropkę, jak i przecinek przy wprowadzaniu; zapisuj zawsze w formacie InvariantCulture
             return decimal.TryParse(input, NumberStyles.Any, CultureInfo.InvariantCulture, out result) ||
             decimal.TryParse(input, NumberStyles.Any, CultureInfo.CurrentCulture, out result);
+        }
+
+        public async Task UpdateProductId(string offerId, string? value, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            await connection.ExecuteAsync(
+                "AllegroOffers_UpsertAllegroId",
+                new { OfferId = offerId, ProductId = value, Account = ServiceConstants.Account },
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900);
         }
     }
 }

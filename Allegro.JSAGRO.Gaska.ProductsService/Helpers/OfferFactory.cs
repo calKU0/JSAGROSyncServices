@@ -53,7 +53,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                 appSettings,
                 priceSettings,
                 publicationStatus: product.InStock >= appSettings.MinProductStock && product.PriceNet >= appSettings.MinProductPriceNet ? "ACTIVE" : "ENDED",
-                startingAt: null,
+                startingAt: offer.Status == "INACTIVE" ? DateTime.UtcNow : null,
                 categoryId: null,          // nie nadpisujemy kategorii przy patchu
                 name: null,                // nie nadpisujemy nazwy przy patchu
                 stockOverride: Convert.ToInt32(Math.Floor(product.InStock)),
@@ -164,15 +164,19 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             int quantity,
             AllegroSettings allegroSettings,
             bool includeProductParameters = true,
+            string? offerProductId = null,
             string fallbackCat = "319123")
         {
+            var hasProductId = !string.IsNullOrWhiteSpace(offerProductId);
             var categoryId = product.DefaultAllegroCategory.ToString();
             var productObject = new ProductObject
             {
                 Name = product.Name,
-                Category = new Category { Id = categoryId == "0" ? fallbackCat : categoryId },
+                Id = hasProductId ? offerProductId : null,
+                IdType = null,
+                Category = hasProductId ? null : new Category { Id = categoryId == "0" ? fallbackCat : categoryId },
                 Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
-                Parameters = includeProductParameters ? BuildParameters(product.Parameters, isForProduct: true) : null,
+                Parameters = includeProductParameters && !hasProductId ? BuildParameters(product.Parameters, isForProduct: true) : null,
             };
 
             return new List<ProductSet>

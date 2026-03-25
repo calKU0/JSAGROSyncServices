@@ -75,7 +75,7 @@ public class Worker : BackgroundService
             }
 
             await MeasureStepAsync("Allegro offers sync", () => offerService.SyncAllegroOffers());
-            //await MeasureStepAsync("Allegro offers details", () => offerService.SyncAllegroOffersDetails());
+            await MeasureStepAsync("Allegro offers details", () => offerService.SyncAllegroOffersDetails());
             await MeasureStepAsync("Allegro categories update", () => categoryService.UpdateAllegroCategories());
             await MeasureStepAsync("Category parameters fetch", () => categoryService.FetchAndSaveCategoryParameters());
             await MeasureStepAsync("Product parameters update", () => parametersService.UpdateParameters());

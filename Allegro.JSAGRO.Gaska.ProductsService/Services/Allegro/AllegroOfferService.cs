@@ -94,10 +94,10 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                         offer.Delivery.ShippingRates.Name = name;
                     }
 
-                    if (offer.External?.Id != null && offer.Publication.Status != "ENDED")
-                    {
-                        await _productRepo.UpdateProductAllegroCategory(offer.External.Id, offer.Category.Id, ct);
-                    }
+                    //if (offer.External?.Id != null && offer.Publication.Status != "ENDED")
+                    //{
+                    //    await _productRepo.UpdateProductAllegroCategory(offer.External.Id, offer.Category.Id, ct);
+                    //}
                 }
 
                 _logger.LogInformation("Attempting to update database offers.");
@@ -133,8 +133,11 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                         var detailedOffer = await _apiClient.GetAsync<AllegroOfferDetails.Root>(
                             $"/sale/product-offers/{offer.Id}", token);
 
-                        if (detailedOffer == null)
+                        if (detailedOffer is null || offer is null)
                             return;
+
+                        detailedOffer.Delivery ??= new AllegroOfferDetails.Delivery();
+                        detailedOffer.Delivery.ShippingRates ??= new AllegroOfferDetails.ShippingRates();
 
                         detailedOffer.Delivery.ShippingRates.Id = offer.DeliveryName;
 
@@ -275,7 +278,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
 
                         var body = await response.Content.ReadAsStringAsync(token);
 
-                        await LogAllegroResponse(offer.Product, response, body, true);
+                        await LogAllegroResponse(offer.Product, response, body, true, offer.Id);
                     }
                     catch (Exception ex)
                     {
@@ -335,7 +338,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             }
         }
 
-        private async Task LogAllegroResponse(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false)
+        private async Task LogAllegroResponse(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false, string? offerId = null)
         {
             var action = isUpdate ? "updated" : "created";
 
@@ -360,7 +363,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                 case 422:
                 case 433:
                     await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
-                    await LogAllegroErrors(product, response, body, isUpdate);
+                    await LogAllegroErrors(product, response, body, isUpdate, offerId);
                     break;
 
                 case 401:
@@ -386,7 +389,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
             }
         }
 
-        private async Task LogAllegroErrors(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false)
+        private async Task LogAllegroErrors(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false, string? offerId = null)
         {
             var action = isUpdate ? "updating" : "creating";
             try
@@ -470,6 +473,12 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                         {
                             _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
                             await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
+                        }
+                        else if (err.Code == "MultipleProductsFoundException")
+                        {
+                            _logger.LogInformation("Updating producitId to null in offer.");
+                            if (!string.IsNullOrEmpty(offerId))
+                                await _offerRepo.UpdateProductId(offerId, null, CancellationToken.None);
                         }
                         else
                         {

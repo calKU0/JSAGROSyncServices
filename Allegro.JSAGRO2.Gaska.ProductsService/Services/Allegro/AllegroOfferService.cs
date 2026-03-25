@@ -93,11 +93,6 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                     {
                         offer.Delivery.ShippingRates.Name = name;
                     }
-
-                    if (offer.External?.Id != null && offer.Publication.Status != "ENDED")
-                    {
-                        await _productRepo.UpdateProductAllegroCategory(offer.External.Id, offer.Category.Id, ct);
-                    }
                 }
 
                 _logger.LogInformation("Attempting to update database offers.");
@@ -335,7 +330,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
             }
         }
 
-        private async Task LogAllegroResponse(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false)
+        private async Task LogAllegroResponse(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false, string? offerId = null)
         {
             var action = isUpdate ? "updated" : "created";
 
@@ -360,7 +355,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                 case 422:
                 case 433:
                     await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
-                    await LogAllegroErrors(product, response, body, isUpdate);
+                    await LogAllegroErrors(product, response, body, isUpdate, offerId);
                     break;
 
                 case 401:
@@ -386,7 +381,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
             }
         }
 
-        private async Task LogAllegroErrors(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false)
+        private async Task LogAllegroErrors(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false, string? offerId = null)
         {
             var action = isUpdate ? "updating" : "creating";
             try
@@ -471,6 +466,12 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                             _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
                             await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
                         }
+                        else if (err.Code == "MultipleProductsFoundException")
+                        {
+                            _logger.LogInformation("Updating producitId to null in offer.");
+                            if (!string.IsNullOrEmpty(offerId))
+                                await _offerRepo.UpdateProductId(offerId, null, CancellationToken.None);
+                        }
                         else
                         {
                             _logger.LogError("Offer {Action} error for {ProductCode}: Code={Code}, Message={Message}, UserMessage={UserMessage}, Path={Path}, Details={Details}",
@@ -480,15 +481,15 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                 }
                 else
                 {
-                    if (body.Contains(@"The type of this ""Compatible with"" "))
-                    {
-                        await _productRepo.UpdateCompatibilitySet(product.Id, false, CancellationToken.None);
-                    }
                     _logger.LogError($"Offer {action} error {response.StatusCode} for {product.Code}: {body}");
                 }
             }
             catch (Exception exParse)
             {
+                if (body.Contains(@"The type of this ""Compatible with"" "))
+                {
+                    await _productRepo.UpdateCompatibilitySet(product.Id, false, CancellationToken.None);
+                }
                 _logger.LogError(exParse, $"Failed to parse Allegro error ({response.StatusCode}) while {action} offer for {product.Code}. Body={body}");
             }
         }

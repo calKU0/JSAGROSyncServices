@@ -10,7 +10,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
             public string Id { get; set; }
             public string Name { get; set; }
             public Category Category { get; set; }
-            public Delivery Delivery { get; set; }
+            public Delivery? Delivery { get; set; }
             public Publication Publication { get; set; }
             public AdditionalMarketplaces AdditionalMarketplaces { get; set; }
             public B2b B2b { get; set; }
@@ -96,7 +96,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class Delivery
         {
             public string HandlingTime { get; set; }
-            public ShippingRates ShippingRates { get; set; }
+            public ShippingRates? ShippingRates { get; set; }
             public string AdditionalInfo { get; set; }
             public DateTime? ShipmentDate { get; set; }
         }

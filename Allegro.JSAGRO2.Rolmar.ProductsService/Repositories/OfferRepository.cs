@@ -190,5 +190,10 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
         {
             throw new NotImplementedException();
         }
+
+        public Task UpdateProductId(string offerId, string? value, CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

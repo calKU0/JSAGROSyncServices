@@ -96,7 +96,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
             {
                 ["stan"] = _ => "Nowy",
                 ["waga produktu z opakowaniem jednostkowym"] = p => p.Weight.ToString(), // bez ?. dla float
-                ["numer katalogowy części"] = p => "JS" + p.Code,
+                ["numer katalogowy części"] = p => p.Code,
                 ["typ maszyny"] = _ => "Inny",
                 ["rodzaj skrzyni"] = _ => "Brak informacji",
                 ["typ samochodu"] = _ => "Niezdefiniowany",

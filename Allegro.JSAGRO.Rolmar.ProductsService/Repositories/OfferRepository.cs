@@ -307,5 +307,10 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
                 throw;
             }
         }
+
+        public Task UpdateProductId(string offerId, string? value, CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

@@ -143,6 +143,12 @@
     <None Update="Migrations\20260225_01_AlterUpdateDefaultCategoryProcedure.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Migrations\20260325_02_AddRolmarUpsertAllegroId.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Migrations\20260325_03_ChangeProductIdColumnType.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Migrations\20261102_01_ChangeRolmarProducts_GetByCodeSp.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -153,6 +159,9 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="Migrations\20260324_02_AddAllegroResponsibleAndDeliveryMethodStoredProcedures.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Migrations\20260325_01_AddRolmarProductsUpsertAllegroIdByCodeSp.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

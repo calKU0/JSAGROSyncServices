@@ -14,5 +14,6 @@ namespace JSAGROSyncServices.Contracts.Interfaces
         Task UpsertOfferDetails(List<AllegroOfferDetails.Root> offers, CancellationToken ct);
 
         Task DeleteOffer(int productId, CancellationToken ct);
+        Task UpdateProductId(string offerId, string? value, CancellationToken ct);
     }
 }
