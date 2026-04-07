@@ -28,6 +28,11 @@ namespace Allegro.JSAGRO2.Gaska.OrdersService.Repositories
             var dt = new DataTable();
             dt.Columns.Add("ShippingRate", typeof(string));
 
+            foreach (var rate in shippingRates)
+            {
+                dt.Rows.Add(rate);
+            }
+
             var orders = await conn.QueryAsync<AllegroOrder, AllegroOrderItem, AllegroOrder>(
                 storedProcedure,
                 (order, item) =>

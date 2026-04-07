@@ -149,7 +149,13 @@
     <None Update="Migrations\20260325_03_ChangeProductIdColumnType.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Migrations\20260407_02_OptimizeProductStoredProcedures.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Migrations\20261102_01_ChangeRolmarProducts_GetByCodeSp.sql">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Migrations\20260407_01_FixDeleteOfferProcedure.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="Migrations\20261202_01_FixGetOffersToUpdateStoredProcedure.sql">

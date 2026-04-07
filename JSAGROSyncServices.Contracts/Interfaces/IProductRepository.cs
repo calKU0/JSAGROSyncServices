@@ -6,6 +6,7 @@ namespace JSAGROSyncServices.Contracts.Interfaces
     {
         Task<List<RolmarProduct>> GetProductsForDetailUpdate(int limit, CancellationToken ct);
         Task<bool> UpsertProductAsync(RolmarProduct product, CancellationToken ct);
+        Task UpsertProductsBatchAsync(List<RolmarProduct> product, CancellationToken ct);
         Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct);
         Task<bool> DeleteProduct(int productId, CancellationToken ct);
 

@@ -15,6 +15,8 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
 {
     public class RolmarSyncService : IRolmarSyncService
     {
+        private const int UpsertBatchSize = 1000;
+
         private readonly HttpClient _httpClient;
         private readonly ILogger<RolmarSyncService> _logger;
         private readonly IProductRepository _productRepository;
@@ -76,33 +78,26 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
                     ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToList() ?? new List<string>();
 
-                foreach (var product in rolmarResponse.Products)
+                var mappedProducts = rolmarResponse.Products
+                    .Where(product => product.Categories != null &&
+                        product.Categories.Any(c =>
+                            allowedCategories.Any(ac =>
+                                c.StartsWith(ac, StringComparison.OrdinalIgnoreCase))))
+                    .Select(MapToRolmarProduct)
+                    .ToList();
+
+                foreach (var batch in mappedProducts.Chunk(UpsertBatchSize))
                 {
                     try
                     {
-                        if (product.Categories == null ||
-                            !product.Categories.Any(c =>
-                                allowedCategories.Any(ac =>
-                                    c.StartsWith(ac, StringComparison.OrdinalIgnoreCase))))
-                            continue;
-
-                        var mappedProduct = MapToRolmarProduct(product);
-                        bool success = await _productRepository.UpsertProductAsync(mappedProduct, ct);
-
-                        if (success)
-                        {
-                            upsertedCount++;
-                        }
-                        else
-                        {
-                            failedCount++;
-                            _logger.LogWarning("Failed to upsert product with Code: {Code}", product.ProductIndex);
-                        }
+                        var batchList = batch.ToList();
+                        await _productRepository.UpsertProductsBatchAsync(batchList, ct);
+                        upsertedCount += batchList.Count;
                     }
                     catch (Exception ex)
                     {
-                        failedCount++;
-                        _logger.LogError(ex, "Error occurred while upserting product with Code: {Code}", product.ProductIndex);
+                        failedCount += batch.Length;
+                        _logger.LogError(ex, "Error occurred while batch upserting Rolmar products.");
                     }
                 }
 

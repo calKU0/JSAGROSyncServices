@@ -65,7 +65,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
                     product.Code,
                     product.SupplierName,
                     rootBrands,
-                    substitues?.Split(',').ToList()
+                    substitues?.Split(',').Distinct().ToList()
                 );
 
                 var productId = await connection.ExecuteScalarAsync<int>(
@@ -494,6 +494,20 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
                     name = $"{name} a".Trim();
                 }
 
+                if (newWords.Length < 13)
+                {
+                    var suffix = (crossNumbers?.LastOrDefault() ?? code)?.Trim();
+                    var hasSuffixAlready = !string.IsNullOrWhiteSpace(suffix) &&
+                        name.Contains(suffix, StringComparison.OrdinalIgnoreCase);
+                    var hasJagAlready = name.Contains(" JAG", StringComparison.OrdinalIgnoreCase) ||
+                        name.EndsWith("JAG", StringComparison.OrdinalIgnoreCase);
+
+                    if (!hasSuffixAlready && !hasJagAlready && !string.IsNullOrWhiteSpace(suffix))
+                    {
+                        name = $"{name} {suffix} JAG".Trim();
+                    }
+                }
+
                 // 5. If longer than 75 chars → remove last words until < 75
                 while (name.Length > 75)
                 {
@@ -543,6 +557,11 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
         }
 
         public Task UpdateProductAllegroId(int productId, string allegroProductId, string allegroCategoryId, CancellationToken ct)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task UpsertProductsBatchAsync(List<RolmarProduct> product, CancellationToken ct)
         {
             throw new NotImplementedException();
         }

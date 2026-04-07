@@ -51,6 +51,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
             {
                 decimal.TryParse(o.SellingMode?.Price?.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out var price);
                 int.TryParse(o.Category?.Id, out var categoryId);
+                var externalId = string.IsNullOrWhiteSpace(o.External?.Id) ? null : o.External.Id.Trim();
 
                 table.Rows.Add(
                     o.Id,
@@ -65,7 +66,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
                     o.Publication?.Status ?? string.Empty,
                     o.Delivery?.ShippingRates?.Name ?? (object)DBNull.Value,
                     o.Publication?.StartingAt ?? new DateTime(1753, 1, 1),
-                    o.External?.Id ?? (object)DBNull.Value
+                    externalId ?? (object)DBNull.Value
                 );
             }
 
@@ -148,7 +149,8 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetAll",
                 new { Account = ServiceConstants.Account },
-                commandType: CommandType.StoredProcedure)).ToList();
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersWithoutDetails(CancellationToken ct)
@@ -157,7 +159,8 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
             return (await connection.QueryAsync<AllegroOffer>(
                 "AllegroOffers_GetWithoutDetails",
                 new { Account = ServiceConstants.Account },
-                commandType: CommandType.StoredProcedure)).ToList();
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900)).ToList();
         }
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
@@ -229,23 +232,18 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
             return offers;
         }
 
-        public async Task DeleteOffer(int productId, CancellationToken ct)
+        public async Task DeleteOffer(string offerId, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
             connection.Open();
 
-            var code = await connection.ExecuteScalarAsync<string>(
-                "AllegroOffers_DeleteByProductId",
-                new { ProductId = productId },
+            await connection.ExecuteScalarAsync<string>(
+                "AllegroOffers_Delete",
+                new { OfferId = offerId },
                 commandType: CommandType.StoredProcedure);
 
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                _logger.LogWarning("Product with Id {ProductId} not found. Cannot delete offer.", productId);
-                return;
-            }
 
-            _logger.LogInformation("Deleted Allegro offer for product {Code}.", code);
+            _logger.LogInformation("Deleted Allegro offer {Id}.", offerId);
         }
 
         private static bool TryParseDecimal(string input, out decimal result)

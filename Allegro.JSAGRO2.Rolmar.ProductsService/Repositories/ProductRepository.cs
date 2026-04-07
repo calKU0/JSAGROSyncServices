@@ -20,6 +20,127 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
             _deliveries = options.Value.Deliveries;
         }
 
+        public async Task UpsertProductsBatchAsync(List<RolmarProduct> products, CancellationToken ct)
+        {
+            if (products == null || products.Count == 0)
+                return;
+
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            var table = new DataTable();
+            table.Columns.Add("Code", typeof(string));
+            table.Columns.Add("Name", typeof(string));
+            table.Columns.Add("SupplierLogo", typeof(string));
+            table.Columns.Add("SupplierName", typeof(string));
+            table.Columns.Add("Description", typeof(string));
+            table.Columns.Add("CustomerCode", typeof(string));
+            table.Columns.Add("Ean", typeof(string));
+            table.Columns.Add("InStock", typeof(double));
+            table.Columns.Add("Weight", typeof(double));
+            table.Columns.Add("Fits", typeof(string));
+            table.Columns.Add("Unit", typeof(string));
+            table.Columns.Add("CurrencyPrice", typeof(string));
+            table.Columns.Add("Substitutes", typeof(string));
+            table.Columns.Add("IntegrationCompany", typeof(int));
+            table.Columns.Add("IntegrationId", typeof(int));
+            table.Columns.Add("DeliveryType", typeof(int));
+            table.Columns.Add("PriceNet", typeof(decimal));
+            table.Columns.Add("PriceGross", typeof(decimal));
+            table.Columns.Add("Package", typeof(decimal));
+
+            foreach (var product in products)
+            {
+                table.Rows.Add(
+                    product.Code,
+                    product.Name ?? string.Empty,
+                    DBNull.Value,
+                    DBNull.Value,
+                    product.Description ?? (object)DBNull.Value,
+                    DBNull.Value,
+                    product.Ean ?? (object)DBNull.Value,
+                    Convert.ToDouble(product.InStock),
+                    Convert.ToDouble(product.Weight),
+                    product.Fits ?? (object)DBNull.Value,
+                    product.Unit ?? (object)DBNull.Value,
+                    product.CurrencyPrice ?? (object)DBNull.Value,
+                    product.Substitutes ?? (object)DBNull.Value,
+                    (int)ServiceConstants.Company,
+                    product.IntegrationId,
+                    product.DeliveryType,
+                    product.PriceNet,
+                    product.PriceGross,
+                    product.Package);
+            }
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "RolmarProducts_UpsertBatch",
+                    new { Products = table.AsTableValuedParameter("dbo.RolmarProductUpsertType") },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct));
+
+            var codes = products
+                .Select(p => p.Code)
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var idMap = (await connection.QueryAsync<(int Id, string Code)>(
+                "SELECT Id, Code FROM RolmarProducts WHERE IntegrationCompany = @IntegrationCompany AND Code IN @Codes",
+                new { IntegrationCompany = ServiceConstants.Company, Codes = codes })).ToDictionary(x => x.Code, x => x.Id, StringComparer.OrdinalIgnoreCase);
+
+            using var transaction = connection.BeginTransaction();
+            try
+            {
+                foreach (var product in products)
+                {
+                    if (!idMap.TryGetValue(product.Code, out var productId))
+                        continue;
+
+                    var specsTable = new DataTable();
+                    specsTable.Columns.Add("Name", typeof(string));
+                    specsTable.Columns.Add("Value", typeof(string));
+                    specsTable.Columns.Add("UnitName", typeof(string));
+
+                    foreach (var s in product.Specifications ?? Enumerable.Empty<ProductSpecification>())
+                    {
+                        specsTable.Rows.Add(s.Name ?? string.Empty, s.Value ?? (object)DBNull.Value, s.UnitName ?? (object)DBNull.Value);
+                    }
+
+                    await connection.ExecuteAsync(
+                        "ProductSpecifications_ReplaceByProductId",
+                        new { ProductId = productId, Items = specsTable.AsTableValuedParameter("dbo.ProductSpecificationType") },
+                        transaction,
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900);
+
+                    var catTable = new DataTable();
+                    catTable.Columns.Add("Name", typeof(string));
+
+                    foreach (var c in product.Categories ?? Enumerable.Empty<RolmarCategory>())
+                    {
+                        catTable.Rows.Add(c.Name ?? string.Empty);
+                    }
+
+                    await connection.ExecuteAsync(
+                        "RolmarCategory_ReplaceByProductId",
+                        new { ProductId = productId, Items = catTable.AsTableValuedParameter("dbo.RolmarCategoryType") },
+                        transaction,
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900);
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+        }
+
         public Task<bool> DeleteProduct(int productId, CancellationToken ct)
         {
             throw new NotImplementedException();

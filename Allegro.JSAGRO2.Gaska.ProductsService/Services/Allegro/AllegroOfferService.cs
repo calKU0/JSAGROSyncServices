@@ -266,11 +266,26 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                             offer.Product.AllegroImages = images;
                         }
                         var offerDto = OfferFactory.PatchOffer(offer, allegroCategories, _appSettings, _allegroSettings, _priceSettings);
+
+                        if (offerDto.Publication?.Status == "ENDED")
+                        {
+                            var inStockUnits = Convert.ToInt32(Math.Floor(offer.Product.InStock));
+                            _logger.LogInformation(
+                                "Offer {OfferId} for {Code} marked as ENDED. InStock={InStock}, InStockUnits={InStockUnits}, MinStock={MinStock}, PriceNet={PriceNet}, MinPriceNet={MinPriceNet}",
+                                offer.Id,
+                                offer.Product.Code,
+                                offer.Product.InStock,
+                                inStockUnits,
+                                _appSettings.MinProductStock,
+                                offer.Product.PriceNet,
+                                _appSettings.MinProductPriceNet);
+                        }
+
                         var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, offerDto, token);
 
                         var body = await response.Content.ReadAsStringAsync(token);
 
-                        await LogAllegroResponse(offer.Product, response, body, true);
+                        await LogAllegroResponse(offer.Product, response, body, true, offer.Id);
                     }
                     catch (Exception ex)
                     {
@@ -371,7 +386,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                 case 404:
                     await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
-                    await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
+                    await _offerRepo.DeleteOffer(offerId, CancellationToken.None);
                     break;
 
                 default:
@@ -464,7 +479,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                         else if (err.Code == "OfferNotFoundException" && response.StatusCode == System.Net.HttpStatusCode.NotFound)
                         {
                             _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
-                            await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
+                            await _offerRepo.DeleteOffer(offerId, CancellationToken.None);
                         }
                         else if (err.Code == "MultipleProductsFoundException")
                         {

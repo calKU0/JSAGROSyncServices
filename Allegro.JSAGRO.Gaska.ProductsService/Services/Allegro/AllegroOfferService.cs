@@ -379,7 +379,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                 case 404:
                     await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
-                    await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
+                    await _offerRepo.DeleteOffer(offerId, CancellationToken.None);
                     break;
 
                 default:
@@ -472,7 +472,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.Allegro
                         else if (err.Code == "OfferNotFoundException" && response.StatusCode == System.Net.HttpStatusCode.NotFound)
                         {
                             _logger.LogWarning("Offer not found in Allegro. Deleting from database.");
-                            await _offerRepo.DeleteOffer(product.Id, CancellationToken.None);
+                            await _offerRepo.DeleteOffer(offerId, CancellationToken.None);
                         }
                         else if (err.Code == "MultipleProductsFoundException")
                         {

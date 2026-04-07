@@ -1,5 +1,6 @@
 ﻿using Allegro.JSAGRO.Gaska.ProductsService.Constants;
 using Allegro.JSAGRO.Gaska.ProductsService.DTOs;
+using Allegro.JSAGRO.Gaska.ProductsService.Repositories;
 using Allegro.JSAGRO.Gaska.ProductsService.Services.Gaska.Interfaces;
 using Allegro.JSAGRO.Gaska.ProductsService.Settings;
 using JSAGROSyncServices.Contracts.Interfaces;
@@ -14,6 +15,9 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
 {
     public class GaskaApiService : IGaskaApiService
     {
+        private const int UpsertBatchSize = 1000;
+        private const int UpsertBatchParallelism = 8;
+
         private readonly ILogger<GaskaApiService> _logger;
         private readonly IProductRepository _productRepo;
         private readonly HttpClient _http;
@@ -46,7 +50,6 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
         public async Task SyncProducts(CancellationToken ct = default)
         {
             HashSet<int> fetchedProductIds = new HashSet<int>();
-            bool hasErrors = false;
 
             foreach (var categoryId in _categoriesIds)
             {
@@ -63,7 +66,6 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
                         if (!response.IsSuccessStatusCode)
                         {
                             _logger.LogError($"API error while fetching page {page} for category {categoryId}: {response.StatusCode}");
-                            hasErrors = true;
                             continue;
                         }
 
@@ -79,16 +81,18 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
                         try
                         {
                             fetchedProductIds.UnionWith(apiResponse.Products.Select(p => p.Id));
-                            foreach (var product in apiResponse.Products)
-                            {
-                                await _productRepo.UpsertProductAsync(MapToRolmarProduct(product), ct);
-                            }
+
+                            var mappedProducts = apiResponse.Products
+                                .Select(MapToRolmarProduct)
+                                .ToList();
+
+                            await UpsertProductsInBatchesAsync(mappedProducts, ct);
+
                             _logger.LogInformation($"Successfully fetched and updated {apiResponse.Products.Count} products for category {categoryId}.");
                         }
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, $"Error while saving products for category {categoryId}");
-                            hasErrors = true;
                         }
 
                         if (apiResponse.Products.Count < _apiSettings.Value.ProductsPerPage)
@@ -100,7 +104,6 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, $"Error while getting products from page {page} for category {categoryId}.");
-                        hasErrors = true;
                         break;
                     }
                     finally
@@ -110,22 +113,33 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Services.GaskaApiService
                     }
                 }
             }
+        }
 
-            if (hasErrors)
-            {
-                _logger.LogWarning("Errors occurred during product sync. Archiving skipped to avoid data inconsistency.");
+        private async Task UpsertProductsInBatchesAsync(List<RolmarProduct> products, CancellationToken ct)
+        {
+            if (products == null || products.Count == 0)
                 return;
-            }
 
-            //try
-            //{
-            //    var archivedCount = await _productRepo.ArchiveProductsNotIn(fetchedProductIds, ct);
-            //    _logger.LogInformation($"Archived {archivedCount} products.");
-            //}
-            //catch (Exception ex)
-            //{
-            //    _logger.LogError(ex, "An error occurred while checking for products to archive.");
-            //}
+            var batches = products
+                .Select((product, index) => new { product, index })
+                .GroupBy(x => x.index / UpsertBatchSize)
+                .Select(g => g.Select(x => x.product).ToList())
+                .ToList();
+
+            foreach (var batch in batches)
+            {
+                if (_productRepo is ProductRepository concreteRepo)
+                {
+                    await concreteRepo.UpsertProductsBatchAsync(batch, ct);
+                }
+                else
+                {
+                    foreach (var product in batch)
+                    {
+                        await _productRepo.UpsertProductAsync(product, ct);
+                    }
+                }
+            }
         }
 
         public async Task SyncProductDetails(CancellationToken ct = default)

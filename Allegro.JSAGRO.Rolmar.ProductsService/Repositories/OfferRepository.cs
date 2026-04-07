@@ -163,23 +163,18 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Repositories
             return offers;
         }
 
-        public async Task DeleteOffer(int productId, CancellationToken ct)
+        public async Task DeleteOffer(string offerId, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
             connection.Open();
 
-            var code = await connection.ExecuteScalarAsync<string>(
-                "AllegroOffers_DeleteByProductId",
-                new { ProductId = productId },
+            await connection.ExecuteScalarAsync<string>(
+                "AllegroOffers_Delete",
+                new { OfferId = offerId },
                 commandType: CommandType.StoredProcedure);
 
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                _logger.LogWarning("Product with Id {ProductId} not found. Cannot delete offer.", productId);
-                return;
-            }
 
-            _logger.LogInformation("Deleted Allegro offer for product {Code}.", code);
+            _logger.LogInformation("Deleted Allegro offer {Id}.", offerId);
         }
 
         public async Task<List<AllegroOffer>> GetOffersWithoutDetails(CancellationToken ct)

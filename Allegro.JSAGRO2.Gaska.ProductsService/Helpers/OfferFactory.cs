@@ -44,6 +44,8 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
         {
             var product = offer.Product;
             var quantity = GetPackageQuantity(product, appSettings.BundleProductsUnderPriceNet);
+            var inStockUnits = Convert.ToInt32(Math.Floor(product.InStock));
+            var shouldBeActive = inStockUnits >= appSettings.MinProductStock && product.PriceNet >= appSettings.MinProductPriceNet;
 
             return CreateOffer(
                 product,
@@ -52,11 +54,11 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 allegroSettings,
                 appSettings,
                 priceSettings,
-                publicationStatus: product.InStock >= appSettings.MinProductStock && product.PriceNet >= appSettings.MinProductPriceNet ? "ACTIVE" : "ENDED",
-                startingAt: offer.Status == "INACTIVE" ? DateTime.UtcNow : null,
+                publicationStatus: shouldBeActive ? "ACTIVE" : "ENDED",
+                startingAt: shouldBeActive && offer.Status == "INACTIVE" ? DateTime.UtcNow : null,
                 categoryId: null,          // nie nadpisujemy kategorii przy patchu
                 name: null,                // nie nadpisujemy nazwy przy patchu
-                stockOverride: Convert.ToInt32(Math.Floor(product.InStock)),
+                stockOverride: inStockUnits,
                 includeCategory: false,
                 includeProductParameters: false,
                 offerProductId: offer.ProductId);
@@ -101,7 +103,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
                 Description = BuildDescription(product),
                 External = new External { Id = product.Code },
-                Publication = new Publication { Status = available < 1 ? "ENDED" : publicationStatus, StartingAt = startingAt },
+                Publication = new Publication { Status = publicationStatus, StartingAt = startingAt },
                 Delivery = new Delivery
                 {
                     ShippingRates = new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
