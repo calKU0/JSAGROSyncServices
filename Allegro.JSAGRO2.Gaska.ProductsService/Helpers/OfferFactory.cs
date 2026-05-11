@@ -55,12 +55,12 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 appSettings,
                 priceSettings,
                 publicationStatus: shouldBeActive ? "ACTIVE" : "ENDED",
-                startingAt: shouldBeActive && offer.Status == "INACTIVE" ? DateTime.UtcNow : null,
+                startingAt: shouldBeActive && string.Equals(offer.Status, "INACTIVE", StringComparison.OrdinalIgnoreCase) ? DateTime.UtcNow : null,
                 categoryId: null,          // nie nadpisujemy kategorii przy patchu
                 name: null,                // nie nadpisujemy nazwy przy patchu
                 stockOverride: inStockUnits,
                 includeCategory: false,
-                includeProductParameters: false,
+                includeProductParameters: true,
                 offerProductId: offer.ProductId);
         }
 

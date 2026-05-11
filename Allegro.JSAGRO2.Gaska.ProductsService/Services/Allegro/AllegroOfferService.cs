@@ -267,9 +267,21 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Services.Allegro
                         }
                         var offerDto = OfferFactory.PatchOffer(offer, allegroCategories, _appSettings, _allegroSettings, _priceSettings);
 
+                        var inStockUnits = Convert.ToInt32(Math.Floor(offer.Product.InStock));
+                        _logger.LogInformation(
+                            "Offer {OfferId} update payload for {Code}: PublicationStatus={PublicationStatus}, CurrentStatus={CurrentStatus}, InStock={InStock}, InStockUnits={InStockUnits}, MinStock={MinStock}, PriceNet={PriceNet}, MinPriceNet={MinPriceNet}",
+                            offer.Id,
+                            offer.Product.Code,
+                            offerDto.Publication?.Status ?? "N/A",
+                            offer.Status,
+                            offer.Product.InStock,
+                            inStockUnits,
+                            _appSettings.MinProductStock,
+                            offer.Product.PriceNet,
+                            _appSettings.MinProductPriceNet);
+
                         if (offerDto.Publication?.Status == "ENDED")
                         {
-                            var inStockUnits = Convert.ToInt32(Math.Floor(offer.Product.InStock));
                             _logger.LogInformation(
                                 "Offer {OfferId} for {Code} marked as ENDED. InStock={InStock}, InStockUnits={InStockUnits}, MinStock={MinStock}, PriceNet={PriceNet}, MinPriceNet={MinPriceNet}",
                                 offer.Id,

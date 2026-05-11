@@ -58,6 +58,12 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
                 };
             }).ToList() ?? new List<ErliAttribute>();
 
+            var priceInCents = (int)(offer.Price * 100);
+            if (IsCourierDelivery(offer.DeliveryName))
+            {
+                priceInCents += 300;
+            }
+
             var productRequest = new ErliCreateProductRequest
             {
                 Name = offer.Name,
@@ -86,7 +92,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
                     }
                 },
                 ExternalAttributes = attributes,
-                Price = (int)(offer.Price * 100),
+                Price = priceInCents,
                 Stock = offer.Stock,
                 Status = offer.Status.ToLower() == "ended" ? "inactive" : offer.Status.ToLower(),
                 DispatchTime = DispatchTimeMapper.MapFromHandlingTime(offer.HandlingTime),
@@ -151,6 +157,18 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
             productRequest.Description = new ErliDescription { Sections = sections };
 
             return productRequest;
+        }
+
+        private static bool IsCourierDelivery(string? deliveryName)
+        {
+            if (string.IsNullOrWhiteSpace(deliveryName))
+                return false;
+
+            var normalized = deliveryName.Trim();
+
+            return !normalized.Contains("paczkomat", StringComparison.OrdinalIgnoreCase)
+                && !normalized.Contains("paczko", StringComparison.OrdinalIgnoreCase)
+                && !normalized.Contains("punkt", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

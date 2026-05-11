@@ -58,7 +58,7 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                 name: null,                // nie nadpisujemy nazwy przy patchu
                 stockOverride: Convert.ToInt32(Math.Floor(product.InStock)),
                 includeCategory: false,
-                includeProductParameters: false);
+                includeProductParameters: true);
         }
 
         private static ProductOfferRequest CreateOffer(

@@ -112,7 +112,7 @@ BEGIN
         Status,
         StartingAt,
         DeliveryName,
-        ProductId AS Id,
+        ProductId,
         AllegroId,
         Code,
         ProductName AS Name,
