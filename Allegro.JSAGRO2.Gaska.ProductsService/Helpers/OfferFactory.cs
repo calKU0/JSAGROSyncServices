@@ -61,6 +61,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 stockOverride: inStockUnits,
                 includeCategory: false,
                 includeProductParameters: true,
+                offer,
                 offerProductId: offer.ProductId);
         }
 
@@ -78,6 +79,7 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
             int? stockOverride,
             bool includeCategory,
             bool includeProductParameters,
+            AllegroOffer? allegroOffer = null,
             string? offerProductId = null)
         {
             var price = CalculatePrice(product, priceSettings, appSettings.Deliveries, quantity);
@@ -91,7 +93,9 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                     Available = available,
                     Unit = MapAllegroUnit(product.Unit)
                 },
-                SellingMode = new SellingMode
+                SellingMode = allegroOffer != null && !PriceHelper.ShouldUpdatePriceAndDelivery(allegroOffer.DeliveryName, appSettings.DeliveriesWithoutPriceUpdate)
+                ? null
+                : new SellingMode
                 {
                     Format = "BUY_NOW",
                     Price = new Price
@@ -106,10 +110,24 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Helpers
                 Publication = new Publication { Status = publicationStatus, StartingAt = startingAt },
                 Delivery = new Delivery
                 {
-                    ShippingRates = new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
+                    ShippingRates = allegroOffer != null && !PriceHelper.ShouldUpdatePriceAndDelivery(allegroOffer.DeliveryName, appSettings.DeliveriesWithoutPriceUpdate)
+                        ? null
+                        : new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
                     HandlingTime = product.DeliveryType == 0
                         ? allegroSettings.AllegroHandlingTime
                         : allegroSettings.AllegroHandlingTimeCustomProducts
+                },
+                TaxSettings = new()
+                {
+                    Rates = new List<Rate>
+                    {
+                        new Rate
+                        {
+                            RateValue = "23.00",
+                            CountryCode = "PL"
+                        }
+                    },
+                    Subject = "GOODS"
                 },
                 AfterSalesServices = new AfterSalesServices
                 {

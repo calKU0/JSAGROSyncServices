@@ -10,5 +10,6 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Settings
         public int LogsExpirationDays { get; set; }
         public int FetchIntervalMinutes { get; set; }
         public List<DeliverySettings> Deliveries { get; set; } = new List<DeliverySettings>();
+        public List<string> DeliveriesWithoutPriceUpdate { get; set; } = new List<string>();
     }
 }

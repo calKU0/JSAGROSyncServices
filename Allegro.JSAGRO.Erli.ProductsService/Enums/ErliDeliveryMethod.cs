@@ -26,6 +26,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Enums
         erliDHL10kg,
         erliDHL20kg,
         erliDHL32kg,
+        erliDPDKurier5kg,
         erliDPDKurier10kg,
         erliDPDKurier15kg,
         erliDPDKurier20kg,

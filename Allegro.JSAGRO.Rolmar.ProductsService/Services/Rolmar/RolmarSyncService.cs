@@ -101,10 +101,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
                     }
                 }
 
-                _logger.LogInformation(
-                    "Product sync completed. Upserted: {Upserted}, Failed: {Failed}",
-                    upsertedCount,
-                    failedCount);
+                _logger.LogInformation("Product sync completed. Upserted: {Upserted}, Failed: {Failed}", upsertedCount, failedCount);
             }
             catch (Exception ex)
             {
@@ -276,6 +273,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Rolmar
                 PriceNet = priceNet,
                 PriceGross = priceNet * 1.23m,
                 Package = package,
+                IntegrationId = Convert.ToInt32(product.Id),
                 Specifications = product.Specifications?.Select(s => new JSAGROSyncServices.Contracts.Models.ProductSpecification
                 {
                     Name = s.Name,

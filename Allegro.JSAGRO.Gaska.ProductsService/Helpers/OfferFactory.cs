@@ -58,7 +58,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                 name: null,                // nie nadpisujemy nazwy przy patchu
                 stockOverride: Convert.ToInt32(Math.Floor(product.InStock)),
                 includeCategory: false,
-                includeProductParameters: true);
+                includeProductParameters: true,
+                allegroOffer: offer);
         }
 
         private static ProductOfferRequest CreateOffer(
@@ -74,7 +75,8 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
             string? name,
             int? stockOverride,
             bool includeCategory,
-            bool includeProductParameters)
+            bool includeProductParameters,
+            AllegroOffer? allegroOffer = null)
         {
             var price = CalculatePrice(product, priceSettings, quantity);
             var available = CalculateAvailableStock(stockOverride, product.InStock, quantity);
@@ -87,7 +89,9 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                     Available = available,
                     Unit = MapAllegroUnit(product.Unit)
                 },
-                SellingMode = new SellingMode
+                SellingMode = allegroOffer != null && !PriceHelper.ShouldUpdatePriceAndDelivery(allegroOffer.DeliveryName, appSettings.DeliveriesWithoutPriceUpdate)
+                ? null
+                : new SellingMode
                 {
                     Format = "BUY_NOW",
                     Price = new Price
@@ -96,13 +100,27 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Helpers
                         Currency = "PLN"
                     }
                 },
+                TaxSettings = new()
+                {
+                    Rates = new List<Rate>
+                    {
+                        new Rate
+                        {
+                            RateValue = "23.00",
+                            CountryCode = "PL"
+                        }
+                    },
+                    Subject = "GOODS"
+                },
                 Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
                 Description = BuildDescription(product),
                 External = new External { Id = product.Code },
                 Publication = new Publication { Status = available < 1 ? "ENDED" : publicationStatus, StartingAt = startingAt },
                 Delivery = new Delivery
                 {
-                    ShippingRates = new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
+                    ShippingRates = allegroOffer != null && !PriceHelper.ShouldUpdatePriceAndDelivery(allegroOffer.DeliveryName, appSettings.DeliveriesWithoutPriceUpdate)
+                        ? null
+                        : new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
                     HandlingTime = product.DeliveryType == 0
                         ? allegroSettings.AllegroHandlingTime
                         : allegroSettings.AllegroHandlingTimeCustomProducts

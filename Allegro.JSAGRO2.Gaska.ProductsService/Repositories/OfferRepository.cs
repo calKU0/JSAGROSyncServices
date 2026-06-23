@@ -4,7 +4,6 @@ using Dapper;
 using JSAGROSyncServices.Contracts.DTOs.Allegro;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
-using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Infrastructure.Data;
 using Microsoft.Extensions.Options;
 using System.Data;
@@ -15,14 +14,14 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
     public class OfferRepository : IOfferRepository
     {
         private readonly DapperContext _context;
-        private readonly List<DeliverySettings> _deliveries;
+        private readonly AppSettings _appSettings;
         private readonly ILogger<OfferRepository> _logger;
 
         public OfferRepository(ILogger<OfferRepository> logger, DapperContext context, IOptions<AppSettings> options)
         {
             _logger = logger;
             _context = context;
-            _deliveries = options.Value.Deliveries;
+            _appSettings = options.Value;
         }
 
         public async Task UpsertOffers(List<Offer> offers, CancellationToken ct)
@@ -165,11 +164,13 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
 
         public async Task<List<AllegroOffer>> GetOffersToUpdate(CancellationToken ct)
         {
-            var deliveryNames = _deliveries?
+            var deliveryNames = _appSettings.Deliveries?
                 .Select(d => d.DeliveryName)
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList() ?? new List<string>();
+
+            deliveryNames.AddRange(_appSettings.DeliveriesWithoutPriceUpdate ?? new List<string>());
 
             if (!deliveryNames.Any())
             {

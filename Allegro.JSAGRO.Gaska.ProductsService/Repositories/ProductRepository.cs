@@ -118,14 +118,24 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
                     cancellationToken: ct));
         }
 
-        public async Task<List<RolmarProduct>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
+        public async Task<List<int>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
         {
             using var conn = _context.CreateConnection();
-            return (await conn.QueryAsync<RolmarProduct>(
+            return (await conn.QueryAsync<int>(
                 "RolmarProducts_GetForDetailUpdate",
                 new { Limit = limit, IntegrationCompany = ServiceConstants.Company },
                 commandType: CommandType.StoredProcedure,
                 commandTimeout: 900)).ToList();
+        }
+
+        public async Task<RolmarProduct?> GetProductByIntegrationIdAsync(int integrationId, CancellationToken ct)
+        {
+            using var conn = _context.CreateConnection();
+            return (await conn.QuerySingleOrDefaultAsync<RolmarProduct?>(
+                "RolmarProducts_GetByIntegrationId",
+                new { IntegrationId = integrationId, IntegrationCompany = ServiceConstants.Company },
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900));
         }
 
         public async Task<bool> DeleteProduct(int productId, CancellationToken ct)
@@ -497,6 +507,9 @@ namespace Allegro.JSAGRO.Gaska.ProductsService.Repositories
             if (!string.IsNullOrWhiteSpace(name))
             {
                 bool jagRemoved = false;
+
+                name = name.Replace("ORYGINAL", "", StringComparison.OrdinalIgnoreCase);
+                name = name.Replace("ORYGINAŁ", "", StringComparison.OrdinalIgnoreCase);
 
                 // 1. Remove JAG variants
                 name = Regex.Replace(

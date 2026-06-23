@@ -174,7 +174,16 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Repositories
             return products.ToList();
         }
 
-        public Task<List<RolmarProduct>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
+        public async Task<List<int>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
+        {
+            using var conn = _context.CreateConnection();
+            return (await conn.QueryAsync<int>(
+                "RolmarProducts_GetForDetailUpdate",
+                new { Limit = limit, IntegrationCompany = ServiceConstants.Company },
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 900)).ToList();
+        }
+        public async Task<RolmarProduct?> GetProductByIntegrationIdAsync(int integrationId, CancellationToken ct)
         {
             throw new NotImplementedException();
         }

@@ -4,10 +4,11 @@ namespace JSAGROSyncServices.Contracts.Interfaces
 {
     public interface IProductRepository
     {
-        Task<List<RolmarProduct>> GetProductsForDetailUpdate(int limit, CancellationToken ct);
+        Task<List<int>> GetProductsForDetailUpdate(int limit, CancellationToken ct);
         Task<bool> UpsertProductAsync(RolmarProduct product, CancellationToken ct);
         Task UpsertProductsBatchAsync(List<RolmarProduct> product, CancellationToken ct);
         Task<bool> UpdateProductStockAsync(string productCode, int stock, CancellationToken ct);
+        Task<RolmarProduct?> GetProductByIntegrationIdAsync(int integrationId, CancellationToken ct);
         Task<bool> DeleteProduct(int productId, CancellationToken ct);
 
         Task<List<RolmarProduct>> GetProductsToUpload(int minProductStock, decimal minProductPrice, CancellationToken ct);

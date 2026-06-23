@@ -65,6 +65,18 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                 {
                     Invoice = "VAT"
                 },
+                TaxSettings = new()
+                {
+                    Rates = new List<Rate>
+                    {
+                        new Rate
+                        {
+                            RateValue = "23.00",
+                            CountryCode = "PL"
+                        }
+                    },
+                    Subject = "GOODS"
+                },
                 AfterSalesServices = new AfterSalesServices
                 {
                     Warranty = new Warranty { Name = allegroSettings.AllegroWarranty },
@@ -101,7 +113,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                     Available = Convert.ToInt32(Math.Floor(offer.Product.InStock)),
                     Unit = MapAllegroUnit(offer.Product.Unit)
                 },
-                SellingMode = new SellingMode
+                SellingMode = !PriceHelper.ShouldUpdatePriceAndDelivery(offer.DeliveryName, appSettings.DeliveriesWithoutPriceUpdate) ? null : new SellingMode
                 {
                     Format = "BUY_NOW",
                     Price = new Price
@@ -121,9 +133,21 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                     Status = offer.Product.InStock >= appSettings.MinProductStock ? "ACTIVE" : "ENDED",
                     StartingAt = offer.Status == "INACTIVE" ? DateTime.UtcNow : null
                 },
+                TaxSettings = new()
+                {
+                    Rates = new List<Rate>
+                    {
+                        new Rate
+                        {
+                            RateValue = "23.00",
+                            CountryCode = "PL"
+                        }
+                    },
+                    Subject = "GOODS"
+                },
                 Delivery = new Delivery
                 {
-                    ShippingRates = new ShippingRates
+                    ShippingRates = !PriceHelper.ShouldUpdatePriceAndDelivery(offer.DeliveryName, appSettings.DeliveriesWithoutPriceUpdate) ? null : new ShippingRates
                     {
                         Name = GetDelivery(offer.Product, appSettings.Deliveries)
                     },

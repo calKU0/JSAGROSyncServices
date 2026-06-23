@@ -152,6 +152,9 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                         if (addressResponse.Result != 0)
                             throw new Exception(addressResponse.Message);
 
+                        // Delay to avoid hitting Gąska API too quickly
+                        await Task.Delay(5000);
+
                         // Create Order in Gąska
                         var orderRequest = MapAllegroOrderToGaskaOrderRequest(order, addressResponse.AddressId);
                         var orderResponse = await _gaskaApiClient.PostAsync<GaskaCreateOrderResponse>("order", orderRequest, ct);
@@ -170,6 +173,22 @@ namespace Allegro.JSAGRO.Gaska.OrdersService.Services
                         var body = BuildOrderEmailBody(order);
                         await _emailService.SendEmailAsync(ServiceConstants.MailSender, _appSettings.NotificationsEmail, $"Złożono automatyczne zamówienie {order.ExternalOrderNumber}", body);
                         await _orderRepo.SetEmailSent(order.Id);
+                    }
+                    catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+                    {
+                        _logger.LogWarning(ex, "Timeout while creating order in Gąska for Allegro Order {AllegroOrderId}. Marking as ordered.", order.AllegroId);
+
+                        await _orderRepo.MarkAsOrderedInExternalCompany(order.Id, order.ExternalOrderId);
+
+                        // optionally send notification
+                        var body = BuildOrderEmailBody(order, "Order creation request timed out. Marked as ordered automatically.");
+                        await _emailService.SendEmailAsync(ServiceConstants.MailSender, _appSettings.NotificationsEmail, $"TIMEOUT during order creation: {order.AllegroId}", body);
+                        await _orderRepo.SetEmailSent(order.Id);
+                    }
+                    catch (TimeoutException ex)
+                    {
+                        _logger.LogWarning(ex, "Timeout while creating order in Gąska for Allegro Order {AllegroOrderId}. Marking as ordered.", order.AllegroId);
+                        await _orderRepo.MarkAsOrderedInExternalCompany(order.Id, order.ExternalOrderId);
                     }
                     catch (Exception ex)
                     {

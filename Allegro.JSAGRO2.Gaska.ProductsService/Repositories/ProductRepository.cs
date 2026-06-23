@@ -19,14 +19,18 @@ namespace Allegro.JSAGRO2.Gaska.ProductsService.Repositories
             _logger = logger;
         }
 
-        public async Task<List<RolmarProduct>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
+        public async Task<List<int>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
         {
             using var conn = _context.CreateConnection();
-            return (await conn.QueryAsync<RolmarProduct>(
+            return (await conn.QueryAsync<int>(
                 "RolmarProducts_GetForDetailUpdate",
                 new { Limit = limit, IntegrationCompany = ServiceConstants.Company },
                 commandType: CommandType.StoredProcedure,
                 commandTimeout: 900)).ToList();
+        }
+        public async Task<RolmarProduct?> GetProductByIntegrationIdAsync(int integrationId, CancellationToken ct)
+        {
+            throw new NotImplementedException();
         }
 
         public async Task<bool> DeleteProduct(int productId, CancellationToken ct)
