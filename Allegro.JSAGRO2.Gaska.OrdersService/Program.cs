@@ -79,12 +79,14 @@ var host = Host.CreateDefaultBuilder(args)
         {
             client.BaseAddress = new Uri(configuration["AllegroApiCredentials:BaseUrl"]);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(configuration["AppSettings:UserAgent"]);
         });
 
         services.AddHttpClient<GaskaApiClient>(client =>
         {
             client.BaseAddress = new Uri(configuration["GaskaApiCredentials:BaseUrl"]);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(configuration["AppSettings:UserAgent"]);
         })
         .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler
         {
