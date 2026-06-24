@@ -71,7 +71,7 @@ var host = Host.CreateDefaultBuilder(args)
 
             client.BaseAddress = new Uri(allegroApiSettings.AuthBaseUrl);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-www-form-urlencoded"));
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(configuration["AppSettings:UserAgent"]);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(configuration["AllegroApiCredentials:UserAgent"]);
         });
 
         services.AddHttpClient<AllegroApiClient>((sp, client) =>
@@ -80,7 +80,7 @@ var host = Host.CreateDefaultBuilder(args)
 
             client.BaseAddress = new Uri(allegroApiSettings.BaseUrl);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(configuration["AppSettings:UserAgent"]);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(configuration["AllegroApiCredentials:UserAgent"]);
         });
 
         // Repositories
