@@ -11,5 +11,6 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Settings
         public int FetchIntervalMinutes { get; set; }
         public List<DeliverySettings> Deliveries { get; set; } = new List<DeliverySettings>();
         public List<string> DeliveriesWithoutPriceUpdate { get; set; } = new List<string>();
+        public string PriceDropAlertEmail { get; set; } = string.Empty;
     }
 }

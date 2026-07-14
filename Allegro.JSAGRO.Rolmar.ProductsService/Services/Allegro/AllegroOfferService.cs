@@ -26,6 +26,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
         private readonly AppSettings _appSettings;
         private readonly PriceSettings _priceSettings;
         private readonly AllegroSettings _allegroSettings;
+        private readonly IEmailService _emailService;
 
         private readonly JsonSerializerOptions _options = new JsonSerializerOptions
         {
@@ -36,7 +37,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
             WriteIndented = true
         };
 
-        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<PriceSettings> priceSettings, IOptions<AllegroSettings> allegroSettings, ILogger<AllegroOfferService> logger, IParameterRepository parameterRepo, IImageRepository imageRepo)
+        public AllegroOfferService(IProductRepository productRepo, IOfferRepository offerRepo, AllegroApiClient apiClient, IOptions<AppSettings> appsettings, IOptions<PriceSettings> priceSettings, IOptions<AllegroSettings> allegroSettings, ILogger<AllegroOfferService> logger, IParameterRepository parameterRepo, IImageRepository imageRepo, IEmailService emailService)
         {
             _productRepo = productRepo;
             _offerRepo = offerRepo;
@@ -47,6 +48,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
             _logger = logger;
             _parameterRepo = parameterRepo;
             _imageRepo = imageRepo;
+            _emailService = emailService;
         }
 
         public async Task SyncAllegroOffers(CancellationToken ct = default)
@@ -274,7 +276,19 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
                             offer.Product.AllegroImages = images;
                         }
 
-                        var offerDto = OfferFactory.PatchOffer(offer, _appSettings, _allegroSettings, _priceSettings);
+                        var newPrice = OfferFactory.CalculatePrice(offer.Product, _priceSettings);
+                        var priceDropTooLarge = OfferFactory.IsPriceDropTooLarge(offer.Price, newPrice, _priceSettings.MaxPriceDropPercent);
+
+                        if (priceDropTooLarge)
+                        {
+                            _logger.LogWarning(
+                                "Price drop of more than {MaxDropPercent}% detected for {Name} ({Code}): {OldPrice} PLN -> {NewPrice} PLN. Keeping current price.",
+                                _priceSettings.MaxPriceDropPercent, offer.Product.Name, offer.Product.Code, offer.Price, newPrice);
+
+                            await SendPriceDropAlert(offer, newPrice);
+                        }
+
+                        var offerDto = OfferFactory.PatchOffer(offer, _appSettings, _allegroSettings, _priceSettings, priceDropTooLarge);
 
                         var response = await _apiClient.SendWithResponseAsync(
                             $"/sale/product-offers/{offer.Id}",
@@ -345,6 +359,25 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Services.Allegro
             {
                 _logger.LogError(ex, "Fatal error while creating Allegro offers.");
             }
+        }
+
+        private async Task SendPriceDropAlert(AllegroOffer offer, decimal newPrice)
+        {
+            if (string.IsNullOrEmpty(_appSettings.PriceDropAlertEmail))
+            {
+                _logger.LogInformation("Price drop alert email is not configured.");
+                return;
+            }
+
+            var body = $"<p>Wykryto spadek ceny o więcej niż {_priceSettings.MaxPriceDropPercent}% dla produktu <b>{offer.Product.Name}</b> ({offer.Product.Code}).</p>" +
+                       $"<p>Aktualna cena na Allegro: {offer.Price:F2} PLN<br/>Nowa cena wyliczona z Rolmar: {newPrice:F2} PLN</p>" +
+                       $"<p>Cena NIE została zaktualizowana automatycznie — pozostała bez zmian.</p>";
+
+            await _emailService.SendEmailAsync(
+                ServiceConstants.MailSender,
+                _appSettings.PriceDropAlertEmail,
+                $"Duży spadek ceny: {offer.Product.Name} ({offer.Product.Code})",
+                body);
         }
 
         private async Task LogAllegroResponse(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate = false, string offerId = null)

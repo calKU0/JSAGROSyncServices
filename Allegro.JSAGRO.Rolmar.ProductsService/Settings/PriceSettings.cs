@@ -6,6 +6,7 @@
         public decimal AllegroMarginUnder5PLN { get; set; }
         public decimal AllegroMarginBetween5and1000PLNPercent { get; set; }
         public decimal AllegroMarginMoreThan1000PLN { get; set; }
+        public decimal MaxPriceDropPercent { get; set; } = 30m;
     }
 
     public class MarginRange

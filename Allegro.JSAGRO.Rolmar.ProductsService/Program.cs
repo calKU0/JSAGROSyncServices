@@ -66,6 +66,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
         services.Configure<PriceSettings>(configuration.GetSection("PriceSettings"));
         services.Configure<AllegroSettings>(configuration.GetSection("AllegroSettings"));
+        services.Configure<SmtpSettings>(configuration.GetSection("SmtpSettings"));
 
         // HttpClients
         services.AddHttpClient<IRolmarSyncService, RolmarSyncService>((sp, client) =>
@@ -108,6 +109,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddScoped<IAllegroOfferService, AllegroOfferService>();
         services.AddScoped<IAllegroCategoryService, AllegroCategoryService>();
         services.AddScoped<IAllegroParametersService, AllegroParametersService>();
+        services.AddScoped<IEmailService, EmailService>();
 
         // Background worker
         services.AddHostedService<Worker>();

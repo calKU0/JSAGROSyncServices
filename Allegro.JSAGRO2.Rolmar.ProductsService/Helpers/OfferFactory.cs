@@ -88,7 +88,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Helpers
             };
         }
 
-        public static ProductOfferRequest PatchOffer(AllegroOffer offer, AppSettings appSettings, AllegroSettings allegroSettings, PriceSettings priceSettings)
+        public static ProductOfferRequest PatchOffer(AllegroOffer offer, AppSettings appSettings, AllegroSettings allegroSettings, PriceSettings priceSettings, bool keepCurrentPrice = false)
         {
             int productQuantity = (int)Math.Ceiling(offer.Product.Package);
 
@@ -114,12 +114,12 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Helpers
                     Available = Convert.ToInt32(Math.Floor(offer.Product.InStock)),
                     Unit = MapAllegroUnit(offer.Product.Unit)
                 },
-                SellingMode = !PriceHelper.ShouldUpdatePriceAndDelivery(offer.DeliveryName, appSettings.DeliveriesWithoutPriceUpdate) ? null : new SellingMode
+                SellingMode = new SellingMode
                 {
                     Format = "BUY_NOW",
-                    Price = new Price
+                    Price = !PriceHelper.ShouldUpdatePriceAndDelivery(offer.DeliveryName, appSettings.DeliveriesWithoutPriceUpdate) ? null : new Price
                     {
-                        Amount = CalculatePrice(offer.Product, priceSettings).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = (keepCurrentPrice ? offer.Price : CalculatePrice(offer.Product, priceSettings)).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -132,7 +132,7 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Helpers
                 Publication = new Publication
                 {
                     Status = offer.Product.InStock >= appSettings.MinProductStock ? "ACTIVE" : "ENDED",
-                    StartingAt = offer.Status == "INACTIVE" ? DateTime.UtcNow : null,
+                    StartingAt = offer.Status == "INACTIVE" ? null : null,
                 },
                 Delivery = new Delivery
                 {
@@ -452,7 +452,16 @@ namespace Allegro.JSAGRO2.Rolmar.ProductsService.Helpers
             return description;
         }
 
-        private static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings)
+        public static bool IsPriceDropTooLarge(decimal currentPrice, decimal newPrice, decimal maxDropPercent)
+        {
+            if (currentPrice <= 0)
+                return false;
+
+            var dropPercent = (currentPrice - newPrice) / currentPrice * 100m;
+            return dropPercent > maxDropPercent;
+        }
+
+        public static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings)
         {
             var calculatedPrice = product.PriceGross;
 

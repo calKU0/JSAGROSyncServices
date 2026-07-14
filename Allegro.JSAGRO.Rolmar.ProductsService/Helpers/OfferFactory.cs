@@ -88,7 +88,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
             };
         }
 
-        public static ProductOfferRequest PatchOffer(AllegroOffer offer, AppSettings appSettings, AllegroSettings allegroSettings, PriceSettings priceSettings)
+        public static ProductOfferRequest PatchOffer(AllegroOffer offer, AppSettings appSettings, AllegroSettings allegroSettings, PriceSettings priceSettings, bool keepCurrentPrice = false)
         {
             int productQuantity = (int)Math.Ceiling(offer.Product.Package);
 
@@ -118,7 +118,7 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(offer.Product, priceSettings).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = (keepCurrentPrice ? offer.Price : CalculatePrice(offer.Product, priceSettings)).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -451,7 +451,16 @@ namespace Allegro.JSAGRO.Rolmar.ProductsService.Helpers
             return description;
         }
 
-        private static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings)
+        public static bool IsPriceDropTooLarge(decimal currentPrice, decimal newPrice, decimal maxDropPercent)
+        {
+            if (currentPrice <= 0)
+                return false;
+
+            var dropPercent = (currentPrice - newPrice) / currentPrice * 100m;
+            return dropPercent > maxDropPercent;
+        }
+
+        public static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings)
         {
             var calculatedPrice = product.PriceGross;
 
