@@ -2,20 +2,20 @@
 {
     public class SupportedCategoriesResponse
     {
-        public List<SupportedCategory> SupportedCategories { get; set; }
+        public List<SupportedCategory> SupportedCategories { get; set; } = new();
     }
 
     public class SupportedCategory
     {
-        public string CategoryId { get; set; }
+        public string? CategoryId { get; set; }
 
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
-        public string ItemsType { get; set; }
+        public string? ItemsType { get; set; }
 
-        public string InputType { get; set; }
+        public string? InputType { get; set; }
 
-        public ValidationRules ValidationRules { get; set; }
+        public ValidationRules? ValidationRules { get; set; }
     }
 
     public class ValidationRules

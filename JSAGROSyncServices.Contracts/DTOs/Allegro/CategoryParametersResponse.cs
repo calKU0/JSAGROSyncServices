@@ -4,25 +4,25 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
 {
     public class CategoryParametersResponse
     {
-        public List<CategoryParameterItem> Parameters { get; set; }
+        public List<CategoryParameterItem> Parameters { get; set; } = new();
     }
 
     public class CategoryParameterItem
     {
-        public string Id { get; set; }
-        public string Name { get; set; }
-        public string Type { get; set; }
+        public string? Id { get; set; }
+        public string? Name { get; set; }
+        public string? Type { get; set; }
         public bool Required { get; set; }
         public bool RequiredForProduct { get; set; }
-        public Restrictions Restrictions { get; set; }
-        public List<Dictionary> Dictionary { get; set; }
-        public Options Options { get; set; }
+        public Restrictions? Restrictions { get; set; }
+        public List<Dictionary> Dictionary { get; set; } = new();
+        public Options? Options { get; set; }
     }
 
     public class Options
     {
         public bool CustomValuesEnabled { get; set; }
-        public string AmbiguousValueId { get; set; }
+        public string? AmbiguousValueId { get; set; }
         public bool DescribesProduct { get; set; }
     }
 
@@ -50,7 +50,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
 
     public class Dictionary
     {
-        public string Id { get; set; }
-        public string Value { get; set; }
+        public string? Id { get; set; }
+        public string? Value { get; set; }
     }
 }

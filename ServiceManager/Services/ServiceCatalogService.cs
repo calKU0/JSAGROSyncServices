@@ -1,4 +1,4 @@
-using ServiceManager.Models;
+﻿using ServiceManager.Models;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;
@@ -9,9 +9,13 @@ namespace ServiceManager.Services
     {
         public List<ServiceItem> LoadServices()
         {
+            // Klucze maja postac Service_<id>_<pole>; id nie moze zawierac podkreslenia.
             var keys = ConfigurationManager.AppSettings.AllKeys
-                .Where(k => k.StartsWith("Service_"))
-                .Select(k => k.Split('_')[1])
+                .OfType<string>()
+                .Where(k => k.StartsWith("Service_", StringComparison.Ordinal))
+                .Select(k => k.Split('_'))
+                .Where(parts => parts.Length >= 2)
+                .Select(parts => parts[1])
                 .Distinct();
 
             var services = new List<ServiceItem>();

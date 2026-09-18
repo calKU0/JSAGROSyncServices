@@ -11,9 +11,13 @@
     <PackageReference Include="dbup-sqlserver" Version="7.2.0" />
     <PackageReference Include="MailKit" Version="4.16.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.6" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.6" />
     <PackageReference Include="MimeKit" Version="4.16.0" />
     <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
   </ItemGroup>
@@ -23,151 +27,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Migrations\20251021_01_CreateAllegroOrdersTables.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251021_02_CreateGaskaCourierColumn.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251022_01_AddClientNickname.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251022_02_AddEmailSent.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251023_01_MessageToSeller_Nullable.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251205_01_InitialMigration.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251216_01_ChangeInStockField.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251216_02_ChangeColumnDefaults.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251217_01_AddRolmarCategoryTable.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251217_02_AddSubstitutesColumn.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251220_01_AddAllegroIdColumn.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251220_02_AddAllegroImagesTable.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20251220_03_AddSupplierColumns.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260106_01_AddAccountColumn.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260208_01_ChangeColumnsToEnums.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260208_02_AddCategoryStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260208_03_AddAccountColumnInImages.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260208_04_AddImageStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260208_05_AddOfferStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260208_06_AddParameterStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260208_07_AddProductStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260208_08_AddTokenStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_01_AddProductPackagesAndApplications.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_02_AddProductApplicationStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_03_AddOptionalParametersToStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_04_AddOfferDetailStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_04_AddProductDetailUpdateStoredProcedure.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_05_AddProductPackageStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_06_ChangeColumnNamesAllegroOrders.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_07_AddImageDeleteStoredProcedure.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_08_AddAccountFieldToOrderTable.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_09_ChangeColumnNamesAllegroOrders.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_10_AddOrderStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260210_11_AddErliOfferStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260219_01_FixGetOrdersToUpdateInAllegroSP.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260221_01_AddShippingRateFieldToOrderItems.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260221_02_ChangeGetOrdersToUpdateExtranalInfoSp.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260222_01_AddDeleteParameterStoredProcedure.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260224_01_OptimizeUpsertOffersStoredProcedure.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260225_01_AlterUpdateDefaultCategoryProcedure.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260325_02_AddRolmarUpsertAllegroId.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260325_03_ChangeProductIdColumnType.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260407_02_OptimizeProductStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20261102_01_ChangeRolmarProducts_GetByCodeSp.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260407_01_FixDeleteOfferProcedure.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20261202_01_FixGetOffersToUpdateStoredProcedure.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260324_01_CreateAllegroResponsibleAndDeliveryMethodTables.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260324_02_AddAllegroResponsibleAndDeliveryMethodStoredProcedures.sql">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Migrations\20260325_01_AddRolmarProductsUpsertAllegroIdByCodeSp.sql">
+    <!-- Wszystkie migracje trafiaja do katalogu wyjsciowego. Recznie utrzymywana lista
+         gubila nowe pliki, a literowka w nazwie cicho wylaczala migracje. -->
+    <None Update="Migrations\*.sql">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

@@ -6,6 +6,6 @@
         public int Length { get; set; }
         public int Height { get; set; }
         public int Weight { get; set; }
-        public string DeliveryName { get; set; }
+        public string DeliveryName { get; set; } = string.Empty;
     }
 }

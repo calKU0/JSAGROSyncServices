@@ -1,12 +1,12 @@
 ﻿using Allegro.JSAGRO.Erli.ProductsService.DTOs;
 using JSAGROSyncServices.Contracts.Models;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
 {
     public static class ErliProductMapper
     {
-        public static ErliCreateProductRequest MapFromOffer(AllegroOffer offer)
+        public static ErliCreateProductRequest MapFromOffer(AllegroOffer offer, decimal courierPriceSurcharge)
         {
             if (offer == null) throw new ArgumentNullException(nameof(offer));
 
@@ -16,10 +16,10 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
 
                 if (!string.IsNullOrEmpty(attr.ValuesJson))
                 {
-                    var valueNames = JsonConvert.DeserializeObject<List<string>>(attr.ValuesJson);
+                    var valueNames = JsonSerializer.Deserialize<List<string>>(attr.ValuesJson) ?? new List<string>();
                     var valueIds = string.IsNullOrEmpty(attr.ValuesIdsJson)
                         ? new List<string>()
-                        : JsonConvert.DeserializeObject<List<string>>(attr.ValuesIdsJson);
+                        : JsonSerializer.Deserialize<List<string>>(attr.ValuesIdsJson) ?? new List<string>();
 
                     if (string.Equals(attr.Type, "dictionary", StringComparison.OrdinalIgnoreCase))
                     {
@@ -58,11 +58,9 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
                 };
             }).ToList() ?? new List<ErliAttribute>();
 
-            var priceInCents = (int)(offer.Price * 100);
-            if (IsCourierDelivery(offer.DeliveryName))
-            {
-                priceInCents += 300;
-            }
+            // Dopłata kurierska jest ustawieniem, nie stałą w kodzie.
+            var price = offer.Price + (IsCourierDelivery(offer.DeliveryName) ? courierPriceSurcharge : 0m);
+            var priceInCents = (int)Math.Round(price * 100, MidpointRounding.AwayFromZero);
 
             var productRequest = new ErliCreateProductRequest
             {
@@ -98,8 +96,10 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
                 DispatchTime = DispatchTimeMapper.MapFromHandlingTime(offer.HandlingTime),
                 Images = string.IsNullOrWhiteSpace(offer.Images)
                     ? new List<ErliImage>()
-                    : JsonConvert.DeserializeObject<List<string>>(offer.Images)
+                    // Erli odrzuca liste z powtorzonym adresem ("images[N] contains a duplicate value").
+                    : (JsonSerializer.Deserialize<List<string>>(offer.Images) ?? new List<string>())
                         .Where(url => !string.IsNullOrWhiteSpace(url))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Select(url => new ErliImage { Url = url })
                         .ToList(),
                 Weight = (int)(offer.Weight * 1000),
@@ -110,7 +110,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
                     {
                         new ErliResponsiblePerson
                         {
-                            ExternalId = offer.ResponsiblePerson,
+                            ExternalId = offer.ResponsiblePerson!,
                             Source = "allegro"
                         }
                     }
@@ -120,7 +120,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Mappers
                     ? new List<ErliResponsibleProducer>
                     {   new ErliResponsibleProducer
                         {
-                        ExternalId = offer.ResponsibleProducer,
+                        ExternalId = offer.ResponsibleProducer!,
                         Source = "allegro"
                     }
                     }

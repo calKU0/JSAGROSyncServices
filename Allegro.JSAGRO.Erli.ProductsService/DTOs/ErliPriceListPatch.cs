@@ -5,7 +5,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.DTOs
     public class ErliPriceListPatch
     {
         [JsonPropertyName("prices")]
-        public List<Prices> Prices { get; set; }
+        public List<Prices> Prices { get; set; } = new();
 
         [JsonPropertyName("erliProEnabled")]
         public bool ErliProEnabled { get; set; }

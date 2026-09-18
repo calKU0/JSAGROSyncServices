@@ -6,9 +6,9 @@ namespace JSAGROSyncServices.Contracts.Models
     {
         public int Id { get; set; }
         public string? AllegroId { get; set; }
-        public string Code { get; set; }
+        public string Code { get; set; } = string.Empty;
         public string? CustomerCode { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public string? Description { get; set; }
         public string? Ean { get; set; }
         public float Weight { get; set; }
@@ -17,7 +17,7 @@ namespace JSAGROSyncServices.Contracts.Models
         public string? SupplierLogo { get; set; }
         public string? Substitutes { get; set; }
         public float InStock { get; set; }
-        public string Unit { get; set; }
+        public string Unit { get; set; } = string.Empty;
         public string? CurrencyPrice { get; set; }
         public decimal PriceNet { get; set; }
         public decimal PriceGross { get; set; }
@@ -30,11 +30,11 @@ namespace JSAGROSyncServices.Contracts.Models
         public IntegrationCompany IntegrationCompany { get; set; }
         public int IntegrationId { get; set; }
         public int DeliveryType { get; set; }
-        public List<ProductPackage>? Packages { get; set; }
-        public List<ProductApplication>? Applications { get; set; }
-        public List<ProductSpecification>? Specifications { get; set; }
-        public List<ProductParameter>? Parameters { get; set; }
-        public List<RolmarCategory>? Categories { get; set; }
-        public List<AllegroImages>? AllegroImages { get; set; }
+        public List<ProductPackage> Packages { get; set; } = new();
+        public List<ProductApplication> Applications { get; set; } = new();
+        public List<ProductSpecification> Specifications { get; set; } = new();
+        public List<ProductParameter> Parameters { get; set; } = new();
+        public List<RolmarCategory> Categories { get; set; } = new();
+        public List<AllegroImages> AllegroImages { get; set; } = new();
     }
 }

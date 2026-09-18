@@ -4,26 +4,19 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <UserSecretsId>dotnet-Allegro.JSAGRO2.Gaska.ProductsService-62af7057-556b-4800-b489-86bb0db0d818</UserSecretsId>
+    <RootNamespace>Allegro.JSAGRO2.Gaska.ProductsService</RootNamespace>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.72" />
-    <PackageReference Include="dbup" Version="5.0.41" />
-    <PackageReference Include="dbup-sqlserver" Version="7.2.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.6" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.6" />
-    <PackageReference Include="Microsoft.Net.Http.Headers" Version="10.0.6" />
-    <PackageReference Include="MimeKit" Version="4.16.0" />
-    <PackageReference Include="Serilog" Version="4.3.1" />
-    <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
-    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\JSAGROSyncServices.Contracts\JSAGROSyncServices.Contracts.csproj" />
     <ProjectReference Include="..\JSAGROSyncServices.Infrastructure\JSAGROSyncServices.Infrastructure.csproj" />
+    <ProjectReference Include="..\JSAGROSyncServices.Products\JSAGROSyncServices.Products.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

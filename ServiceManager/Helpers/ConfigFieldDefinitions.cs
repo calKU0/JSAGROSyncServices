@@ -41,12 +41,17 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "PriceSettings:BulkyDeliveryPriceNet", Label = "Cena netto wysyłki gabarytowej", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:CustomDeliveryPriceNet", Label = "Cena netto wysyłki niestandardowej", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:DropshippingPriceNet", Label = "Cena netto dropshippingu", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
+            new ConfigField { Key = "PriceSettings:MaxPriceDropPercent", Label = "Maksymalny spadek ceny (%)", Group = "Narzuty", FieldType = ConfigFieldType.Decimal, Description = "Powyżej tego spadku cena nie jest aktualizowana, tylko zgłaszana w logu i mailem. 0 = bez ograniczenia." },
 
             // AppSettings
             new ConfigField { Key = "AppSettings:StartHour", Label = "Godzina rozpoczęcia synchronizacji", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int},
             new ConfigField { Key = "AppSettings:EndHour", Label = "Godzina zakończenia synchronizacji", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int},
-            new ConfigField { Key = "AppSettings:CategoriesId", Label = "ID synchronizowanych kategorii", Group = "Ustawienia serwisu" },
-            new ConfigField { Key = "AppSettings:CategoriesName", Label = "Nazwy synchronizowanych kategorii", Group = "Ustawienia serwisu" },
+            new ConfigField { Key = "AppSettings:CategoriesId", Label = "ID synchronizowanych kategorii", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.IntList, Description = "Oferty zakładane i aktualizowane są tylko dla produktów z tych kategorii. Usunięcie kategorii kończy (ENDED) oferty produktów, które do niej należały." },
+            new ConfigField { Key = "AppSettings:CategoriesName", Label = "Nazwy synchronizowanych kategorii", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.StringList, Description = "Oferty zakładane i aktualizowane są tylko dla produktów z tych kategorii. Usunięcie kategorii kończy (ENDED) oferty produktów, które do niej należały." },
+            new ConfigField { Key = "AppSettings:DeliveriesWithoutPriceUpdate", Label = "Cenniki dostaw zarządzane ręcznie", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.StringList, Description = "Oferty z tych cenników mają aktualizowany tylko stan i opis. Serwis nie zmienia im ceny, cennika dostawy ani czasu realizacji." },
+            new ConfigField { Key = "AppSettings:PriceDropAlertEmail", Label = "Email do powiadomień o spadku ceny", Group = "Ustawienia serwisu" },
+            new ConfigField { Key = "AppSettings:UploadParallelism", Label = "Ile produktów wysyłać równolegle", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },
+            new ConfigField { Key = "AppSettings:CourierPriceSurcharge", Label = "Dopłata do ceny przy wysyłce kurierem (PLN)", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "AppSettings:MinProductStock", Label = "Minimalny stan produktu", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:MinProductPriceNet", Label = "Minimalna cena netto produktu (w Gąsce)", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "AppSettings:BundleProductsUnderPriceNet", Label = "Łącz w zestawy poniżej X PLN", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Decimal },
@@ -54,7 +59,8 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "AppSettings:FetchIntervalMinutes", Label = "Co ile wywoływać synchronizację (min)", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:OfferProcessingDelayMinutes", Label = "Opóźnienie złożenia zamówienia (min)", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:NotificationsEmail", Label = "Adresy email do powiadomień (rodzielone średnikiem)", Group = "Ustawienia serwisu" },
-            new ConfigField { Key = "AppSettings:AllegroDeliveryNames", Label = "Nazwy cenników dostawy Allegro", Group = "Ustawienia serwisu" },
+            new ConfigField { Key = "AppSettings:AllegroDeliveryNames", Label = "Nazwy cenników dostawy Allegro", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.StringList, Description = "Serwis obsługuje tylko zamówienia z tych cenników. Oferty wystawione ręcznie, spoza listy, są pomijane." },
+            new ConfigField { Key = "AppSettings:DeliveryAddressEmail", Label = "Email podawany w adresie dostawy", Group = "Ustawienia serwisu" },
 
             // Allegro Settings
             new ConfigField { Key = "AllegroSettings:AllegroHandlingTime", Label = "Czas realizacji", Group = "Ustawienia Allegro" },
@@ -65,6 +71,7 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "AllegroSettings:AllegroImpliedWarranty", Label = "Nazwa polityki reklamacji", Group = "Ustawienia Allegro" },
             new ConfigField { Key = "AllegroSettings:AllegroResponsiblePerson", Label = "Odpowiedzialna osoba", Group = "Ustawienia Allegro" },
             new ConfigField { Key = "AllegroSettings:AllegroResponsibleProducer", Label = "Odpowiedzialny producent", Group = "Ustawienia Allegro" },
+            new ConfigField { Key = "AllegroSettings:DefaultPartsManufacturer", Label = "Domyślny producent części", Group = "Ustawienia Allegro", Description = "Wstawiany w parametr „Producent części”, gdy dostawca go nie podaje." },
         };
     }
 }

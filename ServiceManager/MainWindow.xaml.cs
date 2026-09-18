@@ -18,7 +18,7 @@ namespace ServiceManager
         private ObservableCollection<LogFileItem> logFiles = new ObservableCollection<LogFileItem>();
         private readonly LogRefreshService _logRefreshService = new();
         private readonly ServiceControllerService _serviceControllerService = new();
-        private FileSystemWatcher _logWatcher;
+        private FileSystemWatcher? _logWatcher;
         private readonly DispatcherTimer _logReloadDebounce;
         public ObservableCollection<ServiceItem> AvailableServices { get; } = new ObservableCollection<ServiceItem>();
         private const int InitialTailLines = 2000;
@@ -31,7 +31,7 @@ namespace ServiceManager
         private bool _isLoadingMore = false;
         private bool _reachedFileStart = false;
         private long _lastReadOffset = 0;
-        private object _lastSelectedLog;
+        private object? _lastSelectedLog;
         private bool _isAtBottom = true;
         private bool _suppressLogSelection;
         private LogFileItem? _selectedLogFile;

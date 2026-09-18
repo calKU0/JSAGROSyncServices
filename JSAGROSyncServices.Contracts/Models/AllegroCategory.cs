@@ -4,9 +4,9 @@
     {
         public int Id { get; set; }
 
-        public string CategoryId { get; set; }
-        public string Name { get; set; }
-        public AllegroCategory Parent { get; set; }
+        public string CategoryId { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public AllegroCategory? Parent { get; set; }
 
         public int? ParentId { get; set; }
 

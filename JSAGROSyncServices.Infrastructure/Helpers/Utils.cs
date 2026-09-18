@@ -6,7 +6,7 @@ namespace JSAGROSyncServices.Infrastructure.Helpers
 {
     public static class Utils
     {
-        public static byte[] EnsureImageMinSize(byte[] image, int minWidth = 400, int minHeight = 400)
+        public static byte[]? EnsureImageMinSize(byte[] image, int minWidth = 400, int minHeight = 400)
         {
             try
             {
@@ -30,8 +30,9 @@ namespace JSAGROSyncServices.Infrastructure.Helpers
 
                 return ms.ToArray();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                // Nieprzetwarzalny obrazek pomijamy - wywolujacy rozpozna to po null.
                 return null;
             }
         }

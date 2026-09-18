@@ -5,20 +5,20 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
     public class AllegroShippingRatesResponse
     {
         [JsonPropertyName("shippingRates")]
-        public List<ShippingRate> ShippingRates { get; set; }
+        public List<ShippingRate> ShippingRates { get; set; } = new();
         public class ShippingRate
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("name")]
-            public string Name { get; set; }
+            public string? Name { get; set; }
 
             [JsonPropertyName("features")]
-            public Features Features { get; set; }
+            public Features? Features { get; set; }
 
             [JsonPropertyName("marketplaces")]
-            public List<Marketplace> Marketplaces { get; set; }
+            public List<Marketplace> Marketplaces { get; set; } = new();
         }
         public class Features
         {
@@ -32,7 +32,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class Marketplace
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
         }
     }
 }

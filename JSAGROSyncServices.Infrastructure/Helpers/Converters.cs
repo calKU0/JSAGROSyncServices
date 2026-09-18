@@ -21,7 +21,7 @@ namespace JSAGROSyncServices.Infrastructure.Helpers
                         throw new JsonException($"Unexpected string value for list: {s}");
 
                     case JsonTokenType.StartArray:
-                        return JsonSerializer.Deserialize<List<T>>(ref reader, options);
+                        return JsonSerializer.Deserialize<List<T>>(ref reader, options) ?? new List<T>();
 
                     case JsonTokenType.Null:
                         return new List<T>();

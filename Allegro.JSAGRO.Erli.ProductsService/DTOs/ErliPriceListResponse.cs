@@ -9,10 +9,10 @@ namespace Allegro.JSAGRO.Erli.ProductsService.DTOs
         public int Id { get; set; }
 
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         [JsonPropertyName("prices")]
-        public List<Prices> Prices { get; set; }
+        public List<Prices> Prices { get; set; } = new();
 
         [JsonPropertyName("erliProEnabled")]
         public bool ErliProEnabled { get; set; }
@@ -30,7 +30,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.DTOs
     public class Prices
     {
         [JsonPropertyName("deliveryMethod")]
-        public DeliveryMethod DeliveryMethod { get; set; }
+        public DeliveryMethod? DeliveryMethod { get; set; }
 
         [JsonPropertyName("basePrice")]
         public int BasePrice { get; set; }
@@ -38,7 +38,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.DTOs
         public int NextItemPrice { get; set; }
 
         [JsonPropertyName("limit")]
-        public object Limit { get; set; }
+        public object? Limit { get; set; }
 
         [JsonPropertyName("nextDayDeliveryOption")]
         public bool? NextDayDeliveryOption { get; set; }
@@ -47,7 +47,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.DTOs
     public class DeliveryDimensionLimit
     {
         [JsonPropertyName("dimension")]
-        public string Dimension { get; set; }
+        public string? Dimension { get; set; }
 
         [JsonPropertyName("limit")]
         public int Limit { get; set; }
@@ -56,7 +56,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.DTOs
     public class DeliveryMethod
     {
         [JsonPropertyName("id")]
-        [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
         public ErliDeliveryMethod Id { get; set; }
 
         [JsonPropertyName("deliveryTime")]
@@ -66,10 +66,14 @@ namespace Allegro.JSAGRO.Erli.ProductsService.DTOs
     public class DeliveryTime
     {
         [JsonPropertyName("unit")]
-        public string Unit { get; set; }
+        public string? Unit { get; set; }
+
         [JsonPropertyName("minPeriod")]
         public int MinPeriod { get; set; }
-        [JsonPropertyName("MaxPeriod")]
+
+        // Uwaga: nazwa musi byc dokladnie "maxPeriod" - Erli odrzuca cennik z bledem
+        // "deliveryTime.maxPeriod is required", gdy pole przyjdzie z wielkiej litery.
+        [JsonPropertyName("maxPeriod")]
         public int MaxPeriod { get; set; }
     }
 }

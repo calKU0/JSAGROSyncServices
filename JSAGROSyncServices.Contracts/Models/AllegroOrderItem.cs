@@ -4,7 +4,8 @@
     {
         public int Id { get; set; }
         public int AllegroOrderId { get; set; }
-        public int ProductId { get; set; }
+        /// <summary>Id produktu u dostawcy. Null, gdy produktu nie ma jeszcze w naszej bazie.</summary>
+        public int? ProductId { get; set; }
         public string OrderItemId { get; set; } = string.Empty;
         public string OfferId { get; set; } = string.Empty;
         public string OfferName { get; set; } = string.Empty;

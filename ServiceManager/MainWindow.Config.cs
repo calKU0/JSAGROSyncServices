@@ -1,4 +1,5 @@
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
+using ServiceManager.Enums;
 using ServiceManager.Helpers;
 using ServiceManager.Models;
 using ServiceManager.Controls;
@@ -48,7 +49,7 @@ namespace ServiceManager
                 foreach (var group in groupedFields)
                 {
                     var existingFields = group
-                        .Where(f => config.GetSection(f.Key).Exists())
+                        .Where(f => FieldExists(config, f))
                         .ToList();
 
                     if (!existingFields.Any())
@@ -92,6 +93,20 @@ namespace ServiceManager
             {
                 _dialogService.ShowError(string.Format(UiMessages.ConfigLoadFailed, ex.Message));
             }
+        }
+
+        private bool FieldExists(IConfiguration config, ConfigField field)
+        {
+            if (field.FieldType == ConfigFieldType.StringList || field.FieldType == ConfigFieldType.IntList)
+            {
+                // Pusta tablica jest poprawną konfiguracją, a IConfiguration jej nie widzi -
+                // dlatego zaglądamy wprost do pliku.
+                var path = _selectedService?.ExternalConfigPath;
+
+                return !string.IsNullOrWhiteSpace(path) && _configService.KeyExists(path, field.Key);
+            }
+
+            return config.GetSection(field.Key).Exists();
         }
 
         private void LoadDeliveries(IConfiguration config)
