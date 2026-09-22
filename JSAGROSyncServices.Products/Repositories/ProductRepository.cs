@@ -18,13 +18,15 @@ namespace JSAGROSyncServices.Products.Repositories
         private readonly ServiceContext _service;
         private readonly ILogger<ProductRepository> _logger;
         private readonly AppSettings _appSettings;
+        private readonly PriceSettings _priceSettings;
 
-        public ProductRepository(DapperContext context, ILogger<ProductRepository> logger, IOptions<AppSettings> appSettings, ServiceContext serviceContext)
+        public ProductRepository(DapperContext context, ILogger<ProductRepository> logger, IOptions<AppSettings> appSettings, IOptions<PriceSettings> priceSettings, ServiceContext serviceContext)
         {
             _context = context;
             _service = serviceContext;
             _logger = logger;
             _appSettings = appSettings.Value;
+            _priceSettings = priceSettings.Value;
         }
 
         public async Task UpsertProductsBatchAsync(List<RolmarProduct> products, CancellationToken ct)
@@ -86,13 +88,17 @@ namespace JSAGROSyncServices.Products.Repositories
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     "RolmarProducts_UpsertBatch",
-                    new { Products = table.AsTableValuedParameter("dbo.RolmarProductUpsertType") },
+                    new
+                    {
+                        Products = table.AsTableValuedParameter("dbo.RolmarProductUpsertType"),
+                        // Zapis ceny zakupu decyduje o blokadzie - dlatego limit idzie razem z danymi.
+                        MaxPriceDropPercent = _priceSettings.MaxPriceDropPercent
+                    },
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 900,
                     cancellationToken: ct));
 
             await ReplaceSpecificationsBatchAsync(connection, products, ct);
-            await ReplaceCategoriesBatchAsync(connection, products, ct);
         }
 
         /// <summary>
@@ -194,53 +200,6 @@ namespace JSAGROSyncServices.Products.Repositories
                     cancellationToken: ct));
         }
 
-        private async Task ReplaceCategoriesBatchAsync(IDbConnection connection, List<RolmarProduct> products, CancellationToken ct)
-        {
-            var withCategories = products.Where(p => p.Categories != null).ToList();
-
-            if (withCategories.Count == 0)
-                return;
-
-            var codes = new DataTable();
-            codes.Columns.Add("Code", typeof(string));
-
-            var items = new DataTable();
-            items.Columns.Add("Code", typeof(string));
-            items.Columns.Add("Name", typeof(string));
-
-            foreach (var product in withCategories)
-            {
-                if (string.IsNullOrWhiteSpace(product.Code))
-                    continue;
-
-                codes.Rows.Add(product.Code);
-
-                foreach (var category in product.Categories!)
-                {
-                    if (string.IsNullOrWhiteSpace(category.Name))
-                        continue;
-
-                    items.Rows.Add(product.Code, category.Name);
-                }
-            }
-
-            if (codes.Rows.Count == 0)
-                return;
-
-            await connection.ExecuteAsync(
-                new CommandDefinition(
-                    "RolmarCategory_ReplaceBatch",
-                    new
-                    {
-                        IntegrationCompany = _service.Company,
-                        Codes = codes.AsTableValuedParameter("dbo.ProductCodeType"),
-                        Items = items.AsTableValuedParameter("dbo.ProductCategoryBatchType")
-                    },
-                    commandType: CommandType.StoredProcedure,
-                    commandTimeout: 900,
-                    cancellationToken: ct));
-        }
-
         public async Task<List<int>> GetProductsForDetailUpdate(int limit, CancellationToken ct)
         {
             using var conn = _context.CreateConnection();
@@ -317,7 +276,8 @@ namespace JSAGROSyncServices.Products.Repositories
                         DeliveryType = product.DeliveryType,
                         PriceNet = product.PriceNet,
                         PriceGross = product.PriceGross,
-                        Package = product.Package
+                        Package = product.Package,
+                        MaxPriceDropPercent = _priceSettings.MaxPriceDropPercent
                     },
                     transaction,
                     commandType: CommandType.StoredProcedure
@@ -326,11 +286,6 @@ namespace JSAGROSyncServices.Products.Repositories
                 if (product.Specifications?.Any() == true)
                 {
                     await ReplaceSpecificationsAsync(connection, transaction, productId, product.Specifications, ct);
-                }
-
-                if (product.Categories?.Any() == true)
-                {
-                    await ReplaceCategoriesAsync(connection, transaction, productId, product.Categories, ct);
                 }
 
                 if (product.Packages?.Any() == true)
@@ -372,30 +327,6 @@ namespace JSAGROSyncServices.Products.Repositories
                     {
                         ProductId = productId,
                         Items = table.AsTableValuedParameter("dbo.ProductSpecificationType")
-                    },
-                    transaction,
-                    commandType: CommandType.StoredProcedure,
-                    commandTimeout: 900,
-                    cancellationToken: ct));
-        }
-
-        private async Task ReplaceCategoriesAsync(IDbConnection connection, IDbTransaction transaction, int productId, List<RolmarCategory> categories, CancellationToken ct)
-        {
-            var table = new DataTable();
-            table.Columns.Add("Name", typeof(string));
-
-            foreach (var c in categories)
-            {
-                table.Rows.Add(c.Name ?? string.Empty);
-            }
-
-            await connection.ExecuteAsync(
-                new CommandDefinition(
-                    "RolmarCategory_ReplaceByProductId",
-                    new
-                    {
-                        ProductId = productId,
-                        Items = table.AsTableValuedParameter("dbo.RolmarCategoryType")
                     },
                     transaction,
                     commandType: CommandType.StoredProcedure,
@@ -902,7 +833,7 @@ namespace JSAGROSyncServices.Products.Repositories
             return products.ToList();
         }
 
-        public async Task UpdateProductAllegroId(int productId, string allegroProductId, string allegroCategoryId, CancellationToken ct)
+        public async Task UpdateProductAllegroId(int productId, string? allegroProductId, string allegroCategoryId, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
             connection.Open();

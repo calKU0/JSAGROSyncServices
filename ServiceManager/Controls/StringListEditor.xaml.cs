@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -7,7 +7,7 @@ using System.Windows.Media;
 
 namespace ServiceManager.Controls
 {
-    public partial class StringListEditor : UserControl
+    public partial class StringListEditor : UserControl, IListValueEditor
     {
         private readonly List<TextBox> _rows = new();
 

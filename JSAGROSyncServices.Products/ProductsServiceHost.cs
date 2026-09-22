@@ -70,6 +70,9 @@ namespace JSAGROSyncServices.Products
                     services.AddScoped<IAllegroResponsibleProducerRepository>(sp => new AllegroResponsibleProducerRepository(sp.GetRequiredService<DapperContext>(), serviceContext.Account));
                     services.AddScoped<IAllegroResponsiblePersonRepository>(sp => new AllegroResponsiblePersonRepository(sp.GetRequiredService<DapperContext>(), serviceContext.Account));
                     services.AddScoped<IAllegroDeliveryMethodRepository>(sp => new AllegroDeliveryMethodRepository(sp.GetRequiredService<DapperContext>(), serviceContext.Account));
+                    services.AddScoped<ISupplierCategoryRepository>(sp => new SupplierCategoryRepository(
+                        sp.GetRequiredService<DapperContext>(),
+                        serviceContext.Company));
                     services.AddScoped<ISyncCategoryRepository>(sp => new SyncCategoryRepository(
                         sp.GetRequiredService<DapperContext>(),
                         serviceContext.Account,

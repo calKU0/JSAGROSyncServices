@@ -8,6 +8,8 @@ using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Infrastructure.Helpers;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -17,13 +19,11 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
     {
         private readonly ServiceContext _service;
         private const int UpsertBatchSize = 1000;
-        private const int UpsertBatchParallelism = 8;
-
-        private const int CategoryMappingBatchSize = 2000;
 
         private readonly ILogger<GaskaApiService> _logger;
         private readonly IProductRepository _productRepo;
         private readonly IImageRepository _imageRepo;
+        private readonly ISupplierCategoryRepository _categoryRepo;
         private readonly ISyncCategoryRepository _syncCategoryRepo;
         private readonly HttpClient _http;
         private readonly AppSettings _appSettings;
@@ -35,11 +35,12 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             WriteIndented = true
         };
 
-        public GaskaApiService(IProductRepository productRepo, IImageRepository imageRepo, ISyncCategoryRepository syncCategoryRepo, HttpClient http, IOptions<GaskaApiCredentials> apiSettings, IOptions<AppSettings> appSettings, ILogger<GaskaApiService> logger, ServiceContext serviceContext)
+        public GaskaApiService(IProductRepository productRepo, IImageRepository imageRepo, ISupplierCategoryRepository categoryRepo, ISyncCategoryRepository syncCategoryRepo, HttpClient http, IOptions<GaskaApiCredentials> apiSettings, IOptions<AppSettings> appSettings, ILogger<GaskaApiService> logger, ServiceContext serviceContext)
         {
             _service = serviceContext;
             _productRepo = productRepo;
             _imageRepo = imageRepo;
+            _categoryRepo = categoryRepo;
             _syncCategoryRepo = syncCategoryRepo;
             _http = http;
             _appSettings = appSettings.Value;
@@ -49,199 +50,170 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
         public async Task SyncProducts(CancellationToken ct = default)
         {
-            // Produkty pobiera tylko to konto, więc bierzemy sumę kategorii skonfigurowanych na wszystkich kontach Allegro.
-            var categoriesIds = await GetCategoriesToFetch(ct);
+            // Drzewo kategorii najpierw - na nim opiera się filtr ofert i lista wyboru w konfiguratorze.
+            await SyncCategoryTreeAsync(ct);
 
-            if (categoriesIds.Count == 0)
+            // Pobieramy i zapisujemy wyłącznie produkty ze skonfigurowanych kategorii. Produkty pobiera
+            // tylko ten serwis, więc bierzemy sumę kategorii wszystkich kont Allegro.
+            var categoryIds = await GetCategoriesToFetchAsync(ct);
+
+            if (categoryIds.Count == 0)
             {
                 _logger.LogWarning("No categories configured for any Allegro account. Skipping product sync.");
                 return;
             }
 
-            // Kategorie, pod którymi produkt został pobrany - na ich podstawie każde konto filtruje swoje oferty.
-            var categoriesByProductCode = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
-            var fetchedCategories = new HashSet<int>();
+            int fetched = 0, incomplete = 0;
+            var sw = Stopwatch.StartNew();
 
-            foreach (var categoryId in categoriesIds)
+            foreach (var categoryId in categoryIds)
             {
-                int page = 1;
-                bool hasMore = true;
-                bool categoryCompleted = true;
-                var categoryProductCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                ct.ThrowIfCancellationRequested();
 
-                while (hasMore)
+                var (codes, completed) = await FetchCategoryAsync(categoryId, ct);
+                fetched += codes.Count;
+
+                if (completed)
                 {
-                    try
-                    {
-                        var url = $"/products?category={categoryId}&page={page}&perPage={_apiSettings.Value.ProductsPerPage}&lng=pl";
-                        var response = await _http.GetAsync(url);
-
-                        if (!response.IsSuccessStatusCode)
-                        {
-                            // Przerywamy tę kategorię - przy trwałym błędzie API dalsze strony też nie odpowiedzą.
-                            _logger.LogError($"API error while fetching page {page} for category {categoryId}: {response.StatusCode}");
-                            categoryCompleted = false;
-                            break;
-                        }
-
-                        var json = await response.Content.ReadAsStringAsync();
-                        var apiResponse = JsonSerializer.Deserialize<ProductsResponse>(json, _jsonOptions);
-
-                        if (apiResponse?.Products == null || apiResponse.Products.Count == 0)
-                        {
-                            hasMore = false;
-                            break;
-                        }
-
-                        try
-                        {
-                            var mappedProducts = apiResponse.Products
-                                .Select(MapToRolmarProduct)
-                                .GroupBy(p => p.Code, StringComparer.OrdinalIgnoreCase)
-                                .Select(g => g.First())
-                                .ToList();
-
-                            await UpsertProductsInBatchesAsync(mappedProducts, ct);
-
-                            foreach (var product in mappedProducts)
-                            {
-                                if (!string.IsNullOrWhiteSpace(product.Code))
-                                    categoryProductCodes.Add(product.Code);
-                            }
-
-                            _logger.LogDebug("Fetched {Count} products for category {CategoryId}.", apiResponse.Products.Count, categoryId);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, $"Error while saving products for category {categoryId}");
-                            categoryCompleted = false;
-                        }
-
-                        if (apiResponse.Products.Count < _apiSettings.Value.ProductsPerPage)
-                        {
-                            hasMore = false;
-                            break;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, $"Error while getting products from page {page} for category {categoryId}.");
-                        categoryCompleted = false;
-                        break;
-                    }
-                    finally
-                    {
-                        page++;
-                        await Task.Delay(TimeSpan.FromSeconds(_apiSettings.Value.ProductsInterval));
-                    }
+                    _logger.LogInformation("Category {CategoryId}: {Count} products fetched.", categoryId, codes.Count);
                 }
-
-                // Kategorię pobraną tylko częściowo pomijamy - inaczej skasowalibyśmy przypisania
-                // produktów, których w tym przebiegu zwyczajnie nie zobaczyliśmy, i ich oferty zostałyby zakończone.
-                if (!categoryCompleted)
+                else
                 {
+                    incomplete++;
                     _logger.LogWarning(
-                        "Category {CategoryId} was not fetched completely. Keeping current product assignments for this category.",
-                        categoryId);
-                    continue;
-                }
-
-                fetchedCategories.Add(categoryId);
-
-                _logger.LogInformation("Category {CategoryId}: {Count} products fetched.", categoryId, categoryProductCodes.Count);
-
-                foreach (var code in categoryProductCodes)
-                {
-                    if (!categoriesByProductCode.TryGetValue(code, out var productCategories))
-                    {
-                        productCategories = new HashSet<int>();
-                        categoriesByProductCode.Add(code, productCategories);
-                    }
-
-                    productCategories.Add(categoryId);
+                        "Category {CategoryId} was not fetched completely ({Count} products).",
+                        categoryId, codes.Count);
                 }
             }
 
-            await SaveProductCategoriesAsync(categoriesByProductCode, fetchedCategories, ct);
+            sw.Stop();
+
+            _logger.LogInformation(
+                "Gąska products fetched: {Fetched} from {Categories} categories (incomplete: {Incomplete}). Took {Elapsed}.",
+                fetched, categoryIds.Count, incomplete, sw.Elapsed);
         }
 
-        private async Task<List<int>> GetCategoriesToFetch(CancellationToken ct)
+        /// <summary>Pobiera wszystkie strony jednej kategorii. Zwraca kody produktów i to, czy pobranie się udało.</summary>
+        private async Task<(HashSet<string> Codes, bool Completed)> FetchCategoryAsync(int categoryId, CancellationToken ct)
         {
-            var configuredCategories = _appSettings.CategoriesId?.Where(id => id != 0).ToList() ?? new List<int>();
+            var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var perPage = _apiSettings.Value.ProductsPerPage;
+            var interval = TimeSpan.FromSeconds(_apiSettings.Value.ProductsInterval);
+
+            for (var page = 1; ; page++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                bool lastPage;
+
+                try
+                {
+                    var response = await _http.GetAsync($"/products?category={categoryId}&page={page}&perPage={perPage}&lng=pl", ct);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        // Przy trwałym błędzie API dalsze strony też nie odpowiedzą.
+                        _logger.LogError("Gąska API error on page {Page} of category {CategoryId}: {Status}.", page, categoryId, response.StatusCode);
+                        return (codes, false);
+                    }
+
+                    var json = await response.Content.ReadAsStringAsync(ct);
+                    var apiResponse = JsonSerializer.Deserialize<ProductsResponse>(json, _jsonOptions);
+                    var products = apiResponse?.Products ?? new List<ApiProducts>();
+
+                    var mappedProducts = products
+                        .Select(MapToRolmarProduct)
+                        .Where(p => !string.IsNullOrWhiteSpace(p.Code))
+                        .GroupBy(p => p.Code, StringComparer.OrdinalIgnoreCase)
+                        .Select(g => g.First())
+                        .ToList();
+
+                    await UpsertProductsInBatchesAsync(mappedProducts, ct);
+
+                    foreach (var product in mappedProducts)
+                        codes.Add(product.Code);
+
+                    lastPage = products.Count < perPage;
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    _logger.LogError(ex, "Error while fetching page {Page} of Gąska category {CategoryId}.", page, categoryId);
+                    return (codes, false);
+                }
+
+                // Odstęp po każdym zapytaniu, także ostatnim - kolejna kategoria zaczyna od razu.
+                await Task.Delay(interval, ct);
+
+                if (lastPage)
+                    return (codes, true);
+            }
+        }
+
+        private async Task<List<int>> GetCategoriesToFetchAsync(CancellationToken ct)
+        {
+            var configured = _appSettings.CategoriesId?.Where(id => id != 0).ToList() ?? new List<int>();
 
             try
             {
-                var accountsCategories = await _syncCategoryRepo.GetCompanyCategoriesAsync(ct);
-
-                var categoriesIds = accountsCategories
+                var allAccounts = (await _syncCategoryRepo.GetCompanyCategoriesAsync(ct))
                     .Select(c => int.TryParse(c, out var id) ? id : 0)
-                    .Where(id => id != 0)
-                    .Union(configuredCategories)
-                    .Distinct()
-                    .ToList();
+                    .Where(id => id != 0);
 
-                _logger.LogInformation(
-                    "Fetching products for {Count} categories configured across all Allegro accounts: {Categories}",
-                    categoriesIds.Count,
-                    string.Join(", ", categoriesIds));
+                var categoryIds = allAccounts.Union(configured).Distinct().OrderBy(id => id).ToList();
 
-                return categoriesIds;
+                _logger.LogInformation("Fetching products for {Count} categories configured across all Allegro accounts: {Categories}",
+                    categoryIds.Count, string.Join(", ", categoryIds));
+
+                return categoryIds;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error while reading categories of all Allegro accounts. Using categories of this service only.");
-                return configuredCategories;
+                return configured;
             }
         }
 
-        private async Task SaveProductCategoriesAsync(Dictionary<string, HashSet<int>> categoriesByProductCode, HashSet<int> fetchedCategories, CancellationToken ct)
+        /// <summary>
+        /// Pełne drzewo kategorii Gąski z /categories. Jedno zapytanie na cykl - dzięki temu
+        /// lista kategorii do wyboru jest kompletna, nawet dla kategorii bez pobranych produktów.
+        /// </summary>
+        private async Task SyncCategoryTreeAsync(CancellationToken ct)
         {
-            if (categoriesByProductCode.Count == 0 || fetchedCategories.Count == 0)
-                return;
-
             try
             {
-                foreach (var batch in categoriesByProductCode.Chunk(CategoryMappingBatchSize))
+                var response = await _http.GetAsync("/categories?lng=pl", ct);
+
+                if (!response.IsSuccessStatusCode)
                 {
-                    await _syncCategoryRepo.ReplaceProductCategoriesAsync(
-                        batch.ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase),
-                        fetchedCategories,
-                        ct);
+                    _logger.LogError("Gąska API error while fetching categories: {Status}.", response.StatusCode);
+                    return;
                 }
 
-                _logger.LogInformation("Saved supplier categories for {Count} products.", categoriesByProductCode.Count);
+                var json = await response.Content.ReadAsStringAsync(ct);
+                var apiResponse = JsonSerializer.Deserialize<CategoriesResponse>(json, _jsonOptions);
+
+                if (apiResponse == null || apiResponse.Result != 0)
+                {
+                    _logger.LogError("Gąska API returned an error for categories: {Message}", apiResponse?.Message ?? "empty response");
+                    return;
+                }
+
+                var nodes = ToCategoryNodes(apiResponse.Categories);
+                await _categoryRepo.UpsertNodesAsync(nodes, ct);
+
+                _logger.LogInformation("Gąska category tree synchronized: {Count} categories.", nodes.Count);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                _logger.LogError(ex, "Error while saving supplier categories of products.");
+                // Bez aktualnego drzewa działa filtr na dotychczasowym - nie przerywamy pobierania produktów.
+                _logger.LogError(ex, "Synchronizing the Gąska category tree failed.");
             }
         }
 
         private async Task UpsertProductsInBatchesAsync(List<RolmarProduct> products, CancellationToken ct)
         {
-            if (products == null || products.Count == 0)
-                return;
-
-            var batches = products
-                .Select((product, index) => new { product, index })
-                .GroupBy(x => x.index / UpsertBatchSize)
-                .Select(g => g.Select(x => x.product).ToList())
-                .ToList();
-
-            foreach (var batch in batches)
-            {
-                if (_productRepo is ProductRepository concreteRepo)
-                {
-                    await concreteRepo.UpsertProductsBatchAsync(batch, ct);
-                }
-                else
-                {
-                    foreach (var product in batch)
-                    {
-                        await _productRepo.UpsertProductAsync(product, ct);
-                    }
-                }
-            }
+            foreach (var batch in products.Chunk(UpsertBatchSize))
+                await _productRepo.UpsertProductsBatchAsync(batch.ToList(), ct);
         }
 
         public async Task SyncProductDetails(CancellationToken ct = default)
@@ -279,6 +251,11 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 return;
             }
 
+            _logger.LogInformation("Gąska product details: {Count} products to fetch.", productsToUpdate.Count);
+
+            int updated = 0, failed = 0;
+            var sw = Stopwatch.StartNew();
+
             foreach (var productId in productsToUpdate)
             {
                 try
@@ -309,19 +286,41 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                     }
 
                     await SaveProductImagesAsync(apiResponse.Product, existingProduct.Id, ct);
-                    await _productRepo.UpsertProductAsync(MapToRolmarProduct(existingProduct, apiResponse.Product), ct);
+
+                    var product = MapToRolmarProduct(existingProduct, apiResponse.Product);
+                    await _productRepo.UpsertProductAsync(product, ct);
+
+                    // Bez kategorii produkt trafi do kolejki szczegółów ponownie - warto to widzieć w logu.
+                    if (product.CategoryKeys!.Count == 0)
+                        _logger.LogWarning("Product {ProductCode} has no categories in its details.", existingProduct.Code);
+
+                    // Kategorie zapisujemy jako ostatnie: ich obecność oznacza "szczegóły pobrane",
+                    // więc nie może wyprzedzić zdjęć ani reszty danych produktu.
+                    await _categoryRepo.ReplaceProductCategoriesAsync(
+                        new Dictionary<string, List<string>> { [existingProduct.Code] = product.CategoryKeys ?? new List<string>() },
+                        ct);
+
+                    updated++;
 
                     _logger.LogDebug("Product details updated for {ProductCode}.", existingProduct.Code);
                 }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
+                    failed++;
                     _logger.LogError(ex, "Error while updating product {Id}.", productId);
                 }
                 finally
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(_apiSettings.Value.ProductInterval), ct);
+                    if (!ct.IsCancellationRequested)
+                        await Task.Delay(TimeSpan.FromSeconds(_apiSettings.Value.ProductInterval), ct);
                 }
             }
+
+            _logger.LogInformation("Gąska product details: updated {Updated}, failed {Failed}. Took {Elapsed}.", updated, failed, sw.Elapsed);
         }
 
         private async Task SaveProductImagesAsync(ApiProduct product, int productId, CancellationToken ct)
@@ -410,8 +409,28 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                     Name = a.Name ?? string.Empty
                 }).ToList() ?? new List<ProductApplication>(),
                 Specifications = MapSpecifications(product.Parameters),
-                Categories = MapCategories(product.Categories)
+                CategoryKeys = MapCategoryKeys(product.Categories)
             };
+        }
+
+        /// <summary>
+        /// Kategorie produktu ze szczegółów - wyłącznie liście, czyli te, które nie są rodzicem
+        /// innej kategorii z tej listy. Nadrzędne wynikają z drzewa, więc ich nie zapisujemy.
+        /// </summary>
+        private static List<string> MapCategoryKeys(IEnumerable<ApiCategory>? categories)
+        {
+            var all = categories?.Where(c => c.Id != 0).ToList();
+
+            if (all == null || all.Count == 0)
+                return new List<string>();
+
+            var parentIds = all.Select(c => c.ParentID).ToHashSet();
+
+            return all
+                .Where(c => !parentIds.Contains(c.Id))
+                .Select(c => c.Id.ToString(CultureInfo.InvariantCulture))
+                .Distinct()
+                .ToList();
         }
 
         private async Task<List<int>?> GetProductsChanged(DateTime dateFrom, CancellationToken ct)
@@ -478,53 +497,18 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             return (name, unit);
         }
 
-        private static List<RolmarCategory> MapCategories(IEnumerable<ApiCategory>? categories)
-        {
-            if (categories == null)
-                return new List<RolmarCategory>();
-
-            var categoryList = categories.ToList();
-            var parentIds = categoryList.Select(c => c.ParentID).ToHashSet();
-            var leafCategories = categoryList.Where(c => !parentIds.Contains(c.Id)).ToList();
-            var categoryLookup = categoryList
+        /// <summary>
+        /// Kategorie z /categories -> węzły drzewa. Kluczem jest id Gąski; parentID = 0 oznacza korzeń.
+        /// </summary>
+        private static List<SupplierCategoryNode> ToCategoryNodes(IEnumerable<ApiCategory>? categories) =>
+            (categories ?? Enumerable.Empty<ApiCategory>())
+                .Where(c => c.Id != 0 && !string.IsNullOrWhiteSpace(c.Name))
                 .GroupBy(c => c.Id)
-                .ToDictionary(g => g.Key, g => g.First());
-
-            var result = new List<RolmarCategory>();
-
-            foreach (var category in leafCategories)
-            {
-                var name = BuildCategoryName(category, categoryLookup);
-                if (string.IsNullOrWhiteSpace(name))
-                    continue;
-
-                result.Add(new RolmarCategory { Name = name });
-            }
-
-            return result
-                .GroupBy(c => c.Name)
                 .Select(g => g.First())
+                .Select(c => new SupplierCategoryNode(
+                    c.Id.ToString(CultureInfo.InvariantCulture),
+                    c.ParentID == 0 || c.ParentID == c.Id ? null : c.ParentID.ToString(CultureInfo.InvariantCulture),
+                    c.Name!.Trim()))
                 .ToList();
-        }
-
-        private static string BuildCategoryName(ApiCategory category, IReadOnlyDictionary<int, ApiCategory> lookup)
-        {
-            var parts = new Stack<string>();
-            var visited = new HashSet<int>();
-            var current = category;
-
-            while (current != null && visited.Add(current.Id))
-            {
-                if (!string.IsNullOrWhiteSpace(current.Name))
-                    parts.Push(current.Name.Trim());
-
-                if (current.ParentID == 0 || !lookup.TryGetValue(current.ParentID, out var parent))
-                    break;
-
-                current = parent;
-            }
-
-            return string.Join(" > ", parts);
-        }
     }
 }

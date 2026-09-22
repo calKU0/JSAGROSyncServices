@@ -527,6 +527,11 @@ namespace JSAGROSyncServices.Orders.Services
 
                 if (response.IsSuccessStatusCode)
                 {
+                    // Zapisujemy stan, ktory Allegro wlasnie przyjelo. Bez tego kolejny cykl
+                    // porownuje nowy status ze starym i wysyla dokladnie to samo jeszcze raz.
+                    order.RealizeStatus = status;
+                    await _orderRepo.UpdateRealizeStatus(order.Id, status);
+
                     _logger.LogInformation("Order {AllegroOrderId} status set to {Status}.", order.AllegroId, status);
                     return true;
                 }
@@ -560,8 +565,17 @@ namespace JSAGROSyncServices.Orders.Services
                     .GroupBy(x => new { x.Waybill, x.Carrier })
                     .ToList();
 
+                if (shipments.Count == 0)
+                    return 0;
+
+                var known = await GetKnownShipments(order, ct);
+
                 foreach (var shipment in shipments)
                 {
+                    // Ten numer Allegro juz zna - ponowne wyslanie tylko zakladaloby duplikat przesylki.
+                    if (known.Contains(ShipmentKey(shipment.Key.Carrier, shipment.Key.Waybill)))
+                        continue;
+
                     var request = new AllegroAddTrackingNumberRequest
                     {
                         CarrierId = shipment.Key.Carrier,
@@ -579,6 +593,9 @@ namespace JSAGROSyncServices.Orders.Services
                     if (response.IsSuccessStatusCode)
                     {
                         sent++;
+                        known.Add(ShipmentKey(shipment.Key.Carrier, shipment.Key.Waybill));
+                        await _orderRepo.AddSentShipment(order.Id, shipment.Key.Carrier, shipment.Key.Waybill);
+
                         _logger.LogInformation("Tracking number {TrackingNumber} ({Carrier}) sent for Allegro order {AllegroOrderId}.",
                             shipment.Key.Waybill, shipment.Key.Carrier, order.AllegroId);
                     }
@@ -594,6 +611,50 @@ namespace JSAGROSyncServices.Orders.Services
             }
 
             return sent;
+        }
+
+        private static string ShipmentKey(string carrierId, string waybill) => $"{carrierId}|{waybill}".ToUpperInvariant();
+
+        /// <summary>
+        /// Numery przesyłek, które Allegro już ma. Przy pierwszym przetwarzaniu zamówienia
+        /// pytamy o nie Allegro - zamówienie mogło dostać przesyłki wcześniej (także z tego
+        /// serwisu, zanim pamiętał, co wysłał). Potem wystarczy zapis w bazie.
+        /// </summary>
+        private async Task<HashSet<string>> GetKnownShipments(AllegroOrder order, CancellationToken ct)
+        {
+            var known = (await _orderRepo.GetSentShipments(order.Id))
+                .Select(s => ShipmentKey(s.CarrierId, s.Waybill))
+                .ToHashSet(StringComparer.Ordinal);
+
+            if (order.ShipmentsCheckedAt != null)
+                return known;
+
+            try
+            {
+                var response = await _allegroApiClient.GetAsync<AllegroShipmentsResponse>(
+                    $"/order/checkout-forms/{order.AllegroId}/shipments", ct);
+
+                foreach (var shipment in response?.Shipments ?? new List<AllegroShipmentsResponse.Shipment>())
+                {
+                    if (string.IsNullOrWhiteSpace(shipment.Waybill))
+                        continue;
+
+                    var carrier = shipment.CarrierId ?? string.Empty;
+
+                    known.Add(ShipmentKey(carrier, shipment.Waybill));
+                    await _orderRepo.AddSentShipment(order.Id, carrier, shipment.Waybill);
+                }
+
+                await _orderRepo.MarkShipmentsChecked(order.Id);
+                order.ShipmentsCheckedAt = DateTime.UtcNow;
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                // Bez tej listy wyslemy numer, ktory moze juz tam byc - gorsze byloby pominiecie wysylki.
+                _logger.LogWarning(ex, "Reading shipments of Allegro order {AllegroOrderId} failed.", order.AllegroId);
+            }
+
+            return known;
         }
 
         private static readonly char[] TrackingNumberSeparators = [',', ';'];

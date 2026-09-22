@@ -44,7 +44,9 @@ namespace ServiceManager
 
                 ConfigStackPanel.Children.Clear();
 
-                var groupedFields = ConfigFieldDefinitions.AllFields.GroupBy(f => f.Group);
+                var groupedFields = ConfigFieldDefinitions.AllFields
+                    .Where(f => f.IsVisable)
+                    .GroupBy(f => f.Group);
 
                 foreach (var group in groupedFields)
                 {

@@ -1,10 +1,11 @@
-using ServiceManager.Controls;
+﻿using ServiceManager.Controls;
 using ServiceManager.Enums;
 using ServiceManager.Models;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using System.Windows;
 using System.Windows.Controls;
 
 namespace ServiceManager.Helpers
@@ -24,8 +25,9 @@ namespace ServiceManager.Helpers
 
                 foreach (var grid in stackPanel.Children.OfType<Grid>())
                 {
-                    var listEditor = grid.Children.OfType<StringListEditor>().FirstOrDefault();
-                    if (listEditor?.Tag is string listKey)
+                    // Lista wpisywana ręcznie i lista kategorii zapisują się tak samo.
+                    var listEditor = grid.Children.OfType<IListValueEditor>().FirstOrDefault();
+                    if (listEditor is FrameworkElement { Tag: string listKey })
                     {
                         definitionsByKey.TryGetValue(listKey, out var listFieldDef);
                         values[listKey] = SerializeList(listEditor.GetItems(), listFieldDef, errors);

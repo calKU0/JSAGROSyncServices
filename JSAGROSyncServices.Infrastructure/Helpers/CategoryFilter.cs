@@ -1,3 +1,4 @@
+﻿using JSAGROSyncServices.Contracts.Models;
 using System.Text.Json;
 
 namespace JSAGROSyncServices.Infrastructure.Helpers
@@ -63,6 +64,53 @@ namespace JSAGROSyncServices.Infrastructure.Helpers
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Zamienia ścieżki kategorii ("A>B>C") na węzły drzewa - po jednym na każdy prefiks
+        /// ("A", "A>B", "A>B>C"), żeby dało się wybrać także kategorię nadrzędną.
+        /// Kluczem węzła jest znormalizowana ścieżka, bo Rolmar nie ma identyfikatorów kategorii.
+        /// </summary>
+        public static List<SupplierCategoryNode> ToTreeNodes(IEnumerable<string?> paths)
+        {
+            var nodes = new Dictionary<string, SupplierCategoryNode>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var raw in paths)
+            {
+                var path = Normalize(raw);
+
+                if (path.Length == 0)
+                    continue;
+
+                // Klucz węzła to dokładnie prefiks znormalizowanej ścieżki - tak samo liczy go SQL
+                // (migracja i filtr konfiguracji). Inne przycinanie dałoby dwa klucze dla tej samej kategorii.
+                string? parentKey = null;
+                var segmentStart = 0;
+
+                while (segmentStart <= path.Length)
+                {
+                    var separator = path.IndexOf(CategorySeparator, segmentStart);
+                    var segmentEnd = separator < 0 ? path.Length : separator;
+                    var name = path[segmentStart..segmentEnd].Trim();
+
+                    if (name.Length == 0)
+                        break;
+
+                    var key = path[..segmentEnd];
+
+                    if (!nodes.ContainsKey(key))
+                        nodes[key] = new SupplierCategoryNode(key, parentKey, name);
+
+                    parentKey = key;
+
+                    if (separator < 0)
+                        break;
+
+                    segmentStart = separator + 1;
+                }
+            }
+
+            return nodes.Values.ToList();
         }
 
         /// <summary>

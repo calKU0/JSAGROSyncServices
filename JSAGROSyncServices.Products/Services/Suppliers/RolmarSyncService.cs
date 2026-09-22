@@ -27,16 +27,18 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         private readonly ILogger<RolmarSyncService> _logger;
         private readonly IProductRepository _productRepository;
         private readonly ISyncCategoryRepository _syncCategoryRepository;
+        private readonly ISupplierCategoryRepository _categoryRepository;
         private readonly RolmarApiCredentials _rolmarSettings;
         private readonly AppSettings _appSettings;
 
-        public RolmarSyncService(HttpClient httpClient, ILogger<RolmarSyncService> logger, IProductRepository productRepository, ISyncCategoryRepository syncCategoryRepository, IOptions<RolmarApiCredentials> options, IOptions<AppSettings> appSettings, ServiceContext serviceContext)
+        public RolmarSyncService(HttpClient httpClient, ILogger<RolmarSyncService> logger, IProductRepository productRepository, ISyncCategoryRepository syncCategoryRepository, ISupplierCategoryRepository categoryRepository, IOptions<RolmarApiCredentials> options, IOptions<AppSettings> appSettings, ServiceContext serviceContext)
         {
             _service = serviceContext;
             _httpClient = httpClient;
             _logger = logger;
             _productRepository = productRepository;
             _syncCategoryRepository = syncCategoryRepository;
+            _categoryRepository = categoryRepository;
             _rolmarSettings = options.Value;
             _appSettings = appSettings.Value;
         }
@@ -83,6 +85,11 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
                 var rolmarResponse = rolmarResponseArray[0];
 
+                // Rolmar nie udostępnia listy kategorii, więc drzewo budujemy z kategorii WSZYSTKICH produktów
+                // w odpowiedzi - także tych, których nie zapisujemy. Inaczej w konfiguratorze byłyby do wyboru
+                // tylko kategorie już skonfigurowane i nie dałoby się dodać nowej.
+                await SyncCategoryTreeAsync(rolmarResponse.Products, ct);
+
                 // Produkty pobiera tylko to konto, więc bierzemy sumę kategorii skonfigurowanych na wszystkich kontach Allegro.
                 var allowedCategories = await GetCategoriesToFetch(ct);
 
@@ -104,6 +111,14 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                     {
                         var batchList = batch.ToList();
                         await _productRepository.UpsertProductsBatchAsync(batchList, ct);
+
+                        await _categoryRepository.ReplaceProductCategoriesAsync(
+                            batchList
+                                .Where(p => !string.IsNullOrWhiteSpace(p.Code))
+                                .GroupBy(p => p.Code, StringComparer.OrdinalIgnoreCase)
+                                .ToDictionary(g => g.Key, g => g.First().CategoryKeys ?? new List<string>(), StringComparer.OrdinalIgnoreCase),
+                            ct);
+
                         upsertedCount += batchList.Count;
                     }
                     catch (Exception ex)
@@ -118,6 +133,22 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error occurred while syncing products from Rolmar.");
+            }
+        }
+
+        private async Task SyncCategoryTreeAsync(IEnumerable<ProductResult> products, CancellationToken ct)
+        {
+            try
+            {
+                var nodes = CategoryFilter.ToTreeNodes(products.SelectMany(p => p.Categories ?? new List<string>()));
+                await _categoryRepository.UpsertNodesAsync(nodes, ct);
+
+                _logger.LogInformation("Rolmar category tree synchronized: {Count} categories.", nodes.Count);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                // Bez odświeżonego drzewa działa filtr na dotychczasowym - produkty i tak pobieramy.
+                _logger.LogError(ex, "Synchronizing the Rolmar category tree failed.");
             }
         }
 
@@ -341,7 +372,12 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                     Value = s.Value ?? string.Empty,
                     UnitName = s.UnitName ?? string.Empty
                 }).ToList() ?? new List<JSAGROSyncServices.Contracts.Models.ProductSpecification>(),
-                Categories = product.Categories?.Select(c => new RolmarCategory { Name = c ?? string.Empty }).ToList() ?? new List<RolmarCategory>()
+                // Rolmar zawsze podaje kategorie produktu, więc ustawiamy listę (także pustą) - zapis zastąpi przypisania.
+                CategoryKeys = (product.Categories ?? new List<string>())
+                    .Select(CategoryFilter.Normalize)
+                    .Where(key => key.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
             };
         }
     }

@@ -1,5 +1,6 @@
 ﻿using JSAGROSyncServices.Contracts.DTOs.Allegro;
 using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Infrastructure.Services;
 
 using System.Collections.Concurrent;
@@ -50,14 +51,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 {
                     try
                     {
-                        var allegroProduct = string.IsNullOrWhiteSpace(product.Ean)
-                            ? (null, null)
-                            : await FindAllegroProduct(product.Ean, token);
-
-                        if (allegroProduct.ProductId == null)
-                        {
-                            allegroProduct = await FindAllegroProduct(product.Code, token);
-                        }
+                        var allegroProduct = await FindCatalogProduct(product, token);
 
                         searched.Add(product.Id);
 
@@ -88,6 +82,21 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             _logger.LogInformation(
                 "Allegro product search: matched {Found}, not found {NotFound}, failed {Failed} of {Total}. Took {Elapsed}.",
                 found, notFound, failed, products.Count, sw.Elapsed);
+        }
+
+        public async Task<(string? ProductId, string? CategoryId)> FindCatalogProduct(RolmarProduct product, CancellationToken ct)
+        {
+            var found = string.IsNullOrWhiteSpace(product.Ean)
+                ? (ProductId: null, CategoryId: (string?)null)
+                : await FindAllegroProduct(product.Ean, ct);
+
+            if (found.ProductId == null)
+                found = await FindAllegroProduct(product.Code, ct);
+
+            if (found.ProductId == null)
+                found = await FindAllegroProduct(product.Name, ct);
+
+            return found;
         }
 
         private async Task<(string? ProductId, string? CategoryId)> FindAllegroProduct(string phrase, CancellationToken ct)

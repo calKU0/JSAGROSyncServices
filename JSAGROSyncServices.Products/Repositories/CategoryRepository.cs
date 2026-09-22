@@ -130,38 +130,52 @@ namespace JSAGROSyncServices.Products.Repositories
             return result;
         }
 
+        /// <summary>
+        /// Kategoria Allegro najczęściej używana przez inne produkty z tej samej kategorii dostawcy.
+        /// Podpowiedź dla produktów, dla których Allegro nie zaproponowało kategorii.
+        /// </summary>
         public async Task<int?> GetMostCommonDefaultAllegroCategory(int productId, CancellationToken ct)
         {
             using var conn = _context.CreateConnection();
 
-            var productCategories = (await conn.QueryAsync<RolmarCategory>(
-                "SELECT * FROM RolmarCategory WHERE ProductId = @ProductId", new { ProductId = productId }
-            )).ToList();
+            var productCategories = (await conn.QueryAsync<(int Id, string Path)>(
+                new CommandDefinition(
+                    @"SELECT sc.Id, sc.Path
+                      FROM dbo.ProductCategories pc
+                      JOIN dbo.SupplierCategories sc ON sc.Id = pc.CategoryId
+                      WHERE pc.ProductId = @ProductId",
+                    new { ProductId = productId },
+                    cancellationToken: ct))).ToList();
 
-            if (!productCategories.Any()) return null;
+            if (productCategories.Count == 0)
+                return null;
 
-            var root = productCategories.Select(c => c.Name).FirstOrDefault(c => c.Contains("Części według rodzaju")) // check
-                       ?? productCategories.Select(c => c.Name).First();
+            // Gąska ma równoległe drzewa ("wg rodzaju", "wg producentów") - rodzaj części lepiej wskazuje kategorię Allegro.
+            var source = productCategories.FirstOrDefault(c => c.Path.Contains("Części według rodzaju", StringComparison.OrdinalIgnoreCase));
 
-            if (root == null) return null;
+            if (source == default)
+                source = productCategories[0];
 
-            var stats = await conn.QueryFirstOrDefaultAsync<(int CategoryId, int Count)>(
-                @"SELECT p.DefaultAllegroCategory AS CategoryId, COUNT(*) AS Count
-                    FROM RolmarCategory pc
-                    INNER JOIN RolmarProducts p ON p.Id = pc.ProductId
-                    WHERE pc.Name = @Name AND pc.ProductId != @ProductId AND p.DefaultAllegroCategory != 0
-                    GROUP BY p.DefaultAllegroCategory
-                    ORDER BY COUNT(*) DESC",
-                new { Name = root, ProductId = productId }
-            );
+            var mostCommon = await conn.QueryFirstOrDefaultAsync<int?>(
+                new CommandDefinition(
+                    @"SELECT TOP 1 p.DefaultAllegroCategory
+                      FROM dbo.ProductCategories pc
+                      JOIN dbo.RolmarProducts p ON p.Id = pc.ProductId
+                      WHERE pc.CategoryId = @CategoryId
+                        AND pc.ProductId <> @ProductId
+                        AND p.DefaultAllegroCategory <> 0
+                      GROUP BY p.DefaultAllegroCategory
+                      ORDER BY COUNT(*) DESC",
+                    new { CategoryId = source.Id, ProductId = productId },
+                    cancellationToken: ct));
 
-            if (stats.CategoryId != 0) return stats.CategoryId;
+            if (mostCommon is > 0)
+                return mostCommon;
 
+            var path = source.Path.ToLowerInvariant();
 
-            // Fallback for traktor/kombajn
-            var nameLower = root.ToLower();
-            if (nameLower.Contains("traktor")) return 305829;
-            if (nameLower.Contains("kombajn")) return 319159;
+            if (path.Contains("traktor")) return 305829;
+            if (path.Contains("kombajn")) return 319159;
 
             return null;
         }

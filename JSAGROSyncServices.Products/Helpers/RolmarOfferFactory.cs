@@ -59,7 +59,7 @@ namespace JSAGROSyncServices.Products.Helpers
                         Currency = "PLN"
                     }
                 },
-                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
+                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).Take(MaxGalleryImages).ToList(),
                 Description = BuildDescription(product),
                 External = new External
                 {
@@ -116,6 +116,15 @@ namespace JSAGROSyncServices.Products.Helpers
         private const int MinOfferNameWords = 3;
         private const int MaxOfferNameLength = 75;
 
+        /// <summary>Maksymalna długość pojedynczego słowa w tytule oferty według Allegro.</summary>
+        private const int MaxOfferNameWordLength = 30;
+
+        /// <summary>Do ilu znaków przycinamy słowo, które przekracza limit.</summary>
+        private const int ShortenedWordLength = 20;
+
+        /// <summary>Maksymalna liczba zdjęć w galerii oferty Allegro.</summary>
+        private const int MaxGalleryImages = 16;
+
         /// <summary>
         /// Allegro wymaga tytulu o dlugosci min. 12 znakow i min. 3 slowach. Krotkie nazwy od dostawcy
         /// (np. "Wspornik Bizon") uzupelniamy kodem produktu - bez tego oferta jest odrzucana w kazdym cyklu.
@@ -130,7 +139,29 @@ namespace JSAGROSyncServices.Products.Helpers
                 name = name.Length == 0 ? code : name + " " + code;
             }
 
+            name = ShortenLongWords(name);
+
             return name.Length > MaxOfferNameLength ? name.Substring(0, MaxOfferNameLength).TrimEnd() : name;
+        }
+
+        /// <summary>
+        /// Allegro odrzuca tytuł, w którym pojedyncze słowo ma ponad 30 znaków (zwykle sklejone
+        /// numery katalogowe). Takie słowo przycinamy, resztę tytułu zostawiamy bez zmian.
+        /// </summary>
+        private static string ShortenLongWords(string name)
+        {
+            if (name.Length == 0)
+                return name;
+
+            var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            for (var i = 0; i < words.Length; i++)
+            {
+                if (words[i].Length > MaxOfferNameWordLength)
+                    words[i] = words[i].Substring(0, ShortenedWordLength);
+            }
+
+            return string.Join(' ', words);
         }
 
         private static bool IsOfferNameValid(string name)
@@ -159,6 +190,8 @@ namespace JSAGROSyncServices.Products.Helpers
             var connectedImages = product.AllegroImages?
                 .Where(i => i.Connected)
                 .Select(i => i.Url)
+                .Distinct()
+                .Take(MaxGalleryImages)
                 .ToList();
 
             var images = connectedImages != null && connectedImages.Any()
@@ -233,15 +266,29 @@ namespace JSAGROSyncServices.Products.Helpers
             };
         }
 
+        /// <summary>
+        /// Produkt z katalogu Allegro: gdy znamy jego id, wysyłamy wyłącznie id. Dołożenie
+        /// zdjęć czy parametrów obok id Allegro traktuje jako propozycję zmiany produktu
+        /// i wymaga wtedy kompletu parametrów produktu - stąd "Uzupełnij parametry obowiązkowe"
+        /// mimo podpiętego produktu. Bez id wysyłamy pełną propozycję nowego produktu.
+        /// </summary>
         private static List<ProductSet> BuildProductSet(RolmarProduct product, int quantity, AllegroSettings allegroSettings)
         {
             var ProductSets = new List<ProductSet>();
 
-            var Product = new ProductObject
-            {
-                Id = product.AllegroId,
-                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
-            };
+            var hasCatalogProduct = !string.IsNullOrWhiteSpace(product.AllegroId);
+
+            var Product = hasCatalogProduct
+                ? new ProductObject { Id = product.AllegroId }
+                : new ProductObject
+                {
+                    Name = BuildOfferName(product),
+                    Category = new Category { Id = product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture) },
+                    // Parametry opisujące produkt idą tutaj; parametry samej oferty - w sekcji parameters.
+                    Parameters = BuildParameters(product.Parameters, true),
+                    // Allegro przyjmuje maksymalnie 16 zdjec - przy wiekszej liczbie odrzuca cala oferte.
+                    Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).Take(MaxGalleryImages).ToList(),
+                };
 
             ProductSets.Add(new ProductSet
             {
@@ -522,15 +569,6 @@ namespace JSAGROSyncServices.Products.Helpers
             return description;
         }
 
-        public static bool IsPriceDropTooLarge(decimal currentPrice, decimal newPrice, decimal maxDropPercent)
-        {
-            if (currentPrice <= 0)
-                return false;
-
-            var dropPercent = (currentPrice - newPrice) / currentPrice * 100m;
-            return dropPercent > maxDropPercent;
-        }
-
         public static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings)
         {
             var calculatedPrice = product.PriceGross;
@@ -577,7 +615,20 @@ namespace JSAGROSyncServices.Products.Helpers
 
             calculatedPrice += shippingCost;
 
+            // Produkt ponadgabarytowy - wysyłka droższa, dopłata idzie do finalnej ceny oferty.
+            if (priceSettings.OversizeSurcharge > 0 && IsOversized(product, priceSettings))
+                calculatedPrice += priceSettings.OversizeSurcharge;
+
             return Math.Max(calculatedPrice, 1.00m);
+        }
+
+        private static bool IsOversized(RolmarProduct product, PriceSettings priceSettings)
+        {
+            IReadOnlyCollection<string> names = priceSettings.OversizeDimensionNames.Count > 0
+                ? priceSettings.OversizeDimensionNames
+                : ProductDimensions.DefaultDimensionNames;
+
+            return ProductDimensions.IsOversized(product, priceSettings.OversizeThresholdCm, names);
         }
 
         private static decimal ResolveMargin(PriceSettings priceSettings, decimal grossPrice)

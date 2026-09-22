@@ -1,4 +1,4 @@
-using Dapper;
+﻿using Dapper;
 using JSAGROSyncServices.Contracts.Data.Enums;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
@@ -200,6 +200,46 @@ namespace JSAGROSyncServices.Orders.Repositories
                 transaction.Rollback();
                 throw;
             }
+        }
+
+        public async Task<List<AllegroShipment>> GetSentShipments(int orderId)
+        {
+            using var conn = _context.CreateConnection();
+
+            return (await conn.QueryAsync<AllegroShipment>(
+                "dbo.AllegroOrderShipments_GetByOrder",
+                new { AllegroOrderId = orderId },
+                commandType: CommandType.StoredProcedure)).ToList();
+        }
+
+        public async Task AddSentShipment(int orderId, string carrierId, string waybill)
+        {
+            using var conn = _context.CreateConnection();
+
+            await conn.ExecuteAsync(
+                "dbo.AllegroOrderShipments_Add",
+                new { AllegroOrderId = orderId, CarrierId = carrierId, Waybill = waybill },
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task MarkShipmentsChecked(int orderId)
+        {
+            using var conn = _context.CreateConnection();
+
+            await conn.ExecuteAsync(
+                "dbo.AllegroOrders_MarkShipmentsChecked",
+                new { AllegroOrderId = orderId },
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task UpdateRealizeStatus(int orderId, AllegroOrderStatus status)
+        {
+            using var conn = _context.CreateConnection();
+
+            await conn.ExecuteAsync(
+                "dbo.AllegroOrders_UpdateRealizeStatus",
+                new { AllegroOrderId = orderId, RealizeStatus = status },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task SetEmailSent(int orderId)

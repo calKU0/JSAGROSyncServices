@@ -61,10 +61,13 @@ namespace JSAGROSyncServices.Infrastructure.Hosting
 
             try
             {
+                // Każdy skrypt w osobnej transakcji: błąd w środku migracji wycofuje ją w całości,
+                // zamiast zostawiać bazę w połowie przebudowy.
                 var upgrader = DeployChanges.To
                     .SqlDatabase(connectionString)
                     .LogTo(new SerilogUpgradeLog(Log.Logger))
                     .WithScriptsFromFileSystem(Path.Combine(AppContext.BaseDirectory, "Migrations"))
+                    .WithTransactionPerScript()
                     .Build();
 
                 var result = upgrader.PerformUpgrade();

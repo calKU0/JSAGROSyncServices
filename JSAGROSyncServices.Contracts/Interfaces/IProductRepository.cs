@@ -26,7 +26,7 @@ namespace JSAGROSyncServices.Contracts.Interfaces
         Task<List<RolmarProduct>> GetNotExistingProductsInAllegro(CancellationToken ct);
         Task UpdateCompatibilitySet(int productId, bool value, CancellationToken ct);
 
-        Task UpdateProductAllegroId(int productId, string allegroProductId, string allegroCategoryId, CancellationToken ct);
+        Task UpdateProductAllegroId(int productId, string? allegroProductId, string allegroCategoryId, CancellationToken ct);
 
         /// <summary>
         /// Zapamietuje, ze produkty byly juz szukane w katalogu Allegro. Bez tego

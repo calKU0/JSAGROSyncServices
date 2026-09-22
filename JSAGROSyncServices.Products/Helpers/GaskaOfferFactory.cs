@@ -12,6 +12,9 @@ namespace JSAGROSyncServices.Products.Helpers
 {
     public class GaskaOfferFactory : IOfferFactory
     {
+        /// <summary>Maksymalna liczba zdjęć w galerii oferty Allegro.</summary>
+        private const int MaxGalleryImages = 16;
+
         private readonly ICategoryRepository _categoryRepo;
         private readonly AppSettings _appSettings;
         private readonly AllegroSettings _allegroSettings;
@@ -145,7 +148,7 @@ namespace JSAGROSyncServices.Products.Helpers
                         Currency = "PLN"
                     }
                 },
-                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
+                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).Take(MaxGalleryImages).ToList(),
                 Description = BuildDescription(product),
                 External = new External { Id = product.Code },
                 Publication = new Publication { Status = publicationStatus, StartingAt = startingAt },
@@ -233,15 +236,18 @@ namespace JSAGROSyncServices.Products.Helpers
         {
             var hasProductId = !string.IsNullOrWhiteSpace(offerProductId);
             var categoryId = product.DefaultAllegroCategory.ToString();
-            var productObject = new ProductObject
-            {
-                Name = product.Name,
-                Id = hasProductId ? offerProductId : null,
-                IdType = null,
-                Category = hasProductId ? null : new Category { Id = categoryId == "0" ? fallbackCat : categoryId },
-                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList(),
-                Parameters = includeProductParameters && !hasProductId ? BuildParameters(product.Parameters, isForProduct: true) : null,
-            };
+
+            // Przy produkcie z katalogu wysyłamy samo id. Nazwa, zdjęcia czy parametry obok id
+            // to dla Allegro propozycja zmiany produktu - wtedy żąda kompletu parametrów produktu.
+            var productObject = hasProductId
+                ? new ProductObject { Id = offerProductId }
+                : new ProductObject
+                {
+                    Name = product.Name,
+                    Category = new Category { Id = categoryId == "0" ? fallbackCat : categoryId },
+                    Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).Take(MaxGalleryImages).ToList(),
+                    Parameters = includeProductParameters ? BuildParameters(product.Parameters, isForProduct: true) : null,
+                };
 
             return new List<ProductSet>
             {

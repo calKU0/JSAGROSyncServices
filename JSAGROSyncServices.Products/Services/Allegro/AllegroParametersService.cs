@@ -97,6 +97,10 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 ["stan"] = _ => "Nowy",
                 ["waga produktu z opakowaniem jednostkowym"] = p => p.Weight.ToString(), // bez ?. dla float
                 ["numer katalogowy części"] = p => p.Code,
+                // Bez tych dwóch mapowań parametry wymagane dla produktu zostawały puste,
+                // a Allegro odrzucało ofertę komunikatem "Uzupełnij parametry obowiązkowe".
+                ["ean (gtin)"] = p => p.Ean,
+                ["kod producenta"] = p => p.Code,
                 ["typ maszyny"] = _ => "Inny",
                 ["rodzaj skrzyni"] = _ => "Brak informacji",
                 ["typ samochodu"] = _ => "Niezdefiniowany",

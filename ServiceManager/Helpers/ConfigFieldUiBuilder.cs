@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using ServiceManager.Controls;
 using ServiceManager.Enums;
 using ServiceManager.Models;
@@ -16,6 +16,13 @@ namespace ServiceManager.Helpers
         {
             foreach (var field in fields)
             {
+                if (field.CategoryCompany != null)
+                {
+                    // Lista kategorii dostawcy z bazy tej usługi - connection string bierzemy z jej konfiguracji.
+                    panel.Children.Add(CreateCategoryPickerRow(field, ReadListValues(config, field.Key), config.GetConnectionString("MyDbContext")));
+                    continue;
+                }
+
                 if (IsListField(field))
                 {
                     panel.Children.Add(CreateListRow(field, ReadListValues(config, field.Key)));
@@ -62,6 +69,20 @@ namespace ServiceManager.Helpers
             }
 
             return section.Get<List<string>>() ?? new List<string>();
+        }
+
+        public Grid CreateCategoryPickerRow(ConfigField field, IEnumerable<string> selectedKeys, string? connectionString)
+        {
+            var picker = new CategoryPickerEditor
+            {
+                Margin = new Thickness(0, 4, 0, 4),
+                IsEnabled = field.IsEnabled,
+                Tag = field.Key
+            };
+
+            picker.Initialize(connectionString, field.CategoryCompany!.Value, selectedKeys);
+
+            return CreateRow(field, picker);
         }
 
         public Grid CreateListRow(ConfigField field, IEnumerable<string> items)

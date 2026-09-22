@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -63,6 +64,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         private readonly IParameterRepository _parameterRepo;
         private readonly IImageRepository _imageRepo;
         private readonly IOfferFactory _offerFactory;
+        private readonly IAllegroProductService _allegroProductService;
         private readonly IEmailService _emailService;
         private readonly AllegroApiClient _apiClient;
         private readonly AppSettings _appSettings;
@@ -86,6 +88,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             IParameterRepository parameterRepo,
             IImageRepository imageRepo,
             IOfferFactory offerFactory,
+            IAllegroProductService allegroProductService,
             IEmailService emailService,
             AllegroApiClient apiClient,
             IOptions<AppSettings> appSettings,
@@ -99,6 +102,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             _parameterRepo = parameterRepo;
             _imageRepo = imageRepo;
             _offerFactory = offerFactory;
+            _allegroProductService = allegroProductService;
             _emailService = emailService;
             _apiClient = apiClient;
             _appSettings = appSettings.Value;
@@ -315,6 +319,20 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 {
                     try
                     {
+                        // Nowej oferty na podejrzanie niskiej cenie zakupu nie wystawiamy wcale -
+                        // inaczej zablokowana cena zostalaby ceną startową oferty.
+                        if (IsPurchasePriceDropTooLarge(product, out var dropPercent))
+                        {
+                            Interlocked.Increment(ref skipped);
+
+                            _logger.LogWarning(
+                                "Purchase price drop {Drop:F0}% for {Code}: {OldPurchase:F2} -> {NewPurchase:F2} PLN. Offer not created.",
+                                dropPercent, product.Code, product.AcceptedPriceGross, product.PriceGross);
+
+                            await SendPriceDropAlert(product, dropPercent, "Oferta nie została wystawiona.");
+                            return;
+                        }
+
                         product.AllegroImages = await ImportImages(product, token);
 
                         if (product.AllegroImages.Count == 0)
@@ -452,11 +470,21 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             if (offersToEnd.Count == 0)
                 return 0;
 
-            _logger.LogInformation("{Count} offers are outside the configured categories - ending them.", offersToEnd.Count);
+            // Zakonczone juz wczesniej tylko pilnujemy, zeby nie wrocily do aktualizacji.
+            // Ponowne wysylanie komendy nic by nie zmienilo, a kosztuje zapytanie do Allegro.
+            var alreadyEnded = offersToEnd.Count(o => string.Equals(o.Status, "ENDED", StringComparison.OrdinalIgnoreCase));
+            var toEnd = offersToEnd.Where(o => !string.Equals(o.Status, "ENDED", StringComparison.OrdinalIgnoreCase)).ToList();
+
+            _logger.LogInformation(
+                "{Count} offers are outside the configured categories - ending {ToEnd} (already ended: {Ended}).",
+                offersToEnd.Count, toEnd.Count, alreadyEnded);
+
+            if (toEnd.Count == 0)
+                return 0;
 
             int ended = 0, failed = 0;
 
-            foreach (var batch in offersToEnd.Chunk(EndOffersBatchSize))
+            foreach (var batch in toEnd.Chunk(EndOffersBatchSize))
             {
                 ct.ThrowIfCancellationRequested();
 
@@ -514,57 +542,82 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             return ended;
         }
 
-        /// <summary>Zwraca true, jeśli cena nie ma być aktualizowana z powodu zbyt dużego spadku.</summary>
+        /// <summary>
+        /// Zwraca true, jeśli cena zakupu spadła skokowo ponad limit - wtedy traktujemy ją
+        /// jak możliwy błąd dostawcy i nie przenosimy na Allegro.
+        ///
+        /// Ceną odniesienia jest ostatnia zaakceptowana cena zakupu, a nie cena oferty:
+        /// cena oferty zmienia się też po zmianie marż, kosztów wysyłki czy dopłat,
+        /// a te nie mają nic wspólnego z błędem w cenniku.
+        /// </summary>
+        private decimal PurchasePriceDropPercent(RolmarProduct product)
+        {
+            var reference = product.AcceptedPriceGross ?? 0m;
+
+            if (_priceSettings.MaxPriceDropPercent <= 0 || reference <= 0 || product.PriceGross >= reference)
+                return 0m;
+
+            return (reference - product.PriceGross) / reference * 100m;
+        }
+
+        private bool IsPurchasePriceDropTooLarge(RolmarProduct product, out decimal dropPercent)
+        {
+            dropPercent = PurchasePriceDropPercent(product);
+            return dropPercent > _priceSettings.MaxPriceDropPercent;
+        }
+
+        /// <summary>Zwraca true, jeśli cena nie ma być aktualizowana z powodu zbyt dużego spadku ceny zakupu.</summary>
         private async Task<bool> CheckPriceDrop(AllegroOffer offer)
         {
-            if (_priceSettings.MaxPriceDropPercent <= 0 || offer.Price <= 0)
+            var product = offer.Product!;
+
+            if (!IsPurchasePriceDropTooLarge(product, out var dropPercent))
                 return false;
 
-            var newPrice = _offerFactory.CalculatePrice(offer.Product!);
-            var dropPercent = (offer.Price - newPrice) / offer.Price * 100m;
-
-            if (dropPercent <= _priceSettings.MaxPriceDropPercent)
-                return false;
+            var newPrice = _offerFactory.CalculatePrice(product);
 
             _logger.LogWarning(
-                "Price drop {Drop:F0}% for {Code}: {OldPrice:F2} -> {NewPrice:F2} PLN. Price not updated.",
-                dropPercent, offer.Product!.Code, offer.Price, newPrice);
+                "Purchase price drop {Drop:F0}% for {Code}: {OldPurchase:F2} -> {NewPurchase:F2} PLN (detected {Detected:yyyy-MM-dd}). " +
+                "Offer price stays {OfferPrice:F2} PLN instead of {NewPrice:F2} PLN.",
+                dropPercent, product.Code, product.AcceptedPriceGross, product.PriceGross,
+                product.PriceDropDetectedAt, offer.Price, newPrice);
 
-            await SendPriceDropAlert(offer, newPrice, dropPercent);
+            await SendPriceDropAlert(product, dropPercent, $"Cena oferty pozostaje {offer.Price:F2} PLN (wyliczona: {newPrice:F2} PLN).");
             return true;
         }
 
-        private async Task SendPriceDropAlert(AllegroOffer offer, decimal newPrice, decimal dropPercent)
+        private async Task SendPriceDropAlert(RolmarProduct product, decimal dropPercent, string consequence)
         {
             if (string.IsNullOrWhiteSpace(_appSettings.PriceDropAlertEmail))
                 return;
 
             var now = DateTime.UtcNow;
 
-            if (PriceDropAlerts.TryGetValue(offer.Product!.Code, out var lastSentUtc) && now - lastSentUtc < PriceDropAlertInterval)
+            if (PriceDropAlerts.TryGetValue(product.Code, out var lastSentUtc) && now - lastSentUtc < PriceDropAlertInterval)
                 return;
 
-            PriceDropAlerts[offer.Product!.Code] = now;
+            PriceDropAlerts[product.Code] = now;
 
             // Slownik zyje tak dlugo jak proces - wyrzucamy wpisy, ktore sie juz przedawnily.
             foreach (var stale in PriceDropAlerts.Where(x => now - x.Value > PriceDropAlertInterval).Select(x => x.Key).ToList())
                 PriceDropAlerts.TryRemove(stale, out _);
 
-            var body = $"<p>Wykryto spadek ceny o {dropPercent:F0}% (limit {_priceSettings.MaxPriceDropPercent}%) dla produktu <b>{offer.Product.Name}</b> ({offer.Product!.Code}).</p>" +
-                       $"<p>Aktualna cena na Allegro: {offer.Price:F2} PLN<br/>Nowa cena wyliczona: {newPrice:F2} PLN</p>" +
-                       $"<p>Cena NIE została zaktualizowana automatycznie.</p>";
+            var body = $"<p>Cena zakupu spadła o {dropPercent:F0}% (limit {_priceSettings.MaxPriceDropPercent}%) dla produktu <b>{product.Name}</b> ({product.Code}).</p>" +
+                       $"<p>Cena zakupu brutto: {product.AcceptedPriceGross:F2} PLN → {product.PriceGross:F2} PLN</p>" +
+                       $"<p>{consequence}</p>" +
+                       $"<p>Blokada zniknie sama, gdy cena zakupu wróci do poprzedniego poziomu.</p>";
 
             try
             {
                 await _emailService.SendEmailAsync(
                     _service.MailSender,
                     _appSettings.PriceDropAlertEmail,
-                    $"Duży spadek ceny: {offer.Product.Name} ({offer.Product!.Code})",
+                    $"Duży spadek ceny zakupu: {product.Name} ({product.Code})",
                     body);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Sending price drop alert for {Code} failed.", offer.Product!.Code);
+                _logger.LogError(ex, "Sending price drop alert for {Code} failed.", product.Code);
             }
         }
 
@@ -690,8 +743,9 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             // Allegro samo podaje wartość, jakiej oczekuje - stosujemy ją, zamiast wpisywać własną.
             if ((code == "PARAMETER_MISMATCH" && !string.IsNullOrEmpty(userMessage))
                 || (code == "ProductConstraintViolationException.DataIntegrity"
-                    && message.Contains("Incorrect value of the")
-                    && message.Contains("parameter for the offered product")))
+                    && ((message.Contains("Incorrect value of the") && message.Contains("parameter for the offered product"))
+                        // Ten sam blad po polsku - np. zly EAN, gdzie Allegro podaje prawidlowa wartosc.
+                        || userMessage.Contains("Niepoprawna wartość parametru", StringComparison.OrdinalIgnoreCase))))
             {
                 var sourceMessage = string.IsNullOrEmpty(userMessage) ? message : userMessage;
                 var correctValue = ExtractCorrectParameterValue(sourceMessage);
@@ -791,6 +845,44 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             {
                 await _offerRepo.DeleteOffer(offerId, CancellationToken.None);
                 _logger.LogWarning("Offer {OfferId} not found in Allegro ({Code}). Removed from database.", offerId, product.Code);
+                return true;
+            }
+
+            // Produkt z katalogu Allegro zniknal (scalony albo usuniety). Czyscimy jego id,
+            // zeby kolejna proba poszla bez niego - Allegro dopasuje produkt po EAN i parametrach.
+            if (code == "ProductNotFoundException" && !string.IsNullOrWhiteSpace(product.AllegroId))
+            {
+                await _productRepo.UpdateProductAllegroId(product.Id, null, product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture), CancellationToken.None);
+                product.AllegroId = null;
+
+                if (!string.IsNullOrEmpty(offerId))
+                    await _offerRepo.UpdateProductId(offerId, null, CancellationToken.None);
+
+                _logger.LogWarning("Allegro product id cleared for {Code}: the product no longer exists in the catalog.", product.Code);
+                return true;
+            }
+
+            // Oferta nie jest podpieta pod produkt z katalogu. Szukamy produktu po EAN,
+            // kodzie i nazwie, zapisujemy jego id i kategorie - patch wyjdzie juz z productSet.
+            if (code == "OfferWithoutProductException" || code == "ProductNotFoundExceptionForOffer")
+            {
+                var found = await _allegroProductService.FindCatalogProduct(product, CancellationToken.None);
+
+                if (found.ProductId == null || found.CategoryId == null)
+                {
+                    _logger.LogWarning("No catalog product found for {Code} (EAN {Ean}) - the offer stays unlinked.", product.Code, product.Ean ?? "-");
+                    return false;
+                }
+
+                await _productRepo.UpdateProductAllegroId(product.Id, found.ProductId, found.CategoryId, CancellationToken.None);
+                product.AllegroId = found.ProductId;
+
+                if (!string.IsNullOrEmpty(offerId))
+                    await _offerRepo.UpdateProductId(offerId, found.ProductId, CancellationToken.None);
+
+                _logger.LogInformation("Offer {OfferId} ({Code}) linked to Allegro product {ProductId} in category {CategoryId}.",
+                    offerId ?? "-", product.Code, found.ProductId, found.CategoryId);
+
                 return true;
             }
 
@@ -936,10 +1028,14 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             return allMatches.Count == 1 ? allMatches[0].Groups[1].Value : null;
         }
 
+        /// <summary>
+        /// Wartość, jakiej oczekuje Allegro - z wersji angielskiej ("the correct value is `X`")
+        /// i polskiej ("Prawidłowa wartość parametru dla produktu to: "X"").
+        /// </summary>
         private static string? ExtractCorrectParameterValue(string message)
         {
-            var match = Regex.Match(message, @"value\s*(?:to|is)\s*[`""]([^`""]+)[`""]", RegexOptions.IgnoreCase);
-            return match.Success ? match.Groups[1].Value : null;
+            var match = Regex.Match(message, @"(?:value|wartość)[^`""]{0,80}?(?:\bto\b|\bis\b)\s*:?\s*[`""]([^`""]+)[`""]", RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups[1].Value.Trim() : null;
         }
 
         /// <summary>
@@ -959,6 +1055,12 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         private static string? ExtractParameterIdFromConstraintMessage(string message)
         {
             var match = Regex.Match(message, @"id:\s*(\d+)", RegexOptions.IgnoreCase);
+
+            if (match.Success)
+                return match.Groups[1].Value;
+
+            // Polska wersja podaje id w nawiasie: "parametru EAN/ISBN/ISSN (225693) dla produktu w ofercie".
+            match = Regex.Match(message, @"parametru\s+[^()]{1,80}?\((\d+)\)", RegexOptions.IgnoreCase);
             return match.Success ? match.Groups[1].Value : null;
         }
 
