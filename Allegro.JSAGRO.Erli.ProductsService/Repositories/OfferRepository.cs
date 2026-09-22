@@ -41,13 +41,18 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Repositories
 
         public void UpdateOffersExistsInErli(IEnumerable<AllegroOffer> offers)
         {
+            var toUpdate = offers as IList<AllegroOffer> ?? offers.ToList();
+
+            if (toUpdate.Count == 0)
+                return;
+
             using (var connection = _context.CreateConnection())
             {
                 // Execute in a transaction for safety
                 connection.Open();
                 using (var transaction = connection.BeginTransaction())
                 {
-                    foreach (var offer in offers)
+                    foreach (var offer in toUpdate)
                     {
                         connection.Execute(
                             "dbo.AllegroOffers_UpdateExistsInErli",
@@ -69,6 +74,11 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Repositories
 
                 var offerDict = new Dictionary<string, AllegroOffer>();
 
+                // Zbiory identyfikatorow zamiast Any() po liscie - przy ofercie z wieloma
+                // parametrami sprawdzanie duplikatow roslo kwadratowo.
+                var seenDescriptions = new HashSet<int>();
+                var seenAttributes = new HashSet<int>();
+
                 connection.Query<AllegroOffer, AllegroOfferDescription, AllegroOfferAttribute, AllegroOffer>(
                     storedProcedure,
                     (offer, desc, attr) =>
@@ -81,10 +91,10 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Repositories
                             offerDict.Add(currentOffer.Id, currentOffer);
                         }
 
-                        if (desc != null && !currentOffer.Descriptions.Any(d => d.Id == desc.Id))
+                        if (desc != null && seenDescriptions.Add(desc.Id))
                             currentOffer.Descriptions.Add(desc);
 
-                        if (attr != null && !currentOffer.Attributes.Any(a => a.Id == attr.Id))
+                        if (attr != null && seenAttributes.Add(attr.Id))
                             currentOffer.Attributes.Add(attr);
 
                         return offer;
@@ -107,6 +117,11 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Repositories
 
                 var offerDict = new Dictionary<string, AllegroOffer>();
 
+                // Zbiory identyfikatorow zamiast Any() po liscie - przy ofercie z wieloma
+                // parametrami sprawdzanie duplikatow roslo kwadratowo.
+                var seenDescriptions = new HashSet<int>();
+                var seenAttributes = new HashSet<int>();
+
                 connection.Query<AllegroOffer, AllegroOfferDescription, AllegroOfferAttribute, AllegroOffer>(
                     storedProcedure,
                     (offer, desc, attr) =>
@@ -119,10 +134,10 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Repositories
                             offerDict.Add(currentOffer.Id, currentOffer);
                         }
 
-                        if (desc != null && !currentOffer.Descriptions.Any(d => d.Id == desc.Id))
+                        if (desc != null && seenDescriptions.Add(desc.Id))
                             currentOffer.Descriptions.Add(desc);
 
-                        if (attr != null && !currentOffer.Attributes.Any(a => a.Id == attr.Id))
+                        if (attr != null && seenAttributes.Add(attr.Id))
                             currentOffer.Attributes.Add(attr);
 
                         return offer;

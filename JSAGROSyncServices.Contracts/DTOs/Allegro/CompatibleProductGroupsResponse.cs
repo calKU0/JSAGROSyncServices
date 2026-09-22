@@ -2,7 +2,7 @@
 {
     public class CompatibleProductGroupsResponse
     {
-        public List<CompatibleGroupDto> Groups { get; set; }
+        public List<CompatibleGroupDto> Groups { get; set; } = new();
 
         public int Count { get; set; }
 
@@ -11,8 +11,8 @@
 
     public class CompatibleGroupDto
     {
-        public string Id { get; set; }
+        public string? Id { get; set; }
 
-        public string Text { get; set; }
+        public string? Text { get; set; }
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 
@@ -8,6 +8,7 @@ namespace ServiceManager.Services
     {
         private DispatcherTimer? _timer;
         private Func<Task>? _onTick;
+        private bool _tickInProgress;
 
         public void Start(TimeSpan interval, Func<Task> onTick)
         {
@@ -31,8 +32,24 @@ namespace ServiceManager.Services
 
         private async void HandleTick(object? sender, EventArgs e)
         {
-            if (_onTick != null)
+            // async void - wyjatek stad nie ma gdzie wyplynac i ubilby cala aplikacje.
+            if (_onTick == null || _tickInProgress)
+                return;
+
+            _tickInProgress = true;
+
+            try
+            {
                 await _onTick();
+            }
+            catch
+            {
+                // Odswiezanie logow nie moze przerwac pracy konfiguratora.
+            }
+            finally
+            {
+                _tickInProgress = false;
+            }
         }
     }
 }

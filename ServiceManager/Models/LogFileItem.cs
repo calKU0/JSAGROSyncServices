@@ -5,8 +5,8 @@ namespace ServiceManager.Models
 {
     public class LogFileItem : INotifyPropertyChanged
     {
-        public string Name { get; set; }
-        public string Path { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
         public DateTime Date { get; set; }
 
         private int warningsCount;
@@ -39,7 +39,7 @@ namespace ServiceManager.Models
             }
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

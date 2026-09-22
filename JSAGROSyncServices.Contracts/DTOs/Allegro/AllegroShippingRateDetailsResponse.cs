@@ -5,16 +5,16 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
     public class AllegroShippingRateDetailsResponse
     {
         [JsonPropertyName("id")]
-        public string Id { get; set; }
+        public string? Id { get; set; }
 
         [JsonPropertyName("name")]
-        public string Name { get; set; }
+        public string? Name { get; set; }
 
         [JsonPropertyName("features")]
-        public Features Feat { get; set; }
+        public Features? Feat { get; set; }
 
         [JsonPropertyName("rates")]
-        public List<Rate> Rates { get; set; }
+        public List<Rate> Rates { get; set; } = new();
 
         [JsonPropertyName("lastModified")]
         public DateTime LastModified { get; set; }
@@ -22,7 +22,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class DeliveryMethod
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
         }
 
         public class Features
@@ -37,10 +37,10 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class FirstItemRate
         {
             [JsonPropertyName("amount")]
-            public string Amount { get; set; }
+            public string? Amount { get; set; }
 
             [JsonPropertyName("currency")]
-            public string Currency { get; set; }
+            public string? Currency { get; set; }
         }
 
         public class MaxPackageWeight
@@ -64,7 +64,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class Rate
         {
             [JsonPropertyName("deliveryMethod")]
-            public DeliveryMethod DeliveryMethod { get; set; }
+            public DeliveryMethod? DeliveryMethod { get; set; }
 
             [JsonPropertyName("maxQuantityPerPackage")]
             public int? MaxQuantityPerPackage { get; set; }
@@ -73,7 +73,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
             public MaxPackageWeight? MaxPackageWeight { get; set; }
 
             [JsonPropertyName("firstItemRate")]
-            public FirstItemRate FirstItemRate { get; set; }
+            public FirstItemRate? FirstItemRate { get; set; }
 
             [JsonPropertyName("nextItemRate")]
             public NextItemRate? NextItemRate { get; set; }

@@ -6,7 +6,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
     public class AllegroGetOrdersResponse
     {
         [JsonPropertyName("checkoutForms")]
-        public List<CheckoutForm> CheckoutForms { get; set; }
+        public List<CheckoutForm> CheckoutForms { get; set; } = new();
 
         [JsonPropertyName("count")]
         public int Count { get; set; }
@@ -17,76 +17,76 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class Address
         {
             [JsonPropertyName("street")]
-            public string Street { get; set; }
+            public string? Street { get; set; }
 
             [JsonPropertyName("city")]
-            public string City { get; set; }
+            public string? City { get; set; }
 
             [JsonPropertyName("postCode")]
-            public string PostCode { get; set; }
+            public string? PostCode { get; set; }
 
             [JsonPropertyName("countryCode")]
-            public string CountryCode { get; set; }
+            public string? CountryCode { get; set; }
 
             [JsonPropertyName("firstName")]
-            public string FirstName { get; set; }
+            public string? FirstName { get; set; }
 
             [JsonPropertyName("lastName")]
-            public string LastName { get; set; }
+            public string? LastName { get; set; }
 
             [JsonPropertyName("zipCode")]
-            public string ZipCode { get; set; }
+            public string? ZipCode { get; set; }
 
             [JsonPropertyName("companyName")]
-            public string CompanyName { get; set; }
+            public string? CompanyName { get; set; }
 
             [JsonPropertyName("phoneNumber")]
-            public string PhoneNumber { get; set; }
+            public string? PhoneNumber { get; set; }
 
             [JsonPropertyName("modifiedAt")]
-            public string ModifiedAt { get; set; }
+            public string? ModifiedAt { get; set; }
 
             [JsonPropertyName("company")]
-            public Company Company { get; set; }
+            public Company? Company { get; set; }
 
             [JsonPropertyName("naturalPerson")]
-            public NaturalPerson NaturalPerson { get; set; }
+            public NaturalPerson? NaturalPerson { get; set; }
         }
 
         public class Buyer
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("email")]
-            public string Email { get; set; }
+            public string? Email { get; set; }
 
             [JsonPropertyName("login")]
-            public string Login { get; set; }
+            public string? Login { get; set; }
 
             [JsonPropertyName("firstName")]
-            public string FirstName { get; set; }
+            public string? FirstName { get; set; }
 
             [JsonPropertyName("lastName")]
-            public string LastName { get; set; }
+            public string? LastName { get; set; }
 
             [JsonPropertyName("companyName")]
-            public string CompanyName { get; set; }
+            public string? CompanyName { get; set; }
 
             [JsonPropertyName("guest")]
             public bool Guest { get; set; }
 
             [JsonPropertyName("personalIdentity")]
-            public string PersonalIdentity { get; set; }
+            public string? PersonalIdentity { get; set; }
 
             [JsonPropertyName("phoneNumber")]
-            public string PhoneNumber { get; set; }
+            public string? PhoneNumber { get; set; }
 
             [JsonPropertyName("preferences")]
-            public Preferences Preferences { get; set; }
+            public Preferences? Preferences { get; set; }
 
             [JsonPropertyName("address")]
-            public Address Address { get; set; }
+            public Address? Address { get; set; }
         }
 
         public class Cancellation
@@ -98,112 +98,112 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class CheckoutForm
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("messageToSeller")]
-            public string MessageToSeller { get; set; }
+            public string? MessageToSeller { get; set; }
 
             [JsonPropertyName("buyer")]
-            public Buyer Buyer { get; set; }
+            public Buyer? Buyer { get; set; }
 
             [JsonPropertyName("payment")]
-            public Payment Payment { get; set; }
+            public Payment? Payment { get; set; }
 
             [JsonPropertyName("status")]
             public AllegroCheckoutFormStatus Status { get; set; }
 
             [JsonPropertyName("fulfillment")]
-            public Fulfillment Fulfillment { get; set; }
+            public Fulfillment? Fulfillment { get; set; }
 
             [JsonPropertyName("delivery")]
-            public Delivery Delivery { get; set; }
+            public Delivery? Delivery { get; set; }
 
             [JsonPropertyName("invoice")]
-            public Invoice Invoice { get; set; }
+            public Invoice? Invoice { get; set; }
 
             [JsonPropertyName("lineItems")]
-            public List<LineItem> LineItems { get; set; }
+            public List<LineItem> LineItems { get; set; } = new();
 
             [JsonPropertyName("surcharges")]
-            public List<Surcharge> Surcharges { get; set; }
+            public List<Surcharge> Surcharges { get; set; } = new();
 
             [JsonPropertyName("discounts")]
-            public List<Discount> Discounts { get; set; }
+            public List<Discount> Discounts { get; set; } = new();
 
             [JsonPropertyName("note")]
-            public Note Note { get; set; }
+            public Note? Note { get; set; }
 
             [JsonPropertyName("marketplace")]
-            public Marketplace Marketplace { get; set; }
+            public Marketplace? Marketplace { get; set; }
 
             [JsonPropertyName("summary")]
-            public Summary Summary { get; set; }
+            public Summary? Summary { get; set; }
 
             [JsonPropertyName("updatedAt")]
             public DateTime UpdatedAt { get; set; }
 
             [JsonPropertyName("revision")]
-            public string Revision { get; set; }
+            public string? Revision { get; set; }
         }
 
         public class Company
         {
             [JsonPropertyName("name")]
-            public string Name { get; set; }
+            public string? Name { get; set; }
 
             [JsonPropertyName("ids")]
-            public List<Id> Ids { get; set; }
+            public List<Id> Ids { get; set; } = new();
 
             [JsonPropertyName("vatPayerStatus")]
-            public string VatPayerStatus { get; set; }
+            public string? VatPayerStatus { get; set; }
 
             [JsonPropertyName("taxId")]
-            public string TaxId { get; set; }
+            public string? TaxId { get; set; }
         }
 
         public class Cost
         {
             [JsonPropertyName("amount")]
-            public string Amount { get; set; }
+            public string? Amount { get; set; }
 
             [JsonPropertyName("currency")]
-            public string Currency { get; set; }
+            public string? Currency { get; set; }
         }
 
         public class Delivery
         {
             [JsonPropertyName("address")]
-            public Address Address { get; set; }
+            public Address? Address { get; set; }
 
             [JsonPropertyName("method")]
-            public Method Method { get; set; }
+            public Method? Method { get; set; }
 
             [JsonPropertyName("pickupPoint")]
-            public PickupPoint PickupPoint { get; set; }
+            public PickupPoint? PickupPoint { get; set; }
 
             [JsonPropertyName("cost")]
-            public Cost Cost { get; set; }
+            public Cost? Cost { get; set; }
 
             [JsonPropertyName("time")]
-            public Time Time { get; set; }
+            public Time? Time { get; set; }
 
             [JsonPropertyName("smart")]
             public bool Smart { get; set; }
 
             [JsonPropertyName("cancellation")]
-            public Cancellation Cancellation { get; set; }
+            public Cancellation? Cancellation { get; set; }
         }
 
         public class Deposit
         {
             [JsonPropertyName("price")]
-            public Price Price { get; set; }
+            public Price? Price { get; set; }
         }
 
         public class Discount
         {
             [JsonPropertyName("type")]
-            public string Type { get; set; }
+            public string? Type { get; set; }
         }
 
         public class Dispatch
@@ -218,7 +218,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class External
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
         }
 
         public class Fulfillment
@@ -227,7 +227,7 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
             public AllegroOrderStatus Status { get; set; }
 
             [JsonPropertyName("shipmentSummary")]
-            public ShipmentSummary ShipmentSummary { get; set; }
+            public ShipmentSummary? ShipmentSummary { get; set; }
         }
 
         public class Guaranteed
@@ -242,10 +242,10 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class Id
         {
             [JsonPropertyName("type")]
-            public string Type { get; set; }
+            public string? Type { get; set; }
 
             [JsonPropertyName("value")]
-            public string Value { get; set; }
+            public string? Value { get; set; }
         }
 
         public class Invoice
@@ -254,172 +254,172 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
             public bool Required { get; set; }
 
             [JsonPropertyName("address")]
-            public Address Address { get; set; }
+            public Address? Address { get; set; }
 
             [JsonPropertyName("dueDate")]
-            public string DueDate { get; set; }
+            public string? DueDate { get; set; }
 
             [JsonPropertyName("features")]
-            public List<string> Features { get; set; }
+            public List<string> Features { get; set; } = new();
         }
 
         public class LineItem
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("offer")]
-            public Offer Offer { get; set; }
+            public Offer? Offer { get; set; }
 
             [JsonPropertyName("quantity")]
             public int Quantity { get; set; }
 
             [JsonPropertyName("originalPrice")]
-            public OriginalPrice OriginalPrice { get; set; }
+            public OriginalPrice? OriginalPrice { get; set; }
 
             [JsonPropertyName("price")]
-            public Price Price { get; set; }
+            public Price? Price { get; set; }
 
             [JsonPropertyName("deposit")]
-            public Deposit Deposit { get; set; }
+            public Deposit? Deposit { get; set; }
 
             [JsonPropertyName("reconciliation")]
-            public Reconciliation Reconciliation { get; set; }
+            public Reconciliation? Reconciliation { get; set; }
 
             [JsonPropertyName("selectedAdditionalServices")]
-            public List<SelectedAdditionalService> SelectedAdditionalServices { get; set; }
+            public List<SelectedAdditionalService> SelectedAdditionalServices { get; set; } = new();
 
             [JsonPropertyName("vouchers")]
-            public List<Voucher> Vouchers { get; set; }
+            public List<Voucher> Vouchers { get; set; } = new();
 
             [JsonPropertyName("tax")]
-            public Tax Tax { get; set; }
+            public Tax? Tax { get; set; }
 
             [JsonPropertyName("boughtAt")]
             public DateTime BoughtAt { get; set; }
 
             [JsonPropertyName("discounts")]
-            public List<Discount> Discounts { get; set; }
+            public List<Discount> Discounts { get; set; } = new();
         }
 
         public class Marketplace
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
         }
 
         public class Method
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("name")]
-            public string Name { get; set; }
+            public string? Name { get; set; }
         }
 
         public class NaturalPerson
         {
             [JsonPropertyName("firstName")]
-            public string FirstName { get; set; }
+            public string? FirstName { get; set; }
 
             [JsonPropertyName("lastName")]
-            public string LastName { get; set; }
+            public string? LastName { get; set; }
         }
 
         public class Note
         {
             [JsonPropertyName("text")]
-            public string Text { get; set; }
+            public string? Text { get; set; }
         }
 
         public class Offer
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("name")]
-            public string Name { get; set; }
+            public string? Name { get; set; }
 
             [JsonPropertyName("external")]
-            public External External { get; set; }
+            public External? External { get; set; }
 
             [JsonPropertyName("productSet")]
-            public ProductSet ProductSet { get; set; }
+            public ProductSet? ProductSet { get; set; }
         }
 
         public class OriginalPrice
         {
             [JsonPropertyName("amount")]
-            public string Amount { get; set; }
+            public string? Amount { get; set; }
 
             [JsonPropertyName("currency")]
-            public string Currency { get; set; }
+            public string? Currency { get; set; }
         }
 
         public class PaidAmount
         {
             [JsonPropertyName("amount")]
-            public string Amount { get; set; }
+            public string? Amount { get; set; }
 
             [JsonPropertyName("currency")]
-            public string Currency { get; set; }
+            public string? Currency { get; set; }
         }
 
         public class Payment
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("type")]
             public AllegroPaymentType Type { get; set; }
 
             [JsonPropertyName("provider")]
-            public string Provider { get; set; }
+            public string? Provider { get; set; }
 
             [JsonPropertyName("paidAmount")]
-            public PaidAmount PaidAmount { get; set; }
+            public PaidAmount? PaidAmount { get; set; }
 
             [JsonPropertyName("reconciliation")]
-            public Reconciliation Reconciliation { get; set; }
+            public Reconciliation? Reconciliation { get; set; }
 
             [JsonPropertyName("features")]
-            public List<string> Features { get; set; }
+            public List<string> Features { get; set; } = new();
         }
 
         public class PickupPoint
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("name")]
-            public string Name { get; set; }
+            public string? Name { get; set; }
 
             [JsonPropertyName("description")]
-            public string Description { get; set; }
+            public string? Description { get; set; }
 
             [JsonPropertyName("address")]
-            public Address Address { get; set; }
+            public Address? Address { get; set; }
         }
 
         public class Preferences
         {
             [JsonPropertyName("language")]
-            public string Language { get; set; }
+            public string? Language { get; set; }
         }
 
         public class Price
         {
             [JsonPropertyName("amount")]
-            public string Amount { get; set; }
+            public string? Amount { get; set; }
 
             [JsonPropertyName("currency")]
-            public string Currency { get; set; }
+            public string? Currency { get; set; }
         }
 
         public class Product
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("quantity")]
             public int Quantity { get; set; }
@@ -428,22 +428,22 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class ProductSet
         {
             [JsonPropertyName("products")]
-            public List<Product> Products { get; set; }
+            public List<Product> Products { get; set; } = new();
         }
 
         public class Reconciliation
         {
             [JsonPropertyName("amount")]
-            public string Amount { get; set; }
+            public string? Amount { get; set; }
 
             [JsonPropertyName("currency")]
-            public string Currency { get; set; }
+            public string? Currency { get; set; }
 
             [JsonPropertyName("value")]
-            public Value Value { get; set; }
+            public Value? Value { get; set; }
 
             [JsonPropertyName("type")]
-            public string Type { get; set; }
+            public string? Type { get; set; }
 
             [JsonPropertyName("quantity")]
             public int Quantity { get; set; }
@@ -452,13 +452,13 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class SelectedAdditionalService
         {
             [JsonPropertyName("definitionId")]
-            public string DefinitionId { get; set; }
+            public string? DefinitionId { get; set; }
 
             [JsonPropertyName("name")]
-            public string Name { get; set; }
+            public string? Name { get; set; }
 
             [JsonPropertyName("price")]
-            public Price Price { get; set; }
+            public Price? Price { get; set; }
 
             [JsonPropertyName("quantity")]
             public int Quantity { get; set; }
@@ -467,94 +467,94 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public class ShipmentSummary
         {
             [JsonPropertyName("lineItemsSent")]
-            public string LineItemsSent { get; set; }
+            public string? LineItemsSent { get; set; }
         }
 
         public class Summary
         {
             [JsonPropertyName("totalToPay")]
-            public TotalToPay TotalToPay { get; set; }
+            public TotalToPay? TotalToPay { get; set; }
         }
 
         public class Surcharge
         {
             [JsonPropertyName("id")]
-            public string Id { get; set; }
+            public string? Id { get; set; }
 
             [JsonPropertyName("type")]
-            public string Type { get; set; }
+            public string? Type { get; set; }
 
             [JsonPropertyName("provider")]
-            public string Provider { get; set; }
+            public string? Provider { get; set; }
 
             [JsonPropertyName("finishedAt")]
             public DateTime FinishedAt { get; set; }
 
             [JsonPropertyName("paidAmount")]
-            public PaidAmount PaidAmount { get; set; }
+            public PaidAmount? PaidAmount { get; set; }
 
             [JsonPropertyName("reconciliation")]
-            public Reconciliation Reconciliation { get; set; }
+            public Reconciliation? Reconciliation { get; set; }
 
             [JsonPropertyName("features")]
-            public List<string> Features { get; set; }
+            public List<string> Features { get; set; } = new();
         }
 
         public class Tax
         {
             [JsonPropertyName("rate")]
-            public string Rate { get; set; }
+            public string? Rate { get; set; }
 
             [JsonPropertyName("subject")]
-            public string Subject { get; set; }
+            public string? Subject { get; set; }
 
             [JsonPropertyName("exemption")]
-            public string Exemption { get; set; }
+            public string? Exemption { get; set; }
         }
 
         public class Time
         {
             [JsonPropertyName("guaranteed")]
-            public Guaranteed Guaranteed { get; set; }
+            public Guaranteed? Guaranteed { get; set; }
 
             [JsonPropertyName("dispatch")]
-            public Dispatch Dispatch { get; set; }
+            public Dispatch? Dispatch { get; set; }
         }
 
         public class TotalToPay
         {
             [JsonPropertyName("amount")]
-            public string Amount { get; set; }
+            public string? Amount { get; set; }
 
             [JsonPropertyName("currency")]
-            public string Currency { get; set; }
+            public string? Currency { get; set; }
         }
 
         public class Value
         {
             [JsonPropertyName("amount")]
-            public string Amount { get; set; }
+            public string? Amount { get; set; }
 
             [JsonPropertyName("currency")]
-            public string Currency { get; set; }
+            public string? Currency { get; set; }
         }
 
         public class Voucher
         {
             [JsonPropertyName("code")]
-            public string Code { get; set; }
+            public string? Code { get; set; }
 
             [JsonPropertyName("type")]
-            public string Type { get; set; }
+            public string? Type { get; set; }
 
             [JsonPropertyName("status")]
-            public string Status { get; set; }
+            public string? Status { get; set; }
 
             [JsonPropertyName("externalTransactionId")]
-            public string ExternalTransactionId { get; set; }
+            public string? ExternalTransactionId { get; set; }
 
             [JsonPropertyName("value")]
-            public Value Value { get; set; }
+            public Value? Value { get; set; }
         }
     }
 }

@@ -10,6 +10,12 @@ namespace JSAGROSyncServices.Contracts.Models
         public string? Note { get; set; }
         public AllegroCheckoutFormStatus Status { get; set; }
         public AllegroOrderStatus RealizeStatus { get; set; }
+
+        /// <summary>
+        /// Kiedy porównaliśmy przesyłki tego zamówienia z tym, co ma Allegro.
+        /// <c>null</c> = jeszcze nie porównywaliśmy, więc przed wysyłką trzeba odpytać Allegro.
+        /// </summary>
+        public DateTime? ShipmentsCheckedAt { get; set; }
         public decimal Amount { get; set; }
         public string ClientNickname { get; set; } = string.Empty;
         public string RecipientFirstName { get; set; } = string.Empty;

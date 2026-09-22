@@ -1,58 +1,73 @@
-using Allegro.JSAGRO.Erli.ProductsService;
+﻿using Allegro.JSAGRO.Erli.ProductsService;
+using Allegro.JSAGRO.Erli.ProductsService.Constants;
 using Allegro.JSAGRO.Erli.ProductsService.Repositories;
 using Allegro.JSAGRO.Erli.ProductsService.Services;
 using Allegro.JSAGRO.Erli.ProductsService.Settings;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Infrastructure.Data;
+using JSAGROSyncServices.Infrastructure.Hosting;
+using JSAGROSyncServices.Infrastructure.Repositories;
+using Microsoft.Extensions.Options;
 using Serilog;
+using System.Net.Http.Headers;
 
-var host = Host.CreateDefaultBuilder(args)
-    .UseWindowsService(options =>
-    {
-        options.ServiceName = "AllegroJSAGROErliProductsService";
-    })
-    .ConfigureServices((hostContext, services) =>
-    {
-        var configuration = hostContext.Configuration;
-        var logDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
-        var logsExpirationDays = Convert.ToInt32(configuration["AppSettings:LogsExpirationDays"]);
-        Directory.CreateDirectory(logDirectory);
+try
+{
+    var host = Host.CreateDefaultBuilder(args)
+        .UseWindowsService(options => options.ServiceName = "AllegroJSAGROErliProductsService")
+        .ConfigureServices((hostContext, services) =>
+        {
+            var configuration = hostContext.Configuration;
 
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
-            .WriteTo.Console()
-            .WriteTo.File(
-                path: Path.Combine(logDirectory, "log-.txt"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: logsExpirationDays,
-                shared: true,
-                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"
-            )
-            .MinimumLevel.Override("System.Net.Http.HttpClient", Serilog.Events.LogEventLevel.Warning)
-            .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
-            .CreateLogger();
+            ServiceBootstrap.ConfigureLogging(configuration);
 
-        // Bind configuration
-        services.Configure<ErliApiCredentials>(configuration.GetSection("ErliApiCredentials"));
-        services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
+            var connectionString = configuration.GetConnectionString("MyDbContext")
+                ?? throw new InvalidOperationException("Brak connection stringa 'MyDbContext' w konfiguracji.");
 
-        // Register dependencies
-        var connectionString = configuration.GetConnectionString("MyDbContext");
-        services.AddSingleton(sp => new DapperContext(connectionString));
-        services.AddScoped<OfferRepository>();
-        services.AddScoped<IAllegroResponsibleProducerRepository, AllegroResponsibleProducerRepository>();
-        services.AddScoped<IAllegroResponsiblePersonRepository, AllegroResponsiblePersonRepository>();
-        services.AddScoped<IAllegroDeliveryMethodRepository, AllegroDeliveryMethodRepository>();
-        services.AddScoped<ErliClient>();
-        services.AddScoped<ErliService>();
+            ServiceBootstrap.RunMigrations(connectionString);
 
-        // Background worker
-        services.AddHostedService<Worker>();
+            services.Configure<ErliApiCredentials>(configuration.GetSection("ErliApiCredentials"));
+            services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
 
-        // Host options
-        services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(10));
-    })
-    .UseSerilog()
-    .Build();
+            services.AddHttpClient<ErliClient>((sp, client) =>
+            {
+                var credentials = sp.GetRequiredService<IOptions<ErliApiCredentials>>().Value;
 
-host.Run();
+                if (string.IsNullOrWhiteSpace(credentials.BaseUrl))
+                    throw new InvalidOperationException("Brak 'ErliApiCredentials:BaseUrl' w konfiguracji.");
+
+                if (string.IsNullOrWhiteSpace(credentials.ApiKey))
+                    throw new InvalidOperationException("Brak 'ErliApiCredentials:ApiKey' w konfiguracji.");
+
+                client.BaseAddress = new Uri(credentials.BaseUrl);
+                client.Timeout = TimeSpan.FromMinutes(2);
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", credentials.ApiKey);
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            });
+
+            services.AddSingleton(_ => new DapperContext(connectionString));
+
+            services.AddScoped<OfferRepository>();
+            services.AddScoped<IAllegroResponsibleProducerRepository>(sp => new AllegroResponsibleProducerRepository(sp.GetRequiredService<DapperContext>(), ServiceConstants.Account));
+            services.AddScoped<IAllegroResponsiblePersonRepository>(sp => new AllegroResponsiblePersonRepository(sp.GetRequiredService<DapperContext>(), ServiceConstants.Account));
+            services.AddScoped<IAllegroDeliveryMethodRepository>(sp => new AllegroDeliveryMethodRepository(sp.GetRequiredService<DapperContext>(), ServiceConstants.Account));
+            services.AddScoped<ErliService>();
+
+            services.AddHostedService<Worker>();
+            services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(15));
+        })
+        .UseSerilog()
+        .Build();
+
+    Log.Information("Starting AllegroJSAGROErliProductsService...");
+    host.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Service terminated unexpectedly.");
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush();
+}

@@ -1,9 +1,11 @@
-﻿namespace ServiceManager.Enums
+namespace ServiceManager.Enums
 {
     public enum ConfigFieldType
     {
         String,
         Int,
-        Decimal
+        Decimal,
+        StringList,
+        IntList
     }
 }

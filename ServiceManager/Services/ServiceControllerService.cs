@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ServiceProcess;
 using System.Threading.Tasks;
 
@@ -11,9 +11,13 @@ namespace ServiceManager.Services
 
         public void SetService(string serviceName)
         {
-            DisposeController();
-            if (!string.IsNullOrWhiteSpace(serviceName))
-                _controller = new ServiceController(serviceName);
+            // Pod lockiem, bo status odswieza sie w tle na innym watku.
+            lock (_lock)
+            {
+                DisposeController();
+                if (!string.IsNullOrWhiteSpace(serviceName))
+                    _controller = new ServiceController(serviceName);
+            }
         }
 
         public async Task<ServiceControllerStatus?> GetStatusAsync()
@@ -63,7 +67,10 @@ namespace ServiceManager.Services
 
         public void Dispose()
         {
-            DisposeController();
+            lock (_lock)
+            {
+                DisposeController();
+            }
         }
 
         private void DisposeController()

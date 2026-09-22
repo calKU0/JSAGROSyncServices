@@ -1,128 +1,20 @@
-using Allegro.JSAGRO.Gaska.OrdersService;
-using Allegro.JSAGRO2.Gaska.OrdersService.Repositories;
-using Allegro.JSAGRO2.Gaska.OrdersService.Services;
-using Allegro.JSAGRO2.Gaska.OrdersService.Settings;
-using DbUp;
-using JSAGROSyncServices.Contracts.Interfaces;
-using JSAGROSyncServices.Contracts.Settings;
-using JSAGROSyncServices.Infrastructure.Data;
-using JSAGROSyncServices.Infrastructure.Logging;
-using JSAGROSyncServices.Infrastructure.Services;
-using Serilog;
-using System.Net.Http.Headers;
+﻿using JSAGROSyncServices.Contracts.Data.Enums;
+using JSAGROSyncServices.Orders;
+using JSAGROSyncServices.Orders.Configuration;
 
-var host = Host.CreateDefaultBuilder(args)
-    .UseWindowsService(options =>
+// Konto JSAGRO2 / dostawca Gąska - w dropshippingu jadą tylko oferty z cennika "JAG API",
+// reszta trafia na nasz magazyn i stamtąd wysyłamy ją sami.
+OrdersServiceHost.Run(
+    args,
+    new OrderServiceContext
     {
-        options.ServiceName = "AllegroJSAGRO2GaskaOrdersService";
-    })
-    .ConfigureServices((hostContext, services) =>
+        Account = AllegroAccount.JSAGRO2,
+        Company = IntegrationCompany.Gaska,
+        WindowsServiceName = "AllegroJSAGRO2GaskaOrdersService",
+        MailSender = "Automat JSAGRO2-Gąska"
+    },
+    new OrderPipeline
     {
-        var configuration = hostContext.Configuration;
-
-        // ------------------ Logging setup ------------------
-        var logDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
-        Directory.CreateDirectory(logDirectory);
-        var logsExpirationDays = configuration.GetValue<int>("AppSettings:LogsExpirationDays", 14);
-
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
-            .WriteTo.Console()
-            .WriteTo.File(
-                path: Path.Combine(logDirectory, "log-.txt"),
-                rollingInterval: RollingInterval.Day,
-                retainedFileCountLimit: logsExpirationDays,
-                shared: true,
-                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}"
-            )
-            .MinimumLevel.Override("System.Net.Http.HttpClient", Serilog.Events.LogEventLevel.Warning)
-            .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
-            .CreateLogger();
-
-        // ------------------ Database migration ------------------
-        var connectionString = configuration.GetConnectionString("MyDbContext");
-        EnsureDatabase.For.SqlDatabase(connectionString);
-
-        var upgrader = DeployChanges.To
-            .SqlDatabase(connectionString)
-            .LogTo(new SerilogUpgradeLog(Log.Logger))
-            .WithScriptsFromFileSystem(Path.Combine(AppContext.BaseDirectory, "Migrations"))
-            .Build();
-
-        var result = upgrader.PerformUpgrade();
-
-        if (!result.Successful)
-        {
-            Log.Error(result.Error.ToString());
-            throw result.Error;
-        }
-
-        Log.Information("Database migration completed successfully.");
-
-        // ------------------ Dependency Injection ------------------
-
-        // Configure options
-        services.Configure<GaskaApiCredentials>(configuration.GetSection("GaskaApiCredentials"));
-        services.Configure<AllegroApiCredentials>(configuration.GetSection("AllegroApiCredentials"));
-        services.Configure<CourierSettings>(configuration.GetSection("CourierSettings"));
-        services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
-        services.Configure<SmtpSettings>(configuration.GetSection("SmtpSettings"));
-
-        // HttpClient configuration for external APIs
-        services.AddHttpClient<AllegroAuthService>(client =>
-        {
-            client.BaseAddress = new Uri(configuration["AllegroApiCredentials:AuthBaseUrl"]);
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/x-www-form-urlencoded"));
-        });
-
-        services.AddHttpClient<AllegroApiClient>(client =>
-        {
-            client.BaseAddress = new Uri(configuration["AllegroApiCredentials:BaseUrl"]);
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.allegro.public.v1+json"));
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(configuration["AllegroApiCredentials:UserAgent"]);
-        });
-
-        services.AddHttpClient<GaskaApiClient>(client =>
-        {
-            client.BaseAddress = new Uri(configuration["GaskaApiCredentials:BaseUrl"]);
-            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(configuration["AllegroApiCredentials:UserAgent"]);
-        })
-        .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-        });
-
-        // Register Dapper context
-        services.AddSingleton(sp => new DapperContext(connectionString));
-
-        // Register repositories
-        services.AddScoped<IOrderRepository, OrderRepository>();
-        services.AddScoped<ITokenRepository, DbTokenRepository>();
-
-        // Register services
-        services.AddScoped<IEmailService, EmailService>();
-        services.AddScoped<IOrderService, OrderService>();
-
-        // Background worker
-        services.AddHostedService<Worker>();
-
-        // Graceful shutdown timeout
-        services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(15));
-    })
-    .UseSerilog()
-    .Build();
-
-try
-{
-    Log.Information("Starting Allegro.JSAGRO.Gaska.OrdersService as Windows Service...");
-    host.Run();
-}
-catch (Exception ex)
-{
-    Log.Fatal(ex, "Service terminated unexpectedly");
-}
-finally
-{
-    Log.CloseAndFlush();
-}
+        DropshippingDeliveryNames = ["JAG API"],
+        WarehouseCourier = "GLS"
+    });

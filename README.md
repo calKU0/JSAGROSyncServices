@@ -21,6 +21,10 @@
 
 - `JSAGROSyncServices.Contracts` - shared contracts (DTOs, models, settings, interfaces, enums).
 - `JSAGROSyncServices.Infrastructure` - shared infrastructure (logging, data access, SQL Server migrations).
+- `JSAGROSyncServices.Products` - the whole product synchronization pipeline shared by all product services
+  (repositories, Allegro services, supplier clients, worker). Each product service only declares its identity
+  (`ServiceContext`: Allegro account + supplier) and the steps it runs (`SyncPipeline`); supplier-specific offer
+  building lives behind `IOfferFactory` (`GaskaOfferFactory`, `RolmarOfferFactory`).
 
 ### Desktop Tooling (`net8.0-windows`)
 

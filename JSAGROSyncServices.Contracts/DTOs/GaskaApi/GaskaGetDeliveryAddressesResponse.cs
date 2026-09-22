@@ -19,21 +19,21 @@ namespace JSAGROSyncServices.Contracts.DTOs.GaskaApi
         [JsonPropertyName("deliveryAddressId")]
         public int Id { get; set; }
         [JsonPropertyName("deliveryAddressName1")]
-        public string Name1 { get; set; }
+        public string? Name1 { get; set; }
         [JsonPropertyName("deliveryAddressName2")]
-        public string Name2 { get; set; }
+        public string? Name2 { get; set; }
         [JsonPropertyName("deliveryAddressStreet")]
-        public string Street { get; set; }
+        public string? Street { get; set; }
         [JsonPropertyName("deliveryAddressCity")]
-        public string City { get; set; }
+        public string? City { get; set; }
         [JsonPropertyName("deliveryAddressPostCode")]
-        public string PostCode { get; set; }
+        public string? PostCode { get; set; }
         [JsonPropertyName("deliveryAddressCountry")]
-        public string Country { get; set; }
+        public string? Country { get; set; }
         [JsonPropertyName("deliveryAddressPhone")]
-        public string Phone { get; set; }
+        public string? Phone { get; set; }
         [JsonPropertyName("deliveryAddressEmail")]
-        public string Email { get; set; }
+        public string? Email { get; set; }
         [JsonPropertyName("deliveryAddressDefault")]
         public bool Default { get; set; }
     }
