@@ -115,9 +115,7 @@ namespace JSAGROSyncServices.Products
                 _logger.LogInformation("{Step} finished in {Duration}.", name, Format(sw.Elapsed));
             }
 
-            var configuredCategories = _service.Company == IntegrationCompany.Rolmar
-                ? _appSettings.CategoriesName
-                : _appSettings.CategoriesId.Select(id => id.ToString()).ToList();
+            var configuredCategories = _appSettings.GetConfiguredCategories(_service.Company);
 
             await Step("Category configuration", () => syncCategoryRepo.ReplaceAccountCategoriesAsync(configuredCategories, ct));
 
@@ -132,14 +130,10 @@ namespace JSAGROSyncServices.Products
             }
 
             if (_pipeline.FetchSupplierProducts)
-            {
-                await Step("Supplier products", () => _service.Company == IntegrationCompany.Gaska
-                    ? services.GetRequiredService<IGaskaApiService>().SyncProducts()
-                    : services.GetRequiredService<IRolmarSyncService>().SyncProductsAsync());
-            }
+                await Step("Supplier products", () => FetchSupplierProducts(services));
 
             if (_pipeline.FetchSupplierStock)
-                await Step("Supplier stock", () => services.GetRequiredService<IRolmarSyncService>().SyncStockAsync());
+                await Step("Supplier stock", () => FetchSupplierStock(services));
 
             if (_pipeline.FetchSupplierImages)
                 await Step("Supplier images", () => services.GetRequiredService<IRolmarSyncService>().SyncImagesAsync());
@@ -152,7 +146,7 @@ namespace JSAGROSyncServices.Products
             if (IsDailyStepDue())
             {
                 if (_pipeline.FetchSupplierProductDetailsDaily)
-                    await Step("Supplier product details", () => services.GetRequiredService<IGaskaApiService>().SyncProductDetails());
+                    await Step("Supplier product details", () => FetchSupplierProductDetails(services));
 
                 if (_pipeline.UpdateAllegroCategoriesDaily)
                     await Step("Allegro categories", () => services.GetRequiredService<IAllegroCategoryService>().UpdateAllegroCategories());
@@ -184,6 +178,25 @@ namespace JSAGROSyncServices.Products
                 _logger.LogInformation(" - {Step}: {Duration}", step.Name, Format(step.Elapsed));
             }
         }
+
+        private Task FetchSupplierProducts(IServiceProvider services) => _service.Company switch
+        {
+            IntegrationCompany.Gaska => services.GetRequiredService<IGaskaApiService>().SyncProducts(),
+            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncProductsAsync(),
+            _ => services.GetRequiredService<IRolmarSyncService>().SyncProductsAsync()
+        };
+
+        private Task FetchSupplierStock(IServiceProvider services) => _service.Company switch
+        {
+            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncStockAsync(),
+            _ => services.GetRequiredService<IRolmarSyncService>().SyncStockAsync()
+        };
+
+        private Task FetchSupplierProductDetails(IServiceProvider services) => _service.Company switch
+        {
+            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncProductDetailsAsync(),
+            _ => services.GetRequiredService<IGaskaApiService>().SyncProductDetails()
+        };
 
         private bool IsDailyStepDue()
         {

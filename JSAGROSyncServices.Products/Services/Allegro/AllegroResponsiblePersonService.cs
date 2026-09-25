@@ -55,7 +55,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error syncing responsible persons from Allegro");
+                _logger.LogError(ex, "Syncing responsible persons from Allegro failed.");
             }
         }
     }

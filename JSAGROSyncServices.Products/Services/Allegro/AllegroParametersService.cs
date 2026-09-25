@@ -77,7 +77,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 if (allProductParameters.Any())
                 {
                     await _parameterRepo.SaveProductParametersAsync(allProductParameters, ct);
-                    _logger.LogInformation("Saved {Count} parameters for {ProductsCount} products", allProductParameters.Count, products.Count);
+                    _logger.LogInformation("Product parameters saved: {Count} for {ProductsCount} products.", allProductParameters.Count, products.Count);
                 }
             }
             catch (Exception ex)

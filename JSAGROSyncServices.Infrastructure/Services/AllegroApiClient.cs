@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -12,9 +13,6 @@ namespace JSAGROSyncServices.Infrastructure.Services
         private readonly AllegroAuthService _auth;
         private readonly HttpClient _http;
         private readonly JsonSerializerOptions _options;
-        private const int MaxRetries = 3;
-        private const int DelayOnTooManyRequestsMs = 30_000;
-        private const int DelayOnServerErrorMs = 5_000;
 
         public AllegroApiClient(ILogger<AllegroApiClient> logger, AllegroAuthService authService, HttpClient httpClient)
         {
@@ -104,7 +102,7 @@ namespace JSAGROSyncServices.Infrastructure.Services
             if (!response.IsSuccessStatusCode)
             {
                 // 404 to normalna odpowiedz przy wyszukiwaniu - nie zasmiecamy nia logu bledow.
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                if (response.StatusCode == HttpStatusCode.NotFound)
                     _logger.LogDebug("Allegro GET {Url} returned 404.", url);
                 else
                     _logger.LogWarning("Allegro GET {Url} returned {Status}: {Body}",
@@ -116,13 +114,16 @@ namespace JSAGROSyncServices.Infrastructure.Services
             return JsonSerializer.Deserialize<T>(body, _options);
         }
 
+        /// <summary>
+        /// Wysyła żądanie, ponawiając je przy błędach przejściowych według wspólnej polityki
+        /// (<see cref="HttpRetryPolicy"/>). Wygasły token odświeżamy raz - to nie jest błąd API,
+        /// więc nie zużywa puli ponowień.
+        /// </summary>
         private async Task<HttpResponseMessage> SendWithRetry(Func<Task<HttpResponseMessage>> send)
         {
-            int retryCount = 0;
-            int serverErrorRetryCount = 0;
-            bool tokenRefreshed = false;
+            var tokenRefreshed = false;
 
-            while (true)
+            for (var attempt = 1; ; attempt++)
             {
                 var response = await send();
 
@@ -130,58 +131,32 @@ namespace JSAGROSyncServices.Infrastructure.Services
                     return response;
 
                 // Token mógł wygasnąć w trakcie długiego kroku - odświeżamy go raz i ponawiamy żądanie.
-                if ((int)response.StatusCode == 401 && !tokenRefreshed)
+                if (response.StatusCode == HttpStatusCode.Unauthorized && !tokenRefreshed)
                 {
                     tokenRefreshed = true;
+                    attempt--;
 
                     var staleToken = response.RequestMessage?.Headers.Authorization?.Parameter;
                     await _auth.RefreshAccessTokenAsync(staleToken);
 
-                    _logger.LogInformation("Unauthorized (401). Token refreshed, retrying the request.");
+                    _logger.LogInformation("Allegro returned 401. Token refreshed, retrying the request.");
                     continue;
                 }
 
-                // Chwilowe błędy po stronie Allegro (najczęściej 502/503 z bramy).
-                if ((int)response.StatusCode >= 500 && serverErrorRetryCount < MaxRetries)
+                if (attempt >= HttpRetryPolicy.MaxAttempts || !HttpRetryPolicy.ShouldRetry(response.StatusCode))
                 {
-                    serverErrorRetryCount++;
-
-                    _logger.LogWarning(
-                        "Allegro returned {StatusCode}. Retry {RetryCount}/{MaxRetries} in {Delay}s...",
-                        (int)response.StatusCode,
-                        serverErrorRetryCount,
-                        MaxRetries,
-                        DelayOnServerErrorMs / 1000);
-
-                    await Task.Delay(DelayOnServerErrorMs * serverErrorRetryCount);
-                    continue;
+                    // Pozostałe błędy obsługuje wywołujący - on zna kontekst (produkt, ofertę).
+                    return response;
                 }
 
-                // Retry on Too Many Requests
-                if ((int)response.StatusCode == 429 && retryCount < MaxRetries)
-                {
-                    int delay = DelayOnTooManyRequestsMs;
+                var delay = HttpRetryPolicy.GetDelay(response, attempt);
+                var request = response.RequestMessage;
 
-                    // Respect Retry-After header if available
-                    if (response.Headers.TryGetValues("Retry-After", out var values) &&
-                        int.TryParse(values.FirstOrDefault(), out var retryAfterSeconds))
-                    {
-                        delay = retryAfterSeconds * 1000;
-                    }
+                HttpRetryPolicy.LogRetry(
+                    _logger, "Allegro", request?.Method ?? HttpMethod.Get, request?.RequestUri?.PathAndQuery ?? "-",
+                    response.StatusCode, attempt, delay);
 
-                    _logger.LogDebug(
-                        "Rate limit hit. Waiting {Delay}s before retry {RetryCount}/{MaxRetries}...",
-                        delay / 1000,
-                        retryCount + 1,
-                        MaxRetries);
-
-                    await Task.Delay(delay);
-                    retryCount++;
-                    continue;
-                }
-
-                // Pozostałe błędy obsługuje wywołujący - on zna kontekst (produkt, ofertę).
-                return response;
+                await Task.Delay(delay);
             }
         }
     }

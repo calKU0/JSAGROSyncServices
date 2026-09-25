@@ -445,7 +445,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             }
 
             var json = await response.Content.ReadAsStringAsync(ct);
-            var apiResponse = JsonSerializer.Deserialize<ProductsChangedReponse>(json, _jsonOptions);
+            var apiResponse = JsonSerializer.Deserialize<ProductsChangedResponse>(json, _jsonOptions);
 
             if (apiResponse?.Products == null || !apiResponse.Products.Any())
             {

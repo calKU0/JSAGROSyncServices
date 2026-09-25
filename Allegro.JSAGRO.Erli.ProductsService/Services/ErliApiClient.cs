@@ -1,3 +1,4 @@
+﻿using JSAGROSyncServices.Infrastructure.Services;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -6,13 +7,11 @@ using System.Text.Json.Serialization;
 namespace Allegro.JSAGRO.Erli.ProductsService.Services
 {
     /// <summary>
-    /// Klient API Erli. Ponawia wywołania przy limitach i błędach serwera,
+    /// Klient API Erli. Ponawia wywołania według wspólnej polityki (<see cref="HttpRetryPolicy"/>),
     /// a nieudane odpowiedzi zamienia na <see cref="ErliApiException"/> z odczytaną treścią błędu.
     /// </summary>
     public class ErliClient
     {
-        private const int MaxRetries = 5;
-
         private static readonly HttpMethod Patch = new("PATCH");
 
         public static readonly JsonSerializerOptions JsonOptions = new()
@@ -83,12 +82,11 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Services
                 if (response.IsSuccessStatusCode)
                     return responseBody;
 
-                if (attempt <= MaxRetries && ShouldRetry(response.StatusCode))
+                if (attempt < HttpRetryPolicy.MaxAttempts && HttpRetryPolicy.ShouldRetry(response.StatusCode))
                 {
-                    var delay = TimeSpan.FromMilliseconds(Math.Pow(2, attempt) * 500);
+                    var delay = HttpRetryPolicy.GetDelay(response, attempt);
 
-                    _logger.LogDebug("Erli API {Method} {Endpoint} returned {Status}. Retry {Attempt}/{MaxRetries} in {Delay}.",
-                        method, endpoint, (int)response.StatusCode, attempt, MaxRetries, delay);
+                    HttpRetryPolicy.LogRetry(_logger, "Erli", method, endpoint, response.StatusCode, attempt, delay);
 
                     await Task.Delay(delay, ct);
                     continue;
@@ -97,14 +95,6 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Services
                 throw new ErliApiException(method, endpoint, response.StatusCode, responseBody, TryParseError(responseBody));
             }
         }
-
-        private static bool ShouldRetry(HttpStatusCode status) => status
-            is HttpStatusCode.TooManyRequests
-            or HttpStatusCode.RequestTimeout
-            or HttpStatusCode.InternalServerError
-            or HttpStatusCode.BadGateway
-            or HttpStatusCode.ServiceUnavailable
-            or HttpStatusCode.GatewayTimeout;
 
         private static ErliApiError? TryParseError(string body)
         {

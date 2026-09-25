@@ -17,6 +17,7 @@
 - `Allegro.JSAGRO2.Gaska.ProductsService` - synchronizes Gaska products into JSAGRO2 Allegro account.
 - `Allegro.JSAGRO2.Gaska.OrdersService` - synchronizes Allegro orders from JSAGRO2 account and creates orders in Gąska supplier.
 - `Allegro.JSAGRO2.Rolmar.ProductsService` - synchronizes Rolmar products into JSAGRO2 Allegro account.
+- `Allegro.JSAGRO2.InterCars.ProductsService` - synchronizes Inter Cars products into JSAGRO2 Allegro account.
 ### Shared Libraries
 
 - `JSAGROSyncServices.Contracts` - shared contracts (DTOs, models, settings, interfaces, enums).
@@ -24,7 +25,7 @@
 - `JSAGROSyncServices.Products` - the whole product synchronization pipeline shared by all product services
   (repositories, Allegro services, supplier clients, worker). Each product service only declares its identity
   (`ServiceContext`: Allegro account + supplier) and the steps it runs (`SyncPipeline`); supplier-specific offer
-  building lives behind `IOfferFactory` (`GaskaOfferFactory`, `RolmarOfferFactory`).
+  building lives behind `IOfferFactory` (`GaskaOfferFactory`, `RolmarOfferFactory`, `InterCarsOfferFactory`).
 
 ### Desktop Tooling (`net8.0-windows`)
 
@@ -52,7 +53,7 @@
 
 - **Frameworks:** .NET 10 Worker Service, .NET 8 WPF
 - **Language:** C#
-- **Data Sources & Targets:** REST APIs (Gaska, Allegro, Erli)
+- **Data Sources & Targets:** REST APIs (Gaska, Rolmar, Inter Cars, Allegro, Erli)
 - **Database:** SQL Server
 - **Data Access:** Dapper
 - **Logging:** Serilog

@@ -18,8 +18,15 @@
         /// <summary>Pobranie zdjęć od dostawcy (Rolmar).</summary>
         public bool FetchSupplierImages { get; init; }
 
-        /// <summary>Pobranie szczegółów produktów od dostawcy - raz dziennie w oknie nocnym (Gąska).</summary>
+        /// <summary>Pobranie szczegółów produktów od dostawcy - raz dziennie w oknie nocnym (Gąska, Inter Cars).</summary>
         public bool FetchSupplierProductDetailsDaily { get; init; }
+
+        /// <summary>
+        /// Czy wystawiać wyłącznie produkty z pobranymi szczegółami. Dotyczy dostawców,
+        /// u których waga i wymiary przychodzą osobnym zapytaniem (Inter Cars) - bez nich
+        /// cennik dostawy wybrałby się na podstawie zerowej wagi.
+        /// </summary>
+        public bool RequireProductDetails { get; init; }
 
         /// <summary>Pobranie szczegółów ofert z Allegro (opisy, parametry).</summary>
         public bool SyncOfferDetails { get; init; }

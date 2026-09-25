@@ -19,6 +19,16 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "GaskaApiCredentials:ProductPerDay", Label = "Produkty dziennie", Group = "Gąska API", IsEnabled = false, IsVisable = false },
             new ConfigField { Key = "GaskaApiCredentials:ProductInterval", Label = "Interwał pobierania szczegółów", Group = "Gąska API", IsEnabled = false, IsVisable = false },
 
+            // Inter Cars API
+            new ConfigField { Key = "InterCarsApiCredentials:BaseUrl", Label = "Adres API Inter Cars", Group = "Inter Cars API", IsEnabled = false, IsVisable = false },
+            new ConfigField { Key = "InterCarsApiCredentials:AuthUrl", Label = "Adres autoryzacji", Group = "Inter Cars API", IsEnabled = false, IsVisable = false },
+            new ConfigField { Key = "InterCarsApiCredentials:ClientId", Label = "Client ID", Group = "Inter Cars API", IsEnabled = false, IsVisable = false },
+            new ConfigField { Key = "InterCarsApiCredentials:ClientSecret", Label = "Client Secret", Group = "Inter Cars API", IsEnabled = false, IsVisable = false },
+            new ConfigField { Key = "InterCarsApiCredentials:Warehouses", Label = "Magazyny do sumowania stanów", Group = "Inter Cars API", FieldType = ConfigFieldType.StringList, Description = "Stan produktu to suma dostępności z tych magazynów Inter Cars." },
+            new ConfigField { Key = "InterCarsApiCredentials:ProductDetailsPerDay", Label = "Szczegóły produktów dziennie", Group = "Inter Cars API", FieldType = ConfigFieldType.Int, Description = "Inter Cars zwraca wagę, wymiary i EAN po jednym produkcie na zapytanie - stąd dzienny limit. Najpierw idą produkty bez szczegółów, potem najdawniej odświeżane." },
+            new ConfigField { Key = "InterCarsApiCredentials:Parallelism", Label = "Równoległych zapytań", Group = "Inter Cars API", FieldType = ConfigFieldType.Int, IsVisable = false },
+            new ConfigField { Key = "InterCarsApiCredentials:CategoryTreeDepth", Label = "Głębokość odświeżania drzewa kategorii", Group = "Inter Cars API", FieldType = ConfigFieldType.Int, IsVisable = false, Description = "Ile poziomów katalogu odświeżać poza skonfigurowanymi gałęziami - te pobierane są zawsze w całości." },
+
             // Allegro API
             new ConfigField { Key = "AllegroApiCredentials:BaseUrl", Label = "Adres API Allegro", Group = "Allegro API", IsEnabled = false, IsVisable = false },
             new ConfigField { Key = "AllegroApiCredentials:AuthBaseUrl", Label = "Adres Autoryzacji Allegro", Group = "Allegro API", IsEnabled = false, IsVisable = false },
@@ -52,6 +62,7 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "AppSettings:EndHour", Label = "Godzina zakończenia synchronizacji", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int},
             new ConfigField { Key = "AppSettings:CategoriesId", Label = "Synchronizowane kategorie", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.IntList, CategoryCompany = 2, Description = "Pobierane są i trafiają na Allegro tylko produkty z tych kategorii (razem z podkategoriami). Usunięcie kategorii kończy (ENDED) oferty jej produktów." },
             new ConfigField { Key = "AppSettings:CategoriesName", Label = "Synchronizowane kategorie", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.StringList, CategoryCompany = 1, Description = "Pobierane są i trafiają na Allegro tylko produkty z tych kategorii (razem z podkategoriami). Usunięcie kategorii kończy (ENDED) oferty jej produktów." },
+            new ConfigField { Key = "AppSettings:CategoriesKey", Label = "Synchronizowane kategorie", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.StringList, CategoryCompany = 3, Description = "Pobierane są i trafiają na Allegro tylko produkty z tych kategorii (razem z podkategoriami). Usunięcie kategorii kończy (ENDED) oferty jej produktów." },
             new ConfigField { Key = "AppSettings:DeliveriesWithoutPriceUpdate", Label = "Cenniki dostaw zarządzane ręcznie", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.StringList, Description = "Oferty z tych cenników mają aktualizowany tylko stan i opis. Serwis nie zmienia im ceny, cennika dostawy ani czasu realizacji." },
             new ConfigField { Key = "AppSettings:PriceDropAlertEmail", Label = "Email do powiadomień o spadku ceny", IsVisable = false, Group = "Ustawienia serwisu" },
             new ConfigField { Key = "AppSettings:UploadParallelism", Label = "Ile produktów wysyłać równolegle", IsVisable = false, Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },

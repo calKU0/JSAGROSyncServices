@@ -19,14 +19,16 @@ namespace JSAGROSyncServices.Products.Repositories
         private readonly ILogger<ProductRepository> _logger;
         private readonly AppSettings _appSettings;
         private readonly PriceSettings _priceSettings;
+        private readonly SyncPipeline _pipeline;
 
-        public ProductRepository(DapperContext context, ILogger<ProductRepository> logger, IOptions<AppSettings> appSettings, IOptions<PriceSettings> priceSettings, ServiceContext serviceContext)
+        public ProductRepository(DapperContext context, ILogger<ProductRepository> logger, IOptions<AppSettings> appSettings, IOptions<PriceSettings> priceSettings, ServiceContext serviceContext, SyncPipeline pipeline)
         {
             _context = context;
             _service = serviceContext;
             _logger = logger;
             _appSettings = appSettings.Value;
             _priceSettings = priceSettings.Value;
+            _pipeline = pipeline;
         }
 
         public async Task UpsertProductsBatchAsync(List<RolmarProduct> products, CancellationToken ct)
@@ -60,6 +62,7 @@ namespace JSAGROSyncServices.Products.Repositories
             table.Columns.Add("PriceNet", typeof(decimal));
             table.Columns.Add("PriceGross", typeof(decimal));
             table.Columns.Add("Package", typeof(decimal));
+            table.Columns.Add("BlockedReturn", typeof(bool));
 
             foreach (var product in products)
             {
@@ -82,7 +85,8 @@ namespace JSAGROSyncServices.Products.Repositories
                     product.DeliveryType,
                     product.PriceNet,
                     product.PriceGross,
-                    product.Package);
+                    product.Package,
+                    product.BlockedReturn);
             }
 
             await connection.ExecuteAsync(
@@ -208,6 +212,71 @@ namespace JSAGROSyncServices.Products.Repositories
                 new { Limit = limit, IntegrationCompany = _service.Company },
                 commandType: CommandType.StoredProcedure,
                 commandTimeout: 900)).ToList();
+        }
+
+        public async Task<List<string>> GetProductCodesForDetailUpdate(int limit, CancellationToken ct)
+        {
+            using var conn = _context.CreateConnection();
+            return (await conn.QueryAsync<string>(
+                new CommandDefinition(
+                    "RolmarProducts_GetCodesForDetailUpdate",
+                    new { Limit = limit, IntegrationCompany = _service.Company },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct))).ToList();
+        }
+
+        public async Task MarkDetailsFetched(IEnumerable<string> codes, CancellationToken ct)
+        {
+            var table = new DataTable();
+            table.Columns.Add("Code", typeof(string));
+
+            foreach (var code in codes.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase))
+                table.Rows.Add(code);
+
+            if (table.Rows.Count == 0)
+                return;
+
+            using var conn = _context.CreateConnection();
+
+            await conn.ExecuteAsync(
+                new CommandDefinition(
+                    "RolmarProducts_MarkDetailsFetched",
+                    new
+                    {
+                        IntegrationCompany = _service.Company,
+                        Codes = table.AsTableValuedParameter("dbo.ProductCodeType")
+                    },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct));
+        }
+
+        /// <summary>
+        /// Zapisane już dane produktów po kodzie. Dostawcy, ktorzy dziela produkt na kilka wywolan,
+        /// przepisuja stad pola nieobecne w biezacej odpowiedzi - inaczej zapis wyczyscilby je w bazie.
+        /// </summary>
+        public async Task<Dictionary<string, RolmarProduct>> GetProductsByCodesAsync(IEnumerable<string> codes, CancellationToken ct)
+        {
+            var list = codes.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+            if (list.Count == 0)
+                return new Dictionary<string, RolmarProduct>(StringComparer.OrdinalIgnoreCase);
+
+            using var conn = _context.CreateConnection();
+
+            var products = await conn.QueryAsync<RolmarProduct>(
+                new CommandDefinition(
+                    @"SELECT Id, Code, CustomerCode, Name, Ean, Weight, Substitutes, Unit, Package, AllegroId, AllegroName, BlockedReturn, DetailsFetchedAt
+                      FROM dbo.RolmarProducts
+                      WHERE IntegrationCompany = @IntegrationCompany AND Code IN @Codes",
+                    new { IntegrationCompany = _service.Company, Codes = list },
+                    commandTimeout: 900,
+                    cancellationToken: ct));
+
+            return products
+                .GroupBy(p => p.Code, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         }
 
         public async Task<RolmarProduct?> GetProductByIntegrationIdAsync(int integrationId, CancellationToken ct)
@@ -417,8 +486,8 @@ namespace JSAGROSyncServices.Products.Repositories
                         productDict.Add(existing.Id, existing);
                     }
 
-                    if (spec?.Id > 0 && !existing.Specifications.Any(s => s.Id == spec.Id))
-                        existing.Specifications.Add(spec);
+                    if (spec?.Id > 0 && !existing.Specifications!.Any(s => s.Id == spec.Id))
+                        existing.Specifications!.Add(spec);
 
                     return existing;
                 },
@@ -458,8 +527,8 @@ namespace JSAGROSyncServices.Products.Repositories
                     if (application?.Id > 0 && !existing.Applications.Any(a => a.Id == application.Id))
                         existing.Applications.Add(application);
 
-                    if (spec?.Id > 0 && !existing.Specifications.Any(s => s.Id == spec.Id))
-                        existing.Specifications.Add(spec);
+                    if (spec?.Id > 0 && !existing.Specifications!.Any(s => s.Id == spec.Id))
+                        existing.Specifications!.Add(spec);
 
                     return existing;
                 },
@@ -528,8 +597,8 @@ namespace JSAGROSyncServices.Products.Repositories
                         productDict.Add(existing.Id, existing);
                     }
 
-                    if (spec?.Id > 0 && !existing.Specifications.Any(s => s.Id == spec.Id))
-                        existing.Specifications.Add(spec);
+                    if (spec?.Id > 0 && !existing.Specifications!.Any(s => s.Id == spec.Id))
+                        existing.Specifications!.Add(spec);
 
                     if (param?.Id > 0 && !existing.Parameters.Any(p => p.Id == param.Id))
                         existing.Parameters.Add(param);
@@ -542,7 +611,15 @@ namespace JSAGROSyncServices.Products.Repositories
 
                     return existing;
                 },
-                new { MinProductStock = minProductStock, MinProductPrice = minProductPrice, IntegrationCompany = _service.Company, Account = _service.Account, Categories = CategoriesFilter() },
+                new
+                {
+                    MinProductStock = minProductStock,
+                    MinProductPrice = minProductPrice,
+                    IntegrationCompany = _service.Company,
+                    Account = _service.Account,
+                    Categories = CategoriesFilter(),
+                    RequireDetails = _pipeline.RequireProductDetails
+                },
                 splitOn: "Id,Id,Id,Id",
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure
@@ -587,9 +664,7 @@ namespace JSAGROSyncServices.Products.Repositories
                     cancellationToken: ct));
         }
 
-        private string? CategoriesFilter() => _service.Company == IntegrationCompany.Rolmar
-            ? CategoryFilter.ToJson(_appSettings.CategoriesName)
-            : CategoryFilter.ToJson(_appSettings.CategoriesId);
+        private string? CategoriesFilter() => CategoryFilter.ToJson(_appSettings.GetConfiguredCategories(_service.Company));
 
         private string FixName(string name, string code, string? supplierName, List<string>? rootBrands = null, List<string>? crossNumbers = null)
         {
@@ -833,14 +908,14 @@ namespace JSAGROSyncServices.Products.Repositories
             return products.ToList();
         }
 
-        public async Task UpdateProductAllegroId(int productId, string? allegroProductId, string allegroCategoryId, CancellationToken ct)
+        public async Task UpdateProductAllegroId(int productId, string? allegroProductId, string allegroCategoryId, string? allegroName, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
             connection.Open();
 
             await connection.ExecuteAsync(
                 "RolmarProducts_UpdateAllegroId",
-                new { AllegroId = allegroProductId, ProductId = productId, CategoryId = allegroCategoryId },
+                new { AllegroId = allegroProductId, ProductId = productId, CategoryId = allegroCategoryId, AllegroName = allegroName },
                 commandType: CommandType.StoredProcedure,
                 commandTimeout: 900);
         }

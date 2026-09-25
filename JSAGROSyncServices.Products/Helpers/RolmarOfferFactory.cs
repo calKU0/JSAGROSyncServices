@@ -107,8 +107,7 @@ namespace JSAGROSyncServices.Products.Helpers
                     ReturnPolicy = new ReturnPolicy { Name = allegroSettings.AllegroReturnPolicy },
                     ImpliedWarranty = new ImpliedWarranty { Name = allegroSettings.AllegroImpliedWarranty }
                 },
-                Parameters = BuildParameters(product.Parameters, false),
-                //CompatibilityList = product.BuildCompatibilitySet ? BuildCompatibilityList(product.DefaultAllegroCategory, product.Applications, allegroCategories) : null
+                Parameters = BuildParameters(product.Parameters, false)
             };
         }
 
@@ -206,7 +205,7 @@ namespace JSAGROSyncServices.Products.Helpers
             {
                 // Bez productSet Allegro odrzuca patch: nie widzi podpietego produktu,
                 // producenta odpowiedzialnego ani informacji o bezpieczenstwie (GPSR).
-                ProductSet = BuildProductSet(product, productQuantity, allegroSettings),
+                ProductSet = BuildProductSet(product, productQuantity, allegroSettings, offer.ProductId),
                 Stock = new Stock
                 {
                     Available = Convert.ToInt32(Math.Floor(product.InStock)),
@@ -272,14 +271,16 @@ namespace JSAGROSyncServices.Products.Helpers
         /// i wymaga wtedy kompletu parametrów produktu - stąd "Uzupełnij parametry obowiązkowe"
         /// mimo podpiętego produktu. Bez id wysyłamy pełną propozycję nowego produktu.
         /// </summary>
-        private static List<ProductSet> BuildProductSet(RolmarProduct product, int quantity, AllegroSettings allegroSettings)
+        private static List<ProductSet> BuildProductSet(RolmarProduct product, int quantity, AllegroSettings allegroSettings, string? offerProductId = null)
         {
             var ProductSets = new List<ProductSet>();
 
-            var hasCatalogProduct = !string.IsNullOrWhiteSpace(product.AllegroId);
+            // Id produktu z katalogu: najpierw to, które oferta już ma, potem zapamiętane przy produkcie.
+            var catalogProductId = string.IsNullOrWhiteSpace(offerProductId) ? product.AllegroId : offerProductId;
+            var hasCatalogProduct = !string.IsNullOrWhiteSpace(catalogProductId);
 
             var Product = hasCatalogProduct
-                ? new ProductObject { Id = product.AllegroId }
+                ? new ProductObject { Id = catalogProductId }
                 : new ProductObject
                 {
                     Name = BuildOfferName(product),

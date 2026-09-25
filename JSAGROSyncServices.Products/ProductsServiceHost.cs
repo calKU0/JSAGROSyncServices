@@ -51,6 +51,7 @@ namespace JSAGROSyncServices.Products
                     services.Configure<AllegroApiCredentials>(configuration.GetSection("AllegroApiCredentials"));
                     services.Configure<GaskaApiCredentials>(configuration.GetSection("GaskaApiCredentials"));
                     services.Configure<RolmarApiCredentials>(configuration.GetSection("RolmarApiCredentials"));
+                    services.Configure<InterCarsApiCredentials>(configuration.GetSection("InterCarsApiCredentials"));
                     services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
                     services.Configure<PriceSettings>(configuration.GetSection("PriceSettings"));
                     services.Configure<AllegroSettings>(configuration.GetSection("AllegroSettings"));
@@ -87,10 +88,20 @@ namespace JSAGROSyncServices.Products
                     services.AddScoped<IAllegroShippingRateService, AllegroShippingRateService>();
                     services.AddScoped<IEmailService, EmailService>();
 
-                    if (serviceContext.Company == IntegrationCompany.Gaska)
-                        services.AddScoped<IOfferFactory, GaskaOfferFactory>();
-                    else
-                        services.AddScoped<IOfferFactory, RolmarOfferFactory>();
+                    switch (serviceContext.Company)
+                    {
+                        case IntegrationCompany.Gaska:
+                            services.AddScoped<IOfferFactory, GaskaOfferFactory>();
+                            break;
+
+                        case IntegrationCompany.InterCars:
+                            services.AddScoped<IOfferFactory, InterCarsOfferFactory>();
+                            break;
+
+                        default:
+                            services.AddScoped<IOfferFactory, RolmarOfferFactory>();
+                            break;
+                    }
 
                     services.AddHostedService<Worker>();
                     services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(15));
@@ -132,6 +143,12 @@ namespace JSAGROSyncServices.Products
             if (!needsSupplierApi)
                 return;
 
+            if (serviceContext.Company == IntegrationCompany.InterCars)
+            {
+                AddInterCarsHttpClients(services);
+                return;
+            }
+
             if (serviceContext.Company == IntegrationCompany.Gaska)
             {
                 services.AddHttpClient<IGaskaApiService, GaskaApiService>((sp, client) =>
@@ -158,6 +175,30 @@ namespace JSAGROSyncServices.Products
                     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
                 });
             }
+        }
+
+        /// <summary>
+        /// Inter Cars autoryzuje zapytania tokenem OAuth2 z osobnego hosta, dlatego klient
+        /// pobierający token jest oddzielny, a token dokłada do zapytań dedykowany handler.
+        /// </summary>
+        private static void AddInterCarsHttpClients(IServiceCollection services)
+        {
+            services.AddHttpClient(InterCarsTokenProvider.AuthHttpClientName, client =>
+                client.Timeout = TimeSpan.FromMinutes(1));
+
+            services.AddSingleton<InterCarsTokenProvider>();
+            services.AddTransient<InterCarsAuthHandler>();
+
+            services.AddHttpClient<IInterCarsApiService, InterCarsApiService>((sp, client) =>
+            {
+                var interCarsApi = sp.GetRequiredService<IOptions<InterCarsApiCredentials>>().Value;
+
+                client.BaseAddress = new Uri(interCarsApi.BaseUrl);
+                client.Timeout = TimeSpan.FromMinutes(5);
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.AcceptLanguage.ParseAdd(interCarsApi.Language);
+            })
+            .AddHttpMessageHandler<InterCarsAuthHandler>();
         }
 
         private static string GetGaskaSignature(GaskaApiCredentials apiSettings)

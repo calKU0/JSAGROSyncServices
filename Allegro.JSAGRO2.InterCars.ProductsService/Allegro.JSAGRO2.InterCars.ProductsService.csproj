@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Allegro.JSAGRO2.InterCars.ProductsService</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\JSAGROSyncServices.Contracts\JSAGROSyncServices.Contracts.csproj" />
+    <ProjectReference Include="..\JSAGROSyncServices.Infrastructure\JSAGROSyncServices.Infrastructure.csproj" />
+    <ProjectReference Include="..\JSAGROSyncServices.Products\JSAGROSyncServices.Products.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

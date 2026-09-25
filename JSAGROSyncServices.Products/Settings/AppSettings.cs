@@ -1,4 +1,6 @@
-﻿using JSAGROSyncServices.Contracts.Settings;
+﻿using JSAGROSyncServices.Contracts.Data.Enums;
+using JSAGROSyncServices.Contracts.Settings;
+using System.Globalization;
 
 namespace JSAGROSyncServices.Products.Settings
 {
@@ -9,6 +11,30 @@ namespace JSAGROSyncServices.Products.Settings
 
         /// <summary>Kategorie dostawcy (Rolmar) - początki ścieżek kategorii przychodzących z produktem.</summary>
         public List<string> CategoriesName { get; set; } = new List<string>();
+
+        /// <summary>Kategorie dostawcy (Inter Cars) - identyfikatory węzłów katalogu, np. "SalesClassificationNode_5011213".</summary>
+        public List<string> CategoriesKey { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Kategorie skonfigurowane dla dostawcy obsługiwanego przez serwis. Każdy dostawca
+        /// identyfikuje kategorie inaczej (Gąska - liczbowe id, Rolmar - ścieżka, Inter Cars - klucz węzła),
+        /// ale dalej w serwisie i w bazie są to po prostu klucze kategorii.
+        /// </summary>
+        public List<string> GetConfiguredCategories(IntegrationCompany company)
+        {
+            var values = company switch
+            {
+                IntegrationCompany.Rolmar => CategoriesName,
+                IntegrationCompany.InterCars => CategoriesKey,
+                _ => CategoriesId.Where(id => id != 0).Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList()
+            };
+
+            return values
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
 
         public int MinProductStock { get; set; }
         public decimal MinProductPriceNet { get; set; }

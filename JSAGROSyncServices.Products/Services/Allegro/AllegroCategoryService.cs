@@ -217,7 +217,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 {
                     // Bulk save all categories at once
                     await _categoryRepo.SaveCategoryParametersAsync(allCategoryParameters, ct);
-                    _logger.LogInformation("Saved total {Count} parameters for {CategoryCount} categories",
+                    _logger.LogInformation("Category parameters saved: {Count} for {CategoryCount} categories.",
                         allCategoryParameters.Count, categories.Count());
                 }
             }

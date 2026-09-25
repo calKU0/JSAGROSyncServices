@@ -20,17 +20,21 @@ namespace ServiceManager.Services
             }
         }
 
+        /// <summary>
+        /// Stan usługi. Sprawdzenie i użycie kontrolera są pod tym samym lockiem - inaczej
+        /// <see cref="SetService"/> mógłby go zwolnić między jednym a drugim.
+        /// </summary>
         public async Task<ServiceControllerStatus?> GetStatusAsync()
         {
-            if (_controller == null)
-                return null;
-
             try
             {
                 return await Task.Run(() =>
                 {
                     lock (_lock)
                     {
+                        if (_controller == null)
+                            return (ServiceControllerStatus?)null;
+
                         _controller.Refresh();
                         return _controller.Status;
                     }
@@ -38,30 +42,29 @@ namespace ServiceManager.Services
             }
             catch (ObjectDisposedException)
             {
-                // Controller was disposed, return null to avoid error
+                // Kontroler zwolniono w trakcie odczytu - dla ekranu to po prostu brak stanu.
                 return null;
             }
         }
 
         public async Task RunOperationAsync(Action<ServiceController> operation)
         {
-            if (_controller == null)
-                return;
-
             try
             {
                 await Task.Run(() =>
                 {
                     lock (_lock)
                     {
+                        if (_controller == null)
+                            return;
+
                         operation(_controller);
                     }
                 });
             }
             catch (ObjectDisposedException)
             {
-                // Controller was disposed, skip operation
-                return;
+                // Kontroler zwolniono w trakcie operacji - nie ma czego ponawiać.
             }
         }
 

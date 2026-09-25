@@ -1,0 +1,14 @@
+namespace JSAGROSyncServices.Products.Services.Suppliers
+{
+    public interface IInterCarsApiService
+    {
+        /// <summary>Drzewo kategorii i produkty ze skonfigurowanych kategorii (razem z ceną i stanem).</summary>
+        Task SyncProductsAsync(CancellationToken ct = default);
+
+        /// <summary>Stany magazynowe wszystkich produktów Inter Cars w bazie.</summary>
+        Task SyncStockAsync(CancellationToken ct = default);
+
+        /// <summary>Szczegóły produktów - waga, wymiary i EAN. Jedno zapytanie na SKU, więc porcjami.</summary>
+        Task SyncProductDetailsAsync(CancellationToken ct = default);
+    }
+}

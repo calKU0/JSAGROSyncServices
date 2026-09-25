@@ -226,7 +226,6 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     pending.Count, offers.Count, OfferDetailsParallelism);
 
                 var details = new ConcurrentBag<AllegroOfferDetails.Root>();
-                var fetchedIds = new ConcurrentBag<string>();
                 var detailsOptions = new ParallelOptions { CancellationToken = ct, MaxDegreeOfParallelism = OfferDetailsParallelism };
 
                 int notFound = 0, empty = 0, failed = 0;
@@ -255,11 +254,10 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             Interlocked.Increment(ref empty);
                         }
 
-                        details.Add(detailedOffer);
-
-                        // Znacznik stawiamy niezależnie od tego, czy oferta miała własny opis -
+                        // Dokładamy do zapisu niezależnie od tego, czy oferta miała własny opis -
                         // inaczej wracałaby do kolejki w każdym cyklu.
-                        fetchedIds.Add(offer.Id);
+                        detailedOffer.Id ??= offer.Id;
+                        details.Add(detailedOffer);
                     }
                     catch (Exception ex)
                     {
@@ -270,18 +268,21 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
                 sw.Stop();
 
-                if (!details.IsEmpty)
-                    await _offerRepo.UpsertOfferDetails(details.ToList(), ct);
+                // Znacznik "pobrane" stawiamy dopiero po udanym zapisie - inaczej chwilowy błąd bazy
+                // wypchnąłby oferty z kolejki bez zapisanych opisów i parametrów.
+                var savedIds = details.IsEmpty
+                    ? Array.Empty<string>()
+                    : (await _offerRepo.UpsertOfferDetails(details.ToList(), ct)).ToArray();
 
-                if (!fetchedIds.IsEmpty)
-                    await _offerRepo.MarkDetailsFetched(fetchedIds, ct);
+                if (savedIds.Length > 0)
+                    await _offerRepo.MarkDetailsFetched(savedIds, ct);
 
-                var remaining = pending.Count - fetchedIds.Count;
+                var remaining = pending.Count - savedIds.Length;
 
                 _logger.LogInformation(
                     "Offer details fetched: {Fetched} (no own description: {Empty}), no data returned: {NotFound}, failed: {Failed}. " +
                     "Still pending: {Remaining}. Took {Duration}.",
-                    fetchedIds.Count, empty, notFound, failed, remaining, Format(sw.Elapsed));
+                    savedIds.Length, empty, notFound, failed, remaining, Format(sw.Elapsed));
             }
             catch (Exception ex)
             {
@@ -335,7 +336,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
                         product.AllegroImages = await ImportImages(product, token);
 
-                        if (product.AllegroImages.Count == 0)
+                        if (product.AllegroImages.Count == 0 && !CanPublishWithoutImages(product))
                         {
                             Interlocked.Increment(ref skipped);
                             return;
@@ -415,7 +416,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                         {
                             var images = await ImportImages(product, token);
 
-                            if (images.Count == 0)
+                            if (images.Count == 0 && !CanPublishWithoutImages(product))
                             {
                                 Interlocked.Increment(ref skipped);
                                 return;
@@ -852,7 +853,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             // zeby kolejna proba poszla bez niego - Allegro dopasuje produkt po EAN i parametrach.
             if (code == "ProductNotFoundException" && !string.IsNullOrWhiteSpace(product.AllegroId))
             {
-                await _productRepo.UpdateProductAllegroId(product.Id, null, product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture), CancellationToken.None);
+                await _productRepo.UpdateProductAllegroId(product.Id, null, product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture), null, CancellationToken.None);
                 product.AllegroId = null;
 
                 if (!string.IsNullOrEmpty(offerId))
@@ -874,8 +875,9 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     return false;
                 }
 
-                await _productRepo.UpdateProductAllegroId(product.Id, found.ProductId, found.CategoryId, CancellationToken.None);
+                await _productRepo.UpdateProductAllegroId(product.Id, found.ProductId, found.CategoryId, found.Name, CancellationToken.None);
                 product.AllegroId = found.ProductId;
+                product.AllegroName = found.Name ?? product.AllegroName;
 
                 if (!string.IsNullOrEmpty(offerId))
                     await _offerRepo.UpdateProductId(offerId, found.ProductId, CancellationToken.None);
@@ -905,6 +907,15 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         }
 
         private bool HasDefaultManufacturer => !string.IsNullOrWhiteSpace(_allegroSettings.DefaultPartsManufacturer);
+
+        /// <summary>
+        /// Czy ofertę wolno wystawić bez własnych zdjęć. Tylko wtedy, gdy dostawca zdjęć w ogóle
+        /// nie udostępnia (wyłączona wysyłka zdjęć) i produkt jest podpięty pod produkt z katalogu
+        /// Allegro - galerię pokazuje wtedy Allegro. W pozostałych przypadkach brak zdjęć to błąd
+        /// pobierania i oferta musi poczekać na kolejny cykl.
+        /// </summary>
+        private bool CanPublishWithoutImages(RolmarProduct product) =>
+            !_appSettings.UploadImagesToAllegro && !string.IsNullOrWhiteSpace(product.AllegroId);
 
         // ---------------------------------------------------------------- zdjecia
 

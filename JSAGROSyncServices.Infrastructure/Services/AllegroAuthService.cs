@@ -87,7 +87,7 @@ namespace JSAGROSyncServices.Infrastructure.Services
                     }
                     catch (HttpRequestException ex)
                     {
-                        _logger.LogWarning(ex, "Refresh token failed");
+                        _logger.LogWarning(ex, "Refreshing the Allegro token failed.");
                     }
                 }
 

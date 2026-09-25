@@ -31,7 +31,12 @@ namespace ServiceManager
 
         private void SaveAppSettings(string path, Dictionary<string, string> values)
         {
-            _configService.SaveAppSettings(path, values);
+            // Typy pól decydują o tym, czy wartość trafi do pliku jako liczba, czy jako tekst.
+            var fieldTypes = ConfigFieldDefinitions.AllFields
+                .GroupBy(f => f.Key)
+                .ToDictionary(g => g.Key, g => g.First().FieldType);
+
+            _configService.SaveAppSettings(path, values, fieldTypes);
         }
 
         private void LoadConfig()

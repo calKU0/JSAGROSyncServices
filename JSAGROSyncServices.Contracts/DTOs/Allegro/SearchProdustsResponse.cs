@@ -141,11 +141,12 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
             [JsonPropertyName("rangeValue")]
             public RangeValue? RangeValue { get; set; }
 
+            /// <summary>Allegro zwraca tu <c>null</c> dla parametrow bez ustawionej wartosci.</summary>
             [JsonPropertyName("values")]
-            public string? Values { get; set; }
+            public List<string>? Values { get; set; }
 
             [JsonPropertyName("valuesIds")]
-            public string? ValuesIds { get; set; }
+            public List<string>? ValuesIds { get; set; }
 
             [JsonPropertyName("unit")]
             public object? Unit { get; set; }
@@ -192,8 +193,13 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
             [JsonPropertyName("images")]
             public List<Image> Images { get; set; } = new();
 
-            //[JsonPropertyName("parameters")]
-            //public List<Parameter> Parameters { get; set; }
+            /// <summary>
+            /// Parametry produktu z katalogu. Numery katalogowe i EAN stąd służą do potwierdzenia,
+            /// że znaleziony produkt to faktycznie nasz towar - samo wyszukiwanie po frazie
+            /// zwraca też trafienia przybliżone.
+            /// </summary>
+            [JsonPropertyName("parameters")]
+            public List<Parameter> Parameters { get; set; } = new();
 
             [JsonPropertyName("aiCoCreatedContent")]
             public AiCoCreatedContent? AiCoCreatedContent { get; set; }

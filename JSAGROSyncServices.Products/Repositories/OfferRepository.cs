@@ -100,21 +100,25 @@ namespace JSAGROSyncServices.Products.Repositories
         /// Zapisuje szczegoly partiami. Wczesniej wszystko szlo w jednej transakcji -
         /// jeden zly wiersz wycofywal komplet i zadna oferta nie dostawala szczegolow.
         /// </summary>
-        public async Task UpsertOfferDetails(List<AllegroOfferDetails.Root> offers, CancellationToken ct)
+        public async Task<IReadOnlyCollection<string>> UpsertOfferDetails(List<AllegroOfferDetails.Root> offers, CancellationToken ct)
         {
+            var savedIds = new List<string>();
+
             if (offers == null || offers.Count == 0)
-                return;
+                return savedIds;
 
             const int batchSize = 200;
 
-            int saved = 0, failedBatches = 0;
+            var failedBatches = 0;
 
             foreach (var batch in offers.Chunk(batchSize))
             {
                 try
                 {
                     await UpsertOfferDetailsBatch(batch.ToList(), ct);
-                    saved += batch.Length;
+
+                    // Tylko zapisane oferty wolno oznaczyć jako pobrane - reszta wraca do kolejki.
+                    savedIds.AddRange(batch.Select(o => o.Id).Where(id => !string.IsNullOrWhiteSpace(id))!);
                 }
                 catch (Exception ex)
                 {
@@ -125,9 +129,11 @@ namespace JSAGROSyncServices.Products.Repositories
             }
 
             if (failedBatches > 0)
-                _logger.LogWarning("Offer details saved: {Saved} of {Total}, failed batches: {Failed}.", saved, offers.Count, failedBatches);
+                _logger.LogWarning("Offer details saved: {Saved} of {Total}, failed batches: {Failed}.", savedIds.Count, offers.Count, failedBatches);
             else
-                _logger.LogInformation("Offer details saved: {Saved}.", saved);
+                _logger.LogInformation("Offer details saved: {Saved}.", savedIds.Count);
+
+            return savedIds;
         }
 
         private async Task UpsertOfferDetailsBatch(List<AllegroOfferDetails.Root> offers, CancellationToken ct)
@@ -305,9 +311,7 @@ namespace JSAGROSyncServices.Products.Repositories
 
         public async Task<List<AllegroOffer>> GetOffersToEnd(CancellationToken ct)
         {
-            var categories = _service.Company == IntegrationCompany.Rolmar
-                ? CategoryFilter.ToJson(_appSettings.CategoriesName)
-                : CategoryFilter.ToJson(_appSettings.CategoriesId);
+            var categories = CategoryFilter.ToJson(_appSettings.GetConfiguredCategories(_service.Company));
 
             var deliveryNames = _appSettings.ManagedDeliveryNames;
 
@@ -364,7 +368,7 @@ namespace JSAGROSyncServices.Products.Repositories
 
             if (deliveryNames.Count == 0)
             {
-                _logger.LogInformation("Brak skonfigurowanych dostaw — pomijam pobieranie ofert do aktualizacji.");
+                _logger.LogInformation("No delivery price lists configured - skipping offers to update.");
                 return new List<AllegroOffer>();
             }
 
