@@ -315,7 +315,9 @@ namespace JSAGROSyncServices.Products.Repositories
 
             var deliveryNames = _appSettings.ManagedDeliveryNames;
 
-            if (categories == null || deliveryNames.Count == 0)
+            // Brak skonfigurowanych kategorii wylacza tylko czesc kategoryjna - oferty produktow
+            // wycofanych u dostawcy konczymy niezaleznie od konfiguracji kategorii.
+            if (deliveryNames.Count == 0)
                 return new List<AllegroOffer>();
 
             using var connection = _context.CreateConnection();

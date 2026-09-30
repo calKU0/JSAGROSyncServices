@@ -136,7 +136,7 @@ namespace JSAGROSyncServices.Products
                 await Step("Supplier stock", () => FetchSupplierStock(services));
 
             if (_pipeline.FetchSupplierImages)
-                await Step("Supplier images", () => services.GetRequiredService<IRolmarSyncService>().SyncImagesAsync());
+                await Step("Supplier images", () => FetchSupplierImages(services));
 
             await Step("Allegro offers", () => offerService.SyncAllegroOffers());
 
@@ -145,6 +145,9 @@ namespace JSAGROSyncServices.Products
 
             if (IsDailyStepDue())
             {
+                if (_pipeline.FetchSupplierCategoryTreeDaily)
+                    await Step("Supplier category tree", () => services.GetRequiredService<IInterCarsApiService>().SyncCategoryTreeAsync());
+
                 if (_pipeline.FetchSupplierProductDetailsDaily)
                     await Step("Supplier product details", () => FetchSupplierProductDetails(services));
 
@@ -192,6 +195,12 @@ namespace JSAGROSyncServices.Products
             _ => services.GetRequiredService<IRolmarSyncService>().SyncStockAsync()
         };
 
+        private Task FetchSupplierImages(IServiceProvider services) => _service.Company switch
+        {
+            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncImagesAsync(),
+            _ => services.GetRequiredService<IRolmarSyncService>().SyncImagesAsync()
+        };
+
         private Task FetchSupplierProductDetails(IServiceProvider services) => _service.Company switch
         {
             IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncProductDetailsAsync(),
@@ -200,7 +209,9 @@ namespace JSAGROSyncServices.Products
 
         private bool IsDailyStepDue()
         {
-            if (!_pipeline.FetchSupplierProductDetailsDaily && !_pipeline.UpdateAllegroCategoriesDaily)
+            if (!_pipeline.FetchSupplierProductDetailsDaily
+                && !_pipeline.UpdateAllegroCategoriesDaily
+                && !_pipeline.FetchSupplierCategoryTreeDaily)
                 return false;
 
             if (_lastDailyStepDate.Date >= DateTime.Today)

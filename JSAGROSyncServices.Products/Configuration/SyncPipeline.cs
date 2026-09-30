@@ -22,6 +22,14 @@
         public bool FetchSupplierProductDetailsDaily { get; init; }
 
         /// <summary>
+        /// Pobranie pełnego drzewa kategorii dostawcy - raz dziennie w oknie nocnym (Inter Cars).
+        /// Katalog ma kilka tysięcy węzłów, więc w zwykłym cyklu odświeżamy tylko wierzchnie poziomy
+        /// i skonfigurowane gałęzie; pełne drzewo jest potrzebne wyłącznie do wyboru kategorii
+        /// w Menadżerze Serwisów.
+        /// </summary>
+        public bool FetchSupplierCategoryTreeDaily { get; init; }
+
+        /// <summary>
         /// Czy wystawiać wyłącznie produkty z pobranymi szczegółami. Dotyczy dostawców,
         /// u których waga i wymiary przychodzą osobnym zapytaniem (Inter Cars) - bez nich
         /// cennik dostawy wybrałby się na podstawie zerowej wagi.

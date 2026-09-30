@@ -26,11 +26,15 @@ namespace JSAGROSyncServices.Products.Settings
         public int SkuBatchSize { get; set; } = 100;
 
         /// <summary>
-        /// Ile produktów dziennie odpytać o szczegóły. Szczegóły przychodzą po jednym zapytaniu
-        /// na SKU, więc pełny katalog rozkłada się na kilka przebiegów. Gdy wszystkie produkty
-        /// mają już szczegóły, kolejka wraca do najdawniej odświeżanych.
+        /// Górny limit produktów odpytywanych o szczegóły w jednym przebiegu. Inter Cars nie limituje
+        /// liczby zapytań, więc domyślne 0 oznacza "wszystkie, które tego wymagają" - hamulcem jest
+        /// <see cref="Parallelism"/> i <see cref="RequestDelayMilliseconds"/>. Wartość dodatnia
+        /// przycina przebieg, np. przy diagnozie.
         /// </summary>
-        public int ProductDetailsPerDay { get; set; } = 5000;
+        public int ProductDetailsPerRun { get; set; }
+
+        /// <summary>Po ilu dniach odświeżać szczegóły produktu, który już je ma.</summary>
+        public int ProductDetailsRefreshDays { get; set; } = 7;
 
         /// <summary>Ile zapytań wykonywać równolegle. API odpowiada 429 przy zbyt dużej równoległości.</summary>
         public int Parallelism { get; set; } = 4;
@@ -45,10 +49,28 @@ namespace JSAGROSyncServices.Products.Settings
         public List<string> Warehouses { get; set; } = new() { "HZA", "BPO" };
 
         /// <summary>
-        /// Do ilu poziomów schodzić przy odświeżaniu globalnego drzewa kategorii. Pełne drzewo
-        /// to ponad tysiąc zapytań, więc szeroko schodzimy płytko, a skonfigurowane gałęzie
-        /// pobieramy zawsze do końca - to one wyznaczają zakres pobierania produktów.
+        /// Do ilu poziomów schodzić przy odświeżaniu globalnego drzewa kategorii w zwykłym cyklu.
+        /// Pełne drzewo to ponad tysiąc zapytań, więc w ciągu dnia schodzimy szeroko, ale płytko;
+        /// raz na dobę drzewo jest pobierane w całości. Skonfigurowane gałęzie pobieramy zawsze do końca.
         /// </summary>
         public int CategoryTreeDepth { get; set; } = 2;
+
+
+        // ------------------------------------------------------------ wymiana plików CSV
+
+        /// <summary>
+        /// Adres serwera z plikami CSV. API nie umie zawęzić katalogu do asortymentu rolniczego,
+        /// a te pliki są już przefiltrowane do produktów AGRO - synchronizujemy wyłącznie SKU,
+        /// które się w nich znajdują.
+        /// </summary>
+        public string DataBaseUrl { get; set; } = "https://data.webapi.intercars.eu/customer/";
+
+        /// <summary>Numer klienta - jednocześnie nazwa katalogu z plikami na serwerze.</summary>
+        public string DataCustomerNumber { get; set; } = string.Empty;
+
+        /// <summary>Użytkownik do wymiany plików CSV (Basic Auth). Inny niż dane klienta API.</summary>
+        public string DataUser { get; set; } = string.Empty;
+
+        public string DataPassword { get; set; } = string.Empty;
     }
 }

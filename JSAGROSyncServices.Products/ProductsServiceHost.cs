@@ -180,6 +180,8 @@ namespace JSAGROSyncServices.Products
         /// <summary>
         /// Inter Cars autoryzuje zapytania tokenem OAuth2 z osobnego hosta, dlatego klient
         /// pobierający token jest oddzielny, a token dokłada do zapytań dedykowany handler.
+        /// Pliki wymiany CSV i zdjęcia leżą na jeszcze innych hostach - każdy dostaje swojego klienta,
+        /// żeby poświadczenia nie wychodziły poza host, do którego należą.
         /// </summary>
         private static void AddInterCarsHttpClients(IServiceCollection services)
         {
@@ -188,6 +190,32 @@ namespace JSAGROSyncServices.Products
 
             services.AddSingleton<InterCarsTokenProvider>();
             services.AddTransient<InterCarsAuthHandler>();
+
+            services.AddHttpClient(InterCarsDataFileService.HttpClientName, (sp, client) =>
+            {
+                var interCarsApi = sp.GetRequiredService<IOptions<InterCarsApiCredentials>>().Value;
+
+                client.BaseAddress = new Uri(EnsureTrailingSlash(interCarsApi.DataBaseUrl));
+                // Plik ze zdjęciami ma kilkadziesiąt megabajtów - pobranie bywa wolniejsze niż zapytanie do API.
+                client.Timeout = TimeSpan.FromMinutes(30);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(InterCarsUserAgent);
+
+                var credentials = Convert.ToBase64String(
+                    Encoding.UTF8.GetBytes($"{interCarsApi.DataUser}:{interCarsApi.DataPassword}"));
+
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+            });
+
+            // Host ze zdjęciami nie wymaga autoryzacji - klient jest celowo bez tokenu i bez Basic Auth.
+            // Wymaga za to nagłówka User-Agent: zapytanie bez niego kończy się kodem 403,
+            // a HttpClient sam z siebie tego nagłówka nie wysyła.
+            services.AddHttpClient(InterCarsApiService.ImagesHttpClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(2);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(InterCarsUserAgent);
+            });
+
+            services.AddSingleton<IInterCarsDataFileService, InterCarsDataFileService>();
 
             services.AddHttpClient<IInterCarsApiService, InterCarsApiService>((sp, client) =>
             {
@@ -200,6 +228,15 @@ namespace JSAGROSyncServices.Products
             })
             .AddHttpMessageHandler<InterCarsAuthHandler>();
         }
+
+        /// <summary>
+        /// Serwery plików i zdjęć Inter Cars odrzucają zapytania bez nagłówka User-Agent kodem 403,
+        /// a <see cref="HttpClient"/> domyślnie go nie wysyła.
+        /// </summary>
+        private const string InterCarsUserAgent = "JSAGROSyncServices/1.0 (+https://github.com/calKU0/JSAGROSyncServices)";
+
+        private static string EnsureTrailingSlash(string url) =>
+            url.EndsWith('/') ? url : url + "/";
 
         private static string GetGaskaSignature(GaskaApiCredentials apiSettings)
         {

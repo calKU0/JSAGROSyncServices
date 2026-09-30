@@ -477,7 +477,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             var toEnd = offersToEnd.Where(o => !string.Equals(o.Status, "ENDED", StringComparison.OrdinalIgnoreCase)).ToList();
 
             _logger.LogInformation(
-                "{Count} offers are outside the configured categories - ending {ToEnd} (already ended: {Ended}).",
+                "{Count} offers are outside the configured categories or their product was withdrawn by the supplier - ending {ToEnd} (already ended: {Ended}).",
                 offersToEnd.Count, toEnd.Count, alreadyEnded);
 
             if (toEnd.Count == 0)

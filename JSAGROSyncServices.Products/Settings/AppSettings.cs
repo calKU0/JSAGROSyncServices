@@ -36,6 +36,13 @@ namespace JSAGROSyncServices.Products.Settings
                 .ToList();
         }
 
+        /// <summary>
+        /// Po ilu dniach nieobecności w danych dostawcy uznać produkt za wycofany. Produkt archiwalny
+        /// nie trafia na Allegro, a jego oferta jest kończona. Karencja chroni przed zakończeniem ofert
+        /// całego asortymentu przez jedno nieudane pobranie - produkt musi zniknąć z kilku pobrań z rzędu.
+        /// </summary>
+        public int ArchiveAfterDaysMissing { get; set; } = 3;
+
         public int MinProductStock { get; set; }
         public decimal MinProductPriceNet { get; set; }
         public decimal BundleProductsUnderPriceNet { get; set; }

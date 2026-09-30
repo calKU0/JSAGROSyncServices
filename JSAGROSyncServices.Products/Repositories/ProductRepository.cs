@@ -14,6 +14,9 @@ namespace JSAGROSyncServices.Products.Repositories
 {
     public class ProductRepository : IProductRepository
     {
+        /// <summary>Ile kodow wysylac w jednym parametrze tabelarycznym przy odnotowywaniu obecnosci.</summary>
+        private const int SeenBatchSize = 10000;
+
         private readonly DapperContext _context;
         private readonly ServiceContext _service;
         private readonly ILogger<ProductRepository> _logger;
@@ -214,13 +217,13 @@ namespace JSAGROSyncServices.Products.Repositories
                 commandTimeout: 900)).ToList();
         }
 
-        public async Task<List<string>> GetProductCodesForDetailUpdate(int limit, CancellationToken ct)
+        public async Task<List<string>> GetProductCodesForDetailUpdate(int limit, int refreshAfterDays, CancellationToken ct)
         {
             using var conn = _context.CreateConnection();
             return (await conn.QueryAsync<string>(
                 new CommandDefinition(
                     "RolmarProducts_GetCodesForDetailUpdate",
-                    new { Limit = limit, IntegrationCompany = _service.Company },
+                    new { Limit = limit, IntegrationCompany = _service.Company, RefreshAfterDays = refreshAfterDays },
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 900,
                     cancellationToken: ct))).ToList();
@@ -246,6 +249,62 @@ namespace JSAGROSyncServices.Products.Repositories
                     {
                         IntegrationCompany = _service.Company,
                         Codes = table.AsTableValuedParameter("dbo.ProductCodeType")
+                    },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct));
+        }
+
+        public async Task MarkProductsSeenAsync(IEnumerable<string> codes, CancellationToken ct)
+        {
+            var distinct = codes
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (distinct.Count == 0)
+                return;
+
+            using var conn = _context.CreateConnection();
+            conn.Open();
+
+            // Katalog dostawcy to nawet kilkaset tysiecy kodow - jeden parametr tabelaryczny
+            // tej wielkosci potrafi przeciazyc plan zapytania, wiec idziemy porcjami.
+            foreach (var batch in distinct.Chunk(SeenBatchSize))
+            {
+                var table = new DataTable();
+                table.Columns.Add("Code", typeof(string));
+
+                foreach (var code in batch)
+                    table.Rows.Add(code);
+
+                await conn.ExecuteAsync(
+                    new CommandDefinition(
+                        "RolmarProducts_MarkSeen",
+                        new
+                        {
+                            IntegrationCompany = _service.Company,
+                            Codes = table.AsTableValuedParameter("dbo.ProductCodeType")
+                        },
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900,
+                        cancellationToken: ct));
+            }
+        }
+
+        public async Task<int> ArchiveMissingProductsAsync(int graceDays, IReadOnlyCollection<string> categories, CancellationToken ct)
+        {
+            using var conn = _context.CreateConnection();
+
+            return await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "RolmarProducts_ArchiveMissing",
+                    new
+                    {
+                        IntegrationCompany = _service.Company,
+                        GraceDays = graceDays,
+                        Categories = CategoryFilter.ToJson(categories)
                     },
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 900,

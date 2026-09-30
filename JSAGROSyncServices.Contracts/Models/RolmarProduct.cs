@@ -48,6 +48,15 @@ namespace JSAGROSyncServices.Contracts.Models
         /// Dotyczy dostawców, u których szczegóły wymagają osobnego zapytania na produkt.
         /// </summary>
         public DateTime? DetailsFetchedAt { get; set; }
+
+        /// <summary>Kiedy dostawca ostatni raz oddał ten produkt (API lub plik CSV).</summary>
+        public DateTime? LastSeenAt { get; set; }
+
+        /// <summary>
+        /// Kiedy uznaliśmy produkt za wycofany u dostawcy. <c>null</c> = produkt jest w ofercie dostawcy.
+        /// Produktu archiwalnego nie wystawiamy ani nie aktualizujemy, a jego ofertę kończymy.
+        /// </summary>
+        public DateTime? ArchivedAt { get; set; }
         public int DefaultAllegroCategory { get; set; }
         public decimal Package { get; set; }
         public bool BuildCompatibilitySet { get; set; } = true;

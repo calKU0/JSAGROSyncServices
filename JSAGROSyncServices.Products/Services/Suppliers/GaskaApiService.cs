@@ -64,6 +64,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             }
 
             int fetched = 0, incomplete = 0;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var sw = Stopwatch.StartNew();
 
             foreach (var categoryId in categoryIds)
@@ -72,6 +73,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
                 var (codes, completed) = await FetchCategoryAsync(categoryId, ct);
                 fetched += codes.Count;
+                seen.UnionWith(codes);
 
                 if (completed)
                 {
@@ -91,6 +93,47 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             _logger.LogInformation(
                 "Gąska products fetched: {Fetched} from {Categories} categories (incomplete: {Incomplete}). Took {Elapsed}.",
                 fetched, categoryIds.Count, incomplete, sw.Elapsed);
+
+            await MarkSeenAndArchiveAsync(seen, categoryIds, incomplete, ct);
+        }
+
+        /// <summary>
+        /// Odnotowuje obecność produktów u dostawcy i archiwizuje te, których nie oddał od kilku dni.
+        /// Produkt archiwalny nie trafia na Allegro, a jego oferta jest kończona.
+        ///
+        /// Przy niekompletnym pobraniu pomijamy archiwizację - produkty kategorii, której API nie oddało
+        /// do końca, wyglądałyby na wycofane, choć u dostawcy nadal są.
+        /// </summary>
+        private async Task MarkSeenAndArchiveAsync(
+            IReadOnlyCollection<string> seenCodes,
+            IReadOnlyCollection<int> categoryIds,
+            int incompleteCategories,
+            CancellationToken ct)
+        {
+            try
+            {
+                await _productRepo.MarkProductsSeenAsync(seenCodes, ct);
+
+                if (incompleteCategories > 0)
+                {
+                    _logger.LogWarning("{Count} categories were fetched incompletely - archiving of missing products was skipped this cycle.", incompleteCategories);
+                    return;
+                }
+
+                var categories = categoryIds.Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
+                var archived = await _productRepo.ArchiveMissingProductsAsync(_appSettings.ArchiveAfterDaysMissing, categories, ct);
+
+                if (archived > 0)
+                {
+                    _logger.LogInformation(
+                        "{Count} products have been missing from the Gąska catalog for over {Days} days - marked as archived, their offers will be ended.",
+                        archived, _appSettings.ArchiveAfterDaysMissing);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "Archiving products missing from the Gąska catalog failed.");
+            }
         }
 
         /// <summary>Pobiera wszystkie strony jednej kategorii. Zwraca kody produktów i to, czy pobranie się udało.</summary>

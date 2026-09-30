@@ -129,10 +129,43 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 }
 
                 _logger.LogInformation("Product sync completed. Upserted: {Upserted}, Failed: {Failed}", upsertedCount, failedCount);
+
+                // Rolmar oddaje caly katalog w jednej odpowiedzi, wiec za "widziane" uznajemy wszystkie
+                // zwrocone produkty - takze te spoza skonfigurowanych kategorii. Produkt poza kategoriami
+                // nie jest wycofany u dostawcy, a jego oferte i tak konczy filtr kategorii.
+                await MarkSeenAndArchiveAsync(
+                    rolmarResponse.Products.Select(p => p.ProductIndex).Where(c => !string.IsNullOrWhiteSpace(c))!,
+                    allowedCategories,
+                    ct);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error occurred while syncing products from Rolmar.");
+            }
+        }
+
+        /// <summary>
+        /// Odnotowuje obecność produktów u dostawcy i archiwizuje te, których nie oddał od kilku dni.
+        /// Produkt archiwalny nie trafia na Allegro, a jego oferta jest kończona.
+        /// </summary>
+        private async Task MarkSeenAndArchiveAsync(IEnumerable<string> seenCodes, IReadOnlyCollection<string> categories, CancellationToken ct)
+        {
+            try
+            {
+                await _productRepository.MarkProductsSeenAsync(seenCodes, ct);
+
+                var archived = await _productRepository.ArchiveMissingProductsAsync(_appSettings.ArchiveAfterDaysMissing, categories, ct);
+
+                if (archived > 0)
+                {
+                    _logger.LogInformation(
+                        "{Count} products have been missing from the Rolmar catalog for over {Days} days - marked as archived, their offers will be ended.",
+                        archived, _appSettings.ArchiveAfterDaysMissing);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "Archiving products missing from the Rolmar catalog failed.");
             }
         }
 

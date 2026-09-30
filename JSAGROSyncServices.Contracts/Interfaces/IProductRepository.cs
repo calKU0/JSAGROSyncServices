@@ -8,12 +8,31 @@ namespace JSAGROSyncServices.Contracts.Interfaces
 
         /// <summary>
         /// Kolejka produktów do pobrania szczegółów, identyfikowanych kodem (dostawcy z alfanumerycznym SKU).
-        /// Najpierw produkty bez szczegółów, a gdy wszystkie je mają - od najdawniej odświeżanych.
+        /// Najpierw produkty bez szczegółów, potem te odświeżane dawniej niż <paramref name="refreshAfterDays"/> temu.
         /// </summary>
-        Task<List<string>> GetProductCodesForDetailUpdate(int limit, CancellationToken ct);
+        /// <param name="limit">Górny limit pozycji; wartość &lt;= 0 oznacza brak limitu.</param>
+        Task<List<string>> GetProductCodesForDetailUpdate(int limit, int refreshAfterDays, CancellationToken ct);
 
         /// <summary>Odnotowuje pobranie szczegółów - bez tego te same produkty wracałyby w każdym cyklu.</summary>
         Task MarkDetailsFetched(IEnumerable<string> codes, CancellationToken ct);
+
+        /// <summary>
+        /// Odnotowuje, że dostawca nadal ma te produkty w ofercie. Wołane po każdym pobraniu listy
+        /// produktów, na komplecie kodów z tego pobrania. Produkt, który wrócił, przestaje być archiwalny.
+        /// </summary>
+        Task MarkProductsSeenAsync(IEnumerable<string> codes, CancellationToken ct);
+
+        /// <summary>
+        /// Oznacza jako archiwalne produkty, których dostawca nie oddał od <paramref name="graceDays"/> dni.
+        /// Karencja chroni przed zakończeniem ofert całego katalogu przez jedno nieudane pobranie.
+        /// </summary>
+        /// <param name="categories">
+        /// Kategorie, z których serwis faktycznie pobiera produkty (suma wszystkich kont Allegro).
+        /// Produkt spoza nich nie jest pobierany wcale, więc jego brak nic nie znaczy - jego ofertę
+        /// i tak kończy filtr kategorii. Pusta lista wyłącza to zawężenie.
+        /// </param>
+        /// <returns>Liczba nowo zarchiwizowanych produktów.</returns>
+        Task<int> ArchiveMissingProductsAsync(int graceDays, IReadOnlyCollection<string> categories, CancellationToken ct);
 
         /// <summary>
         /// Zapisane już dane produktów, po kodzie. Dostawcy dzielący produkt na kilka wywołań API

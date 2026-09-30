@@ -1,7 +1,9 @@
 using JSAGROSyncServices.Contracts.Data.Enums;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Infrastructure.Helpers;
 using JSAGROSyncServices.Infrastructure.Services;
+using JSAGROSyncServices.Products.Configuration;
 using JSAGROSyncServices.Products.DTOs.InterCars;
 using JSAGROSyncServices.Products.Settings;
 using Microsoft.Extensions.Options;
@@ -35,10 +37,22 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         /// <summary>Zabezpieczenie przed cyklem w drzewie kategorii od dostawcy.</summary>
         private const int MaxTreeDepth = 30;
 
+        /// <summary>Klient HTTP do pobierania zdjęć - bez tokenu, bo host zdjęć nie wymaga autoryzacji.</summary>
+        public const string ImagesHttpClientName = "InterCarsImages";
+
+        /// <summary>Ile zdjęć pobierać równolegle. Zdjęcia idą z osobnego hosta, bez limitów API.</summary>
+        private const int ImageParallelism = 8;
+
+        /// <summary>Co ile produktów wypisać postęp pobierania zdjęć.</summary>
+        private const int ImageProgressEvery = 500;
+
         private readonly HttpClient _http;
         private readonly IProductRepository _productRepo;
         private readonly ISupplierCategoryRepository _categoryRepo;
         private readonly ISyncCategoryRepository _syncCategoryRepo;
+        private readonly IInterCarsDataFileService _dataFiles;
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ServiceContext _service;
         private readonly InterCarsApiCredentials _api;
         private readonly AppSettings _appSettings;
         private readonly ILogger<InterCarsApiService> _logger;
@@ -53,6 +67,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             IProductRepository productRepo,
             ISupplierCategoryRepository categoryRepo,
             ISyncCategoryRepository syncCategoryRepo,
+            IInterCarsDataFileService dataFiles,
+            IHttpClientFactory httpClientFactory,
+            ServiceContext service,
             IOptions<InterCarsApiCredentials> api,
             IOptions<AppSettings> appSettings,
             ILogger<InterCarsApiService> logger)
@@ -61,6 +78,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             _productRepo = productRepo;
             _categoryRepo = categoryRepo;
             _syncCategoryRepo = syncCategoryRepo;
+            _dataFiles = dataFiles;
+            _httpClientFactory = httpClientFactory;
+            _service = service;
             _api = api.Value;
             _appSettings = appSettings.Value;
             _logger = logger;
@@ -79,6 +99,17 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 return;
             }
 
+            // Katalog API obejmuje cały asortyment Inter Cars i nie da się go zawęzić do części
+            // rolniczych. Robią to dopiero pliki CSV - zawierają wyłącznie SKU asortymentu AGRO.
+            // Bez tej listy nie ruszamy pobierania: do bazy trafiłby cały katalog dostawcy.
+            var allowedSkus = await _dataFiles.GetAllowedSkusAsync(ct);
+
+            if (allowedSkus == null)
+            {
+                _logger.LogError("The Inter Cars AGRO SKU list could not be read - product sync was skipped to avoid importing the whole catalog.");
+                return;
+            }
+
             // Drzewo najpierw - na nim opiera się filtr ofert, lista wyboru w konfiguratorze
             // i podział pobierania na kategorie, do których faktycznie przypisane są produkty.
             var tree = await SyncCategoryTreeAsync(configured, ct);
@@ -94,17 +125,18 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
             var sw = Stopwatch.StartNew();
             var categoriesBySku = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            int fetched = 0, saved = 0, skipped = 0, failedCategories = 0;
+            int fetched = 0, saved = 0, skipped = 0, outsideWhitelist = 0, failedCategories = 0;
 
             foreach (var categoryKey in categoriesToFetch)
             {
                 ct.ThrowIfCancellationRequested();
 
-                var result = await FetchCategoryProductsAsync(categoryKey, categoriesBySku, ct);
+                var result = await FetchCategoryProductsAsync(categoryKey, allowedSkus, categoriesBySku, ct);
 
                 fetched += result.Fetched;
                 saved += result.Saved;
                 skipped += result.Skipped;
+                outsideWhitelist += result.OutsideWhitelist;
 
                 if (!result.Completed)
                 {
@@ -118,18 +150,63 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             sw.Stop();
 
             _logger.LogInformation(
-                "Inter Cars products: {Saved} saved, {Skipped} skipped (no price), {Fetched} returned from {Categories} categories (incomplete: {Failed}). Took {Elapsed}.",
-                saved, skipped, fetched, categoriesToFetch.Count, failedCategories, sw.Elapsed);
+                "Inter Cars products: {Saved} saved, {Skipped} skipped (no price), {Outside} outside the AGRO list, {Fetched} returned from {Categories} categories (incomplete: {Failed}). Took {Elapsed}.",
+                saved, skipped, outsideWhitelist, fetched, categoriesToFetch.Count, failedCategories, sw.Elapsed);
+
+            await ArchiveMissingProductsAsync(categoriesBySku.Keys, configured, failedCategories, ct);
         }
 
-        /// <summary>Wszystkie strony jednej kategorii. Każda strona od razu trafia do bazy - katalog bywa duży.</summary>
-        private async Task<(int Fetched, int Saved, int Skipped, bool Completed)> FetchCategoryProductsAsync(
+        /// <summary>
+        /// Odnotowuje, że dostawca nadal ma pobrane produkty w ofercie, i archiwizuje te, których
+        /// nie oddał od kilku dni. Produkt archiwalny nie trafia na Allegro, a jego oferta jest kończona.
+        ///
+        /// Przy niekompletnym pobraniu (awaria API w części kategorii) pomijamy archiwizację -
+        /// produkty tych kategorii wyglądałyby na wycofane, choć u dostawcy nadal są.
+        /// </summary>
+        private async Task ArchiveMissingProductsAsync(
+            IEnumerable<string> seenSkus,
+            IReadOnlyCollection<string> configured,
+            int failedCategories,
+            CancellationToken ct)
+        {
+            try
+            {
+                await _productRepo.MarkProductsSeenAsync(seenSkus, ct);
+
+                if (failedCategories > 0)
+                {
+                    _logger.LogWarning("{Count} categories were fetched incompletely - archiving of missing products was skipped this cycle.", failedCategories);
+                    return;
+                }
+
+                var archived = await _productRepo.ArchiveMissingProductsAsync(_appSettings.ArchiveAfterDaysMissing, configured, ct);
+
+                if (archived > 0)
+                {
+                    _logger.LogInformation(
+                        "{Count} products have been missing from the Inter Cars catalog for over {Days} days - marked as archived, their offers will be ended.",
+                        archived, _appSettings.ArchiveAfterDaysMissing);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "Archiving products missing from the Inter Cars catalog failed.");
+            }
+        }
+
+        /// <summary>
+        /// Wszystkie strony jednej kategorii. Każda strona od razu trafia do bazy - katalog bywa duży.
+        /// Produkty spoza listy AGRO (<paramref name="allowedSkus"/>) odrzucamy zaraz po odczytaniu
+        /// strony, więc nie kosztują ani zapytania o wycenę, ani miejsca w bazie.
+        /// </summary>
+        private async Task<CategoryFetchResult> FetchCategoryProductsAsync(
             string categoryKey,
+            IReadOnlySet<string> allowedSkus,
             Dictionary<string, List<string>> categoriesBySku,
             CancellationToken ct)
         {
             var perPage = Math.Clamp(_api.ProductsPerPage, 1, 100);
-            int fetched = 0, saved = 0, skipped = 0;
+            int fetched = 0, saved = 0, skipped = 0, outside = 0;
 
             for (var page = 0; page <= MaxPageNumber; page++)
             {
@@ -145,19 +222,24 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
                     _logger.LogError(ex, "Fetching page {Page} of Inter Cars category {Category} failed.", page, categoryKey);
-                    return (fetched, saved, skipped, false);
+                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: false);
                 }
 
-                var products = response?.Products
+                var returned = response?.Products
                     .Where(p => !string.IsNullOrWhiteSpace(p.Sku))
                     .GroupBy(p => p.Sku!, StringComparer.OrdinalIgnoreCase)
                     .Select(g => g.First())
                     .ToList() ?? new List<InterCarsProduct>();
 
-                if (products.Count == 0)
-                    return (fetched, saved, skipped, true);
+                // Pusta strona kończy kategorię, ale strona złożona wyłącznie z produktów spoza
+                // listy AGRO - już nie: kolejne strony nadal mogą zawierać nasz asortyment.
+                if (returned.Count == 0)
+                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
 
-                fetched += products.Count;
+                fetched += returned.Count;
+
+                var products = returned.Where(p => allowedSkus.Contains(p.Sku!)).ToList();
+                outside += returned.Count - products.Count;
 
                 foreach (var product in products)
                 {
@@ -168,18 +250,24 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                         keys.Add(categoryKey);
                 }
 
-                var (savedInPage, skippedInPage) = await SaveProductsAsync(products, ct);
+                if (products.Count > 0)
+                {
+                    var (savedInPage, skippedInPage) = await SaveProductsAsync(products, ct);
 
-                saved += savedInPage;
-                skipped += skippedInPage;
+                    saved += savedInPage;
+                    skipped += skippedInPage;
+                }
 
                 if (response?.HasNextPage != true)
-                    return (fetched, saved, skipped, true);
+                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
             }
 
             _logger.LogWarning("Category {Category} has more pages than the API allows ({Max}).", categoryKey, MaxPageNumber);
-            return (fetched, saved, skipped, true);
+            return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
         }
+
+        /// <summary>Podsumowanie pobrania jednej kategorii katalogu.</summary>
+        private readonly record struct CategoryFetchResult(int Fetched, int Saved, int Skipped, int OutsideWhitelist, bool Completed);
 
         /// <summary>
         /// Uzupełnia produkty o cenę i stan, po czym zapisuje je wsadowo. Produkt bez ceny pomijamy -
@@ -259,7 +347,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         {
             try
             {
+                // Stanu produktow wycofanych u dostawcy nie odpytujemy - ich oferty i tak konczymy.
                 var codes = (await _productRepo.GetAllProducts(ct))
+                    .Where(p => p.ArchivedAt == null)
                     .Select(p => p.Code)
                     .Where(c => !string.IsNullOrWhiteSpace(c))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -318,6 +408,103 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             }
         }
 
+        // ---------------------------------------------------------------- zdjecia
+
+        public async Task SyncImagesAsync(CancellationToken ct = default)
+        {
+            int downloaded = 0, reused = 0, failed = 0, removed = 0;
+            string? lastError = null;
+
+            try
+            {
+                // Produktow wycofanych u dostawcy nie wystawiamy, wiec nie ma po co pobierac ich zdjec.
+                var products = (await _productRepo.GetAllProducts(ct))
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Code) && p.ArchivedAt == null)
+                    .GroupBy(p => p.Code, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                if (products.Count == 0)
+                {
+                    _logger.LogInformation("No Inter Cars products in the database - skipping image sync.");
+                    return;
+                }
+
+                // Adresy zdjęć są wyłącznie w pliku wymiany - API katalogu ich nie zwraca.
+                var images = await _dataFiles.GetImagesAsync(products.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), ct);
+
+                if (images.Count == 0)
+                {
+                    _logger.LogWarning("The Inter Cars pictures file has no photos for products in our database.");
+                    return;
+                }
+
+                var processed = 0;
+                var sw = Stopwatch.StartNew();
+
+                // Zdjęcia leżą na osobnym, publicznym hoście. Klient API dokłada do każdego zapytania
+                // token OAuth2, więc do pobierania zdjęć bierzemy klienta bez żadnej autoryzacji -
+                // nie ma powodu wysyłać poświadczeń poza host API.
+                var imageClient = _httpClientFactory.CreateClient(ImagesHttpClientName);
+
+                await Parallel.ForEachAsync(
+                    images,
+                    new ParallelOptions { MaxDegreeOfParallelism = ImageParallelism, CancellationToken = ct },
+                    async (item, token) =>
+                    {
+                        var product = products[item.Sku];
+
+                        try
+                        {
+                            // Pobieramy tylko te zdjęcia, których jeszcze nie ma na dysku.
+                            var result = await ImageHelper.SaveNewImagesAsync(
+                                imageClient, item.Urls.Cast<string?>().ToList(), product.Id, _service.ImagesFolder, token);
+
+                            if (result.Failed > 0 && result.LastError != null)
+                                lastError = result.LastError;
+
+                            Interlocked.Add(ref downloaded, result.Downloaded);
+                            Interlocked.Add(ref reused, result.Reused);
+                            Interlocked.Add(ref failed, result.Failed);
+                            Interlocked.Add(ref removed, result.Removed);
+                        }
+                        catch (Exception ex) when (!token.IsCancellationRequested)
+                        {
+                            Interlocked.Add(ref failed, item.Urls.Count);
+                            _logger.LogError(ex, "Downloading images failed for {Code}.", product.Code);
+                        }
+                        finally
+                        {
+                            // Krok potrafi trwac dlugo - bez postepu log milczy i nie wiadomo, czy cos sie dzieje.
+                            var done = Interlocked.Increment(ref processed);
+
+                            if (done % ImageProgressEvery == 0)
+                            {
+                                _logger.LogInformation(
+                                    "Inter Cars images progress: {Done}/{Total} products, downloaded {Downloaded}, present {Reused}, failed {Failed} ({Elapsed}).",
+                                    done, images.Count, Volatile.Read(ref downloaded), Volatile.Read(ref reused), Volatile.Read(ref failed), sw.Elapsed);
+                            }
+                        }
+                    });
+
+                sw.Stop();
+
+                if (failed > 0)
+                {
+                    _logger.LogError(
+                        "Downloading {Failed} Inter Cars images failed (last error: {Error}). Existing files were kept.",
+                        failed, lastError ?? "-");
+                }
+
+                _logger.LogInformation(
+                    "Inter Cars images downloaded: {Downloaded}, already present: {Reused}, failed: {Failed}, removed: {Removed}. Took {Elapsed}.",
+                    downloaded, reused, failed, removed, sw.Elapsed);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "Syncing images from Inter Cars failed.");
+            }
+        }
+
         // ---------------------------------------------------------------- szczegóły produktów
 
         public async Task SyncProductDetailsAsync(CancellationToken ct = default)
@@ -326,7 +513,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
             try
             {
-                codes = await _productRepo.GetProductCodesForDetailUpdate(Math.Max(_api.ProductDetailsPerDay, 1), ct);
+                // Inter Cars nie ogranicza liczby zapytań, więc bierzemy komplet produktów wymagających
+                // szczegółów - tempo wyznaczają Parallelism i RequestDelayMilliseconds, a nie dzienna porcja.
+                codes = await _productRepo.GetProductCodesForDetailUpdate(_api.ProductDetailsPerRun, _api.ProductDetailsRefreshDays, ct);
             }
             catch (Exception ex)
             {
@@ -460,9 +649,46 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         }
 
         /// <summary>
-        /// Odświeża drzewo kategorii. Pełny katalog to ponad tysiąc zapytań, więc globalnie schodzimy
-        /// tylko na kilka poziomów (żeby w konfiguratorze było co wybierać), a skonfigurowane gałęzie
-        /// pobieramy do końca - z nich bierzemy produkty.
+        /// Pełne drzewo kategorii - wszystkie poziomy katalogu. Kosztuje ponad tysiąc zapytań,
+        /// więc idzie raz na dobę, w oknie nocnym. Służy wyłącznie liście wyboru w konfiguratorze:
+        /// zakres pobierania produktów wyznaczają skonfigurowane gałęzie, a te i tak schodzą do końca.
+        /// </summary>
+        public async Task SyncCategoryTreeAsync(CancellationToken ct = default)
+        {
+            var sw = Stopwatch.StartNew();
+            var tree = new CategoryTree();
+
+            try
+            {
+                await CrawlAsync(null, MaxTreeDepth, tree, ct);
+                await _categoryRepo.UpsertNodesAsync(tree.Nodes, ct);
+
+                sw.Stop();
+
+                _logger.LogInformation(
+                    "Full Inter Cars category tree synchronized: {Count} categories. Took {Elapsed}.",
+                    tree.Nodes.Count, sw.Elapsed);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                // Częściowe drzewo też jest coś warte - zapisujemy, co zdążyliśmy pobrać.
+                _logger.LogError(ex, "Synchronizing the full Inter Cars category tree failed after {Count} categories.", tree.Nodes.Count);
+
+                try
+                {
+                    await _categoryRepo.UpsertNodesAsync(tree.Nodes, ct);
+                }
+                catch (Exception saveEx) when (!ct.IsCancellationRequested)
+                {
+                    _logger.LogError(saveEx, "Saving the partially fetched Inter Cars category tree failed.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Odświeża drzewo kategorii na potrzeby pobierania produktów. Pełny katalog to ponad tysiąc
+        /// zapytań, więc globalnie schodzimy tylko na kilka poziomów, a skonfigurowane gałęzie
+        /// pobieramy do końca - z nich bierzemy produkty. Całość drzewa odświeża krok dzienny.
         /// </summary>
         private async Task<CategoryTree> SyncCategoryTreeAsync(IReadOnlyCollection<string> configured, CancellationToken ct)
         {
