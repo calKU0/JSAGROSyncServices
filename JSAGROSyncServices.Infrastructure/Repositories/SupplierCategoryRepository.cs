@@ -54,6 +54,17 @@ namespace JSAGROSyncServices.Infrastructure.Repositories
                     cancellationToken: ct));
         }
 
+        public async Task<int> CountNodesAsync(CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            return await connection.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "SELECT COUNT(*) FROM dbo.SupplierCategories WHERE IntegrationCompany = @IntegrationCompany",
+                    new { IntegrationCompany = _company },
+                    cancellationToken: ct));
+        }
+
         public async Task ReplaceProductCategoriesAsync(IReadOnlyDictionary<string, List<string>> categoryKeysByProductCode, CancellationToken ct)
         {
             if (categoryKeysByProductCode.Count == 0)

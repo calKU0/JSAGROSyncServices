@@ -37,6 +37,36 @@ namespace JSAGROSyncServices.Infrastructure.Helpers
             }
         }
 
+        /// <summary>
+        /// Skraca tresc odpowiedzi do wpisu w logu. Pelne body bledu z API to czesto kilka kilobajtow
+        /// i przy kilkuset bledach zasypuje plik, a przyczyne widac w pierwszym zdaniu.
+        /// </summary>
+        public static string Shorten(string? body, int maxLength = 300) =>
+            string.IsNullOrEmpty(body) || body.Length <= maxLength
+                ? body ?? string.Empty
+                : body[..maxLength] + "...";
+
+        /// <summary>
+        /// Lista kodow produktow do wpisu w logu: bez powtorzen, posortowana i ucieta do
+        /// <paramref name="max"/> pozycji, zeby jeden wpis nie rozrosl sie do tysiecy kodow.
+        /// </summary>
+        public static string FormatCodes(IEnumerable<string?> codes, int max = 20)
+        {
+            var distinct = codes
+                .Where(code => !string.IsNullOrWhiteSpace(code))
+                .Select(code => code!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (distinct.Count == 0)
+                return "-";
+
+            return distinct.Count <= max
+                ? string.Join(", ", distinct)
+                : string.Join(", ", distinct.Take(max)) + $" (+{distinct.Count - max} more)";
+        }
+
         public static string GetContentTypeFromPath(string path)
         {
             return Path.GetExtension(path).ToLowerInvariant() switch

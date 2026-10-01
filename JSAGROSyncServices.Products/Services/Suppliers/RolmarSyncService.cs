@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace JSAGROSyncServices.Products.Services.Suppliers
@@ -72,7 +73,16 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 };
 
                 var response = await _httpClient.PostAsJsonAsync(requestUri, body, options, ct);
-                response.EnsureSuccessStatusCode();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Bez tresci odpowiedzi zostawal sam kod 400 i nie bylo z czego ustalic przyczyny,
+                    // a nieudane pobranie oznacza cykl bez zadnego produktu od dostawcy.
+                    var error = await response.Content.ReadAsStringAsync(ct);
+
+                    throw new HttpRequestException(
+                        $"Rolmar getProducts returned {(int)response.StatusCode}: {Utils.Shorten(error)}");
+                }
 
                 var rolmarResponseArray =
                     await response.Content.ReadFromJsonAsync<List<RolmarProductReponse>>(ct);
@@ -307,6 +317,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                     groups.Count, totalPhotos, ImageParallelism);
 
                 var processed = 0;
+                // Kody produktow z nieudanym pobraniem - bez nich w logu zostaje sama liczba
+                // i nie da sie ustalic, ktorych ofert dotyczy brak zdjec.
+                var failedCodes = new ConcurrentBag<string>();
                 var sw = Stopwatch.StartNew();
 
                 // Pobieramy rownolegle - przy kilkudziesieciu tysiacach produktow sekwencyjne pobieranie
@@ -332,8 +345,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                             // Pobieramy tylko te zdjecia, ktorych jeszcze nie mamy na dysku.
                             var result = await ImageHelper.SaveNewImagesAsync(_httpClient, validUrls, product.Id, _service.ImagesFolder, token);
 
-                            if (result.Failed > 0 && result.LastError != null)
-                                lastDownloadError = result.LastError;
+                            if (result.Failed > 0)
+                            {
+                                failedCodes.Add(product.Code);
+
+                                if (result.LastError != null)
+                                    lastDownloadError = result.LastError;
+                            }
 
                             Interlocked.Add(ref downloaded, result.Downloaded);
                             Interlocked.Add(ref reused, result.Reused);
@@ -343,6 +361,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                         catch (Exception ex)
                         {
                             Interlocked.Add(ref failed, validUrls.Count);
+                            failedCodes.Add(product.Code);
                             _logger.LogError(ex, "Downloading images failed for {Code}.", product.Code);
                         }
                         finally
@@ -363,9 +382,11 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
                 if (failed > 0)
                 {
-                    _logger.LogError(
-                        "Downloading {Failed} images failed (last error: {Error}). Existing files were kept.",
-                        failed, lastDownloadError ?? "-");
+                    // Brak zdjecia u dostawcy to jego dane, nie awaria synchronizacji - ostrzezenie,
+                    // tak samo jak u Gaski. Dotychczasowe pliki zostaja, wiec oferta jedzie dalej.
+                    _logger.LogWarning(
+                        "Downloading {Failed} images failed for {Products} products (last error: {Error}). Existing files were kept. Products: {Codes}.",
+                        failed, failedCodes.Distinct().Count(), lastDownloadError ?? "-", Utils.FormatCodes(failedCodes));
                 }
 
                 _logger.LogInformation(

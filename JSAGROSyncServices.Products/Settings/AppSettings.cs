@@ -43,6 +43,14 @@ namespace JSAGROSyncServices.Products.Settings
         /// </summary>
         public int ArchiveAfterDaysMissing { get; set; } = 3;
 
+        /// <summary>
+        /// Ile zapytań do Allegro wysyłać równolegle. Allegro ogranicza nie tylko liczbę zapytań
+        /// na minutę, ale też liczbę równoległych wywołań w imieniu jednego użytkownika
+        /// (algorytm leaky bucket) - nadmiar wraca jako 429. Większa wartość nie przyspiesza cyklu,
+        /// bo odrzucone zapytania i tak trzeba powtórzyć z narastającym odstępem.
+        /// </summary>
+        public int AllegroParallelism { get; set; } = 8;
+
         public int MinProductStock { get; set; }
         public decimal MinProductPriceNet { get; set; }
         public decimal BundleProductsUnderPriceNet { get; set; }
@@ -53,12 +61,6 @@ namespace JSAGROSyncServices.Products.Settings
         public List<DeliverySettings> Deliveries { get; set; } = new List<DeliverySettings>();
 
         /// <summary>Cenniki dostawy, dla których nie aktualizujemy ceny ani dostawy.</summary>
-        /// <summary>
-        /// Wyłącznik wysyłki zdjęć do Allegro. Przydatny, gdy dostawca zwraca uszkodzone
-        /// lub niedostępne zdjęcia - oferty są wtedy pomijane zamiast psuć galerię na Allegro.
-        /// </summary>
-        public bool UploadImagesToAllegro { get; set; } = true;
-
         /// <summary>
         /// Cenniki dostawy zarządzane ręcznie na Allegro. Dla ofert z tych cenników serwis
         /// pilnuje tylko stanu i opisu - nie wysyła ceny, cennika dostawy ani czasu realizacji.

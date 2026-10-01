@@ -1,4 +1,4 @@
-using JSAGROSyncServices.Contracts.Data.Enums;
+﻿using JSAGROSyncServices.Contracts.Data.Enums;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Infrastructure.Helpers;
@@ -31,8 +31,12 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         /// <summary>Prefiks liści katalogu. Zapytanie o ich podkategorie zwraca rodzeństwo, więc nie schodzimy niżej.</summary>
         private const string LeafKeyPrefix = "GenericArticle_";
 
-        /// <summary>Największy numer strony przyjmowany przez API.</summary>
-        private const int MaxPageNumber = 1000;
+        /// <summary>
+        /// Największy numer strony przyjmowany przez API (strony liczone od zera). Razem z limitem
+        /// 100 pozycji na stronę daje to twardy sufit 10 000 produktów na kategorię - głębsza strona
+        /// kończy się błędem ICF306, więc z liczniejszych kategorii pobieramy tylko tyle.
+        /// </summary>
+        private const int MaxPageNumber = 99;
 
         /// <summary>Zabezpieczenie przed cyklem w drzewie kategorii od dostawcy.</summary>
         private const int MaxTreeDepth = 30;
@@ -262,7 +266,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                     return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
             }
 
-            _logger.LogWarning("Category {Category} has more pages than the API allows ({Max}).", categoryKey, MaxPageNumber);
+            _logger.LogWarning(
+                "Category {Category} is larger than the Inter Cars page limit - only the first {Count} products were fetched.",
+                categoryKey, (MaxPageNumber + 1) * perPage);
             return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
         }
 
@@ -439,6 +445,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 }
 
                 var processed = 0;
+                // Kody produktow z nieudanym pobraniem - sama liczba nie mowi, ktore oferty
+                // pojada bez zdjec.
+                var failedCodes = new ConcurrentBag<string>();
                 var sw = Stopwatch.StartNew();
 
                 // Zdjęcia leżą na osobnym, publicznym hoście. Klient API dokłada do każdego zapytania
@@ -459,8 +468,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                             var result = await ImageHelper.SaveNewImagesAsync(
                                 imageClient, item.Urls.Cast<string?>().ToList(), product.Id, _service.ImagesFolder, token);
 
-                            if (result.Failed > 0 && result.LastError != null)
-                                lastError = result.LastError;
+                            if (result.Failed > 0)
+                            {
+                                failedCodes.Add(product.Code);
+
+                                if (result.LastError != null)
+                                    lastError = result.LastError;
+                            }
 
                             Interlocked.Add(ref downloaded, result.Downloaded);
                             Interlocked.Add(ref reused, result.Reused);
@@ -470,6 +484,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                         catch (Exception ex) when (!token.IsCancellationRequested)
                         {
                             Interlocked.Add(ref failed, item.Urls.Count);
+                            failedCodes.Add(product.Code);
                             _logger.LogError(ex, "Downloading images failed for {Code}.", product.Code);
                         }
                         finally
@@ -490,9 +505,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
                 if (failed > 0)
                 {
-                    _logger.LogError(
-                        "Downloading {Failed} Inter Cars images failed (last error: {Error}). Existing files were kept.",
-                        failed, lastError ?? "-");
+                    _logger.LogWarning(
+                        "Downloading {Failed} Inter Cars images failed for {Products} products (last error: {Error}). Existing files were kept. Products: {Codes}.",
+                        failed, failedCodes.Distinct().Count(), lastError ?? "-", Utils.FormatCodes(failedCodes));
                 }
 
                 _logger.LogInformation(
@@ -686,9 +701,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         }
 
         /// <summary>
-        /// Odświeża drzewo kategorii na potrzeby pobierania produktów. Pełny katalog to ponad tysiąc
-        /// zapytań, więc globalnie schodzimy tylko na kilka poziomów, a skonfigurowane gałęzie
-        /// pobieramy do końca - z nich bierzemy produkty. Całość drzewa odświeża krok dzienny.
+        /// Odświeża skonfigurowane gałęzie drzewa kategorii - to z nich pobieramy produkty.
+        /// Resztę katalogu, potrzebną wyłącznie liście wyboru w Menadżerze Serwisów, pobiera
+        /// w całości krok dzienny.
         /// </summary>
         private async Task<CategoryTree> SyncCategoryTreeAsync(IReadOnlyCollection<string> configured, CancellationToken ct)
         {
@@ -696,7 +711,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
             try
             {
-                await CrawlAsync(null, Math.Max(_api.CategoryTreeDepth, 1), tree, ct);
+                // Pierwsze uruchomienie: w bazie nie ma jeszcze żadnej kategorii, a krok dzienny
+                // ruszy dopiero w nocy - bez tego lista wyboru w Menadżerze Serwisów byłaby pusta.
+                if (await _categoryRepo.CountNodesAsync(ct) == 0)
+                {
+                    _logger.LogInformation("The Inter Cars category tree is empty - fetching the whole catalog.");
+                    await CrawlAsync(null, MaxTreeDepth, tree, ct);
+                }
 
                 foreach (var key in configured)
                     await CrawlAsync(key, MaxTreeDepth, tree, ct);
@@ -970,6 +991,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
                 if (attempt >= HttpRetryPolicy.MaxAttempts || !HttpRetryPolicy.ShouldRetry(response.StatusCode))
                 {
+                    if (HttpRetryPolicy.ShouldRetry(response.StatusCode))
+                        HttpRetryPolicy.LogGaveUp(_logger, "Inter Cars", request.Method, path, response.StatusCode, attempt);
+
                     var body = await response.Content.ReadAsStringAsync(ct);
 
                     throw new HttpRequestException(

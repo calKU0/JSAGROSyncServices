@@ -138,6 +138,12 @@ namespace JSAGROSyncServices.Products
             if (_pipeline.FetchSupplierImages)
                 await Step("Supplier images", () => FetchSupplierImages(services));
 
+            // Szczegoly poza oknem nocnym: porcja na cykl, najpierw produkty bez szczegolow,
+            // potem najdawniej odswiezane. Bez nich produkt nie ma wagi ani wymiarow,
+            // wiec nie przechodzi do wystawienia.
+            if (_pipeline.FetchSupplierProductDetails)
+                await Step("Supplier product details", () => FetchSupplierProductDetails(services));
+
             await Step("Allegro offers", () => offerService.SyncAllegroOffers());
 
             if (_pipeline.SyncOfferDetails)

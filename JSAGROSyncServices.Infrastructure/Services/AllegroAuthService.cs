@@ -19,7 +19,7 @@ namespace JSAGROSyncServices.Infrastructure.Services
         private static Task? _deviceFlowTask;
         private static string? _deviceFlowUrl;
 
-        private ILogger<AllegroAuthService> _logger;
+        private readonly ILogger<AllegroAuthService> _logger;
         private readonly AllegroApiCredentials _settings;
         private readonly ITokenRepository _tokenRepo;
         private readonly HttpClient _http;

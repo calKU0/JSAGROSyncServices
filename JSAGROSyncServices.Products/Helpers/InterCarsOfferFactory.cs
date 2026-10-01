@@ -1,4 +1,4 @@
-using JSAGROSyncServices.Contracts.DTOs.Allegro;
+﻿using JSAGROSyncServices.Contracts.DTOs.Allegro;
 using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Infrastructure.Helpers;
@@ -46,7 +46,15 @@ namespace JSAGROSyncServices.Products.Helpers
 
         public Task PrepareAsync(CancellationToken ct) => Task.CompletedTask;
 
-        public decimal CalculatePrice(RolmarProduct product) => CalculatePrice(product, _priceSettings);
+        /// <summary>
+        /// Oferty Inter Cars wystawiamy wyłącznie na istniejącym produkcie z katalogu Allegro.
+        /// Katalog dostawcy nie zawiera parametrów, których Allegro wymaga do utworzenia produktu
+        /// (ani ich nazw, ani wartości słownikowych), więc propozycja nowego produktu kończyła się
+        /// błędem "Uzupełnij parametry obowiązkowe" i oferta i tak nie powstawała.
+        /// </summary>
+        public bool RequiresCatalogProduct => true;
+
+        public decimal CalculatePrice(RolmarProduct product) => CalculatePrice(product, _priceSettings, _appSettings.Deliveries);
 
         public ProductOfferRequest BuildOffer(RolmarProduct product)
         {
@@ -67,7 +75,7 @@ namespace JSAGROSyncServices.Products.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(product, _priceSettings).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(product, _priceSettings, _appSettings.Deliveries).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -81,7 +89,7 @@ namespace JSAGROSyncServices.Products.Helpers
                 },
                 Delivery = new Delivery
                 {
-                    ShippingRates = new ShippingRates { Name = GetDelivery(product, _appSettings.Deliveries) },
+                    ShippingRates = new ShippingRates { Name = DeliveryMatcher.Match(product, _appSettings.Deliveries) },
                     HandlingTime = _allegroSettings.AllegroHandlingTime
                 },
                 Location = new Location
@@ -94,7 +102,7 @@ namespace JSAGROSyncServices.Products.Helpers
                 Payments = new Payments { Invoice = "VAT" },
                 TaxSettings = BuildTaxSettings(),
                 AfterSalesServices = BuildAfterSalesServices(),
-                Parameters = BuildParameters(product.Parameters, isForProduct: false)
+                Parameters = BuildOfferParameters(product.Parameters)
             };
         }
 
@@ -137,7 +145,7 @@ namespace JSAGROSyncServices.Products.Helpers
                         Format = "BUY_NOW",
                         Price = new Price
                         {
-                            Amount = CalculatePrice(product, _priceSettings).ToString("F2", CultureInfo.InvariantCulture),
+                            Amount = CalculatePrice(product, _priceSettings, _appSettings.Deliveries).ToString("F2", CultureInfo.InvariantCulture),
                             Currency = "PLN"
                         }
                     },
@@ -155,7 +163,7 @@ namespace JSAGROSyncServices.Products.Helpers
                     ? null
                     : new Delivery
                     {
-                        ShippingRates = new ShippingRates { Name = GetDelivery(product, _appSettings.Deliveries) },
+                        ShippingRates = new ShippingRates { Name = DeliveryMatcher.Match(product, _appSettings.Deliveries) },
                         HandlingTime = _allegroSettings.AllegroHandlingTime
                     },
                 AfterSalesServices = BuildAfterSalesServices()
@@ -176,32 +184,21 @@ namespace JSAGROSyncServices.Products.Helpers
         }
 
         /// <summary>
-        /// Produkt z katalogu Allegro: gdy znamy jego id, wysyłamy wyłącznie id. Dołożenie zdjęć
-        /// czy parametrów obok id Allegro traktuje jako propozycję zmiany produktu i wymaga wtedy
-        /// kompletu parametrów - stąd "Uzupełnij parametry obowiązkowe" mimo podpiętego produktu.
+        /// Produkt z katalogu Allegro - wysyłamy wyłącznie jego id. Nazwa, zdjęcia czy parametry
+        /// obok id to dla Allegro propozycja zmiany produktu, a wtedy wymaga kompletu parametrów
+        /// produktowych - stąd "Uzupełnij parametry obowiązkowe" mimo podpiętego produktu.
+        /// Oferta bez dopasowanego produktu tu nie dociera: odsiewa ją <see cref="RequiresCatalogProduct"/>.
         /// </summary>
         private List<ProductSet> BuildProductSet(RolmarProduct product, List<string>? images, string? offerProductId = null)
         {
             // Id produktu z katalogu: najpierw to, które oferta już ma, potem zapamiętane przy produkcie.
             var catalogProductId = string.IsNullOrWhiteSpace(offerProductId) ? product.AllegroId : offerProductId;
-            var hasCatalogProduct = !string.IsNullOrWhiteSpace(catalogProductId);
-
-            var allegroProduct = hasCatalogProduct
-                ? new ProductObject { Id = catalogProductId }
-                : new ProductObject
-                {
-                    Name = BuildOfferName(product),
-                    Category = new Category { Id = product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture) },
-                    // Parametry opisujące produkt idą tutaj; parametry samej oferty - w sekcji parameters.
-                    Parameters = BuildParameters(product.Parameters, isForProduct: true),
-                    Images = images
-                };
 
             return new List<ProductSet>
             {
                 new()
                 {
-                    ProductObject = allegroProduct,
+                    ProductObject = new ProductObject { Id = catalogProductId },
                     Quantity = new Quantity { Value = Math.Max((int)Math.Ceiling(product.Package), 1) },
                     ResponsiblePerson = new ResponsiblePerson { Name = _allegroSettings.AllegroResponsiblePerson },
                     ResponsibleProducer = new ResponsibleProducer
@@ -311,7 +308,11 @@ namespace JSAGROSyncServices.Products.Helpers
 
         // ---------------------------------------------------------------- parametry i opis
 
-        private static List<Parameter> BuildParameters(ICollection<ProductParameter> parameters, bool isForProduct)
+        /// <summary>
+        /// Parametry samej oferty. Parametrów opisujących produkt nie budujemy wcale - produkt
+        /// bierzemy z katalogu Allegro, a on ma własne.
+        /// </summary>
+        private static List<Parameter> BuildOfferParameters(ICollection<ProductParameter> parameters)
         {
             var multiValueParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -320,7 +321,7 @@ namespace JSAGROSyncServices.Products.Helpers
 
             var result = new List<Parameter>();
 
-            foreach (var param in parameters.Where(p => p.IsForProduct == isForProduct))
+            foreach (var param in parameters.Where(p => !p.IsForProduct))
             {
                 if (string.IsNullOrWhiteSpace(param.Value))
                     continue;
@@ -447,46 +448,16 @@ namespace JSAGROSyncServices.Products.Helpers
             };
         }
 
-        public static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings)
+        public static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings, List<DeliverySettings> deliveries)
         {
             // Marża własna z przedziału cenowego, a na niej prowizje Allegro - tak jak u pozostałych dostawców.
             var calculatedPrice = product.PriceGross * (1 + ResolveMargin(priceSettings, product.PriceGross) / 100m);
 
-            if (calculatedPrice < 5m)
-            {
-                var withSmallMargin = calculatedPrice + priceSettings.AllegroMarginUnder5PLN;
-
-                calculatedPrice = withSmallMargin < 5m
-                    ? withSmallMargin
-                    : calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
-            }
-            else if (calculatedPrice <= 1000m)
-            {
-                var tempPrice = calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
-
-                calculatedPrice = tempPrice > 1000m
-                    ? calculatedPrice + priceSettings.AllegroMarginMoreThan1000PLN
-                    : tempPrice;
-            }
-            else
-            {
-                calculatedPrice += priceSettings.AllegroMarginMoreThan1000PLN;
-            }
-
-            // Produkt ponadgabarytowy - wysyłka droższa, dopłata idzie do finalnej ceny oferty.
-            if (priceSettings.OversizeSurcharge > 0 && IsOversized(product, priceSettings))
-                calculatedPrice += priceSettings.OversizeSurcharge;
-
-            return Math.Max(calculatedPrice, 1.00m);
-        }
-
-        private static bool IsOversized(RolmarProduct product, PriceSettings priceSettings)
-        {
-            IReadOnlyCollection<string> names = priceSettings.OversizeDimensionNames.Count > 0
-                ? priceSettings.OversizeDimensionNames
-                : ProductDimensions.DefaultDimensionNames;
-
-            return ProductDimensions.IsOversized(product, priceSettings.OversizeThresholdCm, names);
+            return OfferPricing.Finalize(
+                calculatedPrice,
+                priceSettings,
+                ProductDimensions.IsOversized(product, priceSettings.OversizeThresholdCm),
+                chargeShipping: DeliveryMatcher.MatchDelivery(product, deliveries)?.IsSmart == true);
         }
 
         private static decimal ResolveMargin(PriceSettings priceSettings, decimal grossPrice)
@@ -499,58 +470,5 @@ namespace JSAGROSyncServices.Products.Helpers
                 ?? priceSettings.MarginRanges[^1].Margin;
         }
 
-        /// <summary>
-        /// Cennik dostawy dobrany do wagi i wymiarów opakowania podanych przez Inter Cars.
-        /// Gdy nic nie pasuje, bierzemy największy - lepiej dopłacić do wysyłki niż nie wysłać.
-        /// </summary>
-        private static string? GetDelivery(RolmarProduct product, List<DeliverySettings> deliveries)
-        {
-            if (deliveries == null || deliveries.Count == 0)
-                return null;
-
-            var weight = (decimal)product.Weight;
-            var length = GetDimensionCm(product, "Długość");
-            var width = GetDimensionCm(product, "Szerokość");
-            var height = GetDimensionCm(product, "Wysokość");
-
-            // Inter Cars nie zawsze podaje gabaryty opakowania. Bez nich zerowa waga trafiłaby
-            // w najtańszy cennik - a nieznany rozmiar to częściej duża paczka niż mała.
-            if (weight <= 0 && length == null && width == null && height == null)
-                return LargestDelivery(deliveries);
-
-            var matching = deliveries
-                .Where(d => d.Weight >= weight
-                            && (length == null || d.Length >= length)
-                            && (width == null || d.Width >= width)
-                            && (height == null || d.Height >= height))
-                .OrderBy(d => d.Weight)
-                .ThenBy(d => d.Length * d.Width * d.Height)
-                .FirstOrDefault();
-
-            return matching?.DeliveryName ?? LargestDelivery(deliveries);
-        }
-
-        private static string? LargestDelivery(List<DeliverySettings> deliveries) => deliveries
-            .OrderByDescending(d => d.Weight)
-            .ThenByDescending(d => d.Length * d.Width * d.Height)
-            .First()
-            .DeliveryName;
-
-        private static decimal? GetDimensionCm(RolmarProduct product, string dimensionName)
-        {
-            var spec = product.Specifications?
-                .FirstOrDefault(s => string.Equals(s.Name, dimensionName, StringComparison.OrdinalIgnoreCase));
-
-            if (spec == null || !decimal.TryParse(spec.Value.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
-                return null;
-
-            return spec.UnitName?.ToLowerInvariant() switch
-            {
-                "mm" => value / 10m,
-                "cm" => value,
-                "m" => value * 100m,
-                _ => null
-            };
-        }
     }
 }

@@ -11,6 +11,9 @@ namespace JSAGROSyncServices.Contracts.Interfaces
         /// <summary>Dodaje brakujące węzły, aktualizuje nazwy i rodziców, przelicza ścieżki.</summary>
         Task UpsertNodesAsync(IEnumerable<SupplierCategoryNode> nodes, CancellationToken ct);
 
+        /// <summary>Liczba zapisanych węzłów drzewa. Zero oznacza, że katalogu jeszcze nie pobrano.</summary>
+        Task<int> CountNodesAsync(CancellationToken ct);
+
         /// <summary>
         /// Zastępuje przypisania kategorii podanych produktów (klucz = kod produktu).
         /// Produkty spoza słownika pozostają nietknięte.

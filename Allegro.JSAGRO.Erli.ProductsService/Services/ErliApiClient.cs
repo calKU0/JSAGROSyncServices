@@ -82,14 +82,21 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Services
                 if (response.IsSuccessStatusCode)
                     return responseBody;
 
-                if (attempt < HttpRetryPolicy.MaxAttempts && HttpRetryPolicy.ShouldRetry(response.StatusCode))
+                if (HttpRetryPolicy.ShouldRetry(response.StatusCode))
                 {
-                    var delay = HttpRetryPolicy.GetDelay(response, attempt);
+                    if (attempt >= HttpRetryPolicy.MaxAttempts)
+                    {
+                        HttpRetryPolicy.LogGaveUp(_logger, "Erli", method, endpoint, response.StatusCode, attempt);
+                    }
+                    else
+                    {
+                        var delay = HttpRetryPolicy.GetDelay(response, attempt);
 
-                    HttpRetryPolicy.LogRetry(_logger, "Erli", method, endpoint, response.StatusCode, attempt, delay);
+                        HttpRetryPolicy.LogRetry(_logger, "Erli", method, endpoint, response.StatusCode, attempt, delay);
 
-                    await Task.Delay(delay, ct);
-                    continue;
+                        await Task.Delay(delay, ct);
+                        continue;
+                    }
                 }
 
                 throw new ErliApiException(method, endpoint, response.StatusCode, responseBody, TryParseError(responseBody));

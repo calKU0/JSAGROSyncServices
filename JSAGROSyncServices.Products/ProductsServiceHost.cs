@@ -138,7 +138,8 @@ namespace JSAGROSyncServices.Products
             var needsSupplierApi = pipeline.FetchSupplierProducts
                 || pipeline.FetchSupplierStock
                 || pipeline.FetchSupplierImages
-                || pipeline.FetchSupplierProductDetailsDaily;
+                || pipeline.FetchSupplierProductDetailsDaily
+                || pipeline.FetchSupplierProductDetails;
 
             if (!needsSupplierApi)
                 return;
@@ -191,20 +192,32 @@ namespace JSAGROSyncServices.Products
             services.AddSingleton<InterCarsTokenProvider>();
             services.AddTransient<InterCarsAuthHandler>();
 
-            services.AddHttpClient(InterCarsDataFileService.HttpClientName, (sp, client) =>
+            // Serwer wymiany plików obsługuje dwa konta: rolnicze (lista SKU AGRO) i pełne (zdjęcia),
+            // bo katalog Pictures istnieje tylko na tym drugim. Konta różnią się wyłącznie logowaniem,
+            // więc oba klienty są takie same poza nagłówkiem Authorization.
+            static void AddDataExchangeClient(
+                IServiceCollection services,
+                string name,
+                Func<InterCarsApiCredentials, (string User, string Password)> login)
             {
-                var interCarsApi = sp.GetRequiredService<IOptions<InterCarsApiCredentials>>().Value;
+                services.AddHttpClient(name, (sp, client) =>
+                {
+                    var interCarsApi = sp.GetRequiredService<IOptions<InterCarsApiCredentials>>().Value;
+                    var (user, password) = login(interCarsApi);
 
-                client.BaseAddress = new Uri(EnsureTrailingSlash(interCarsApi.DataBaseUrl));
-                // Plik ze zdjęciami ma kilkadziesiąt megabajtów - pobranie bywa wolniejsze niż zapytanie do API.
-                client.Timeout = TimeSpan.FromMinutes(30);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd(InterCarsUserAgent);
+                    client.BaseAddress = new Uri(EnsureTrailingSlash(interCarsApi.DataBaseUrl));
+                    // Plik ze zdjęciami ma kilkadziesiąt megabajtów - pobranie bywa wolniejsze niż zapytanie do API.
+                    client.Timeout = TimeSpan.FromMinutes(30);
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd(InterCarsUserAgent);
 
-                var credentials = Convert.ToBase64String(
-                    Encoding.UTF8.GetBytes($"{interCarsApi.DataUser}:{interCarsApi.DataPassword}"));
+                    var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
 
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
-            });
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+                });
+            }
+
+            AddDataExchangeClient(services, InterCarsDataFileService.HttpClientName, c => (c.DataUser, c.DataPassword));
+            AddDataExchangeClient(services, InterCarsDataFileService.PicturesHttpClientName, c => (c.PicturesUser, c.PicturesPassword));
 
             // Host ze zdjęciami nie wymaga autoryzacji - klient jest celowo bez tokenu i bez Basic Auth.
             // Wymaga za to nagłówka User-Agent: zapytanie bez niego kończy się kodem 403,

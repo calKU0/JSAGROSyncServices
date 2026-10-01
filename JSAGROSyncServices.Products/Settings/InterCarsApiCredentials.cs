@@ -48,14 +48,6 @@ namespace JSAGROSyncServices.Products.Settings
         /// </summary>
         public List<string> Warehouses { get; set; } = new() { "HZA", "BPO" };
 
-        /// <summary>
-        /// Do ilu poziomów schodzić przy odświeżaniu globalnego drzewa kategorii w zwykłym cyklu.
-        /// Pełne drzewo to ponad tysiąc zapytań, więc w ciągu dnia schodzimy szeroko, ale płytko;
-        /// raz na dobę drzewo jest pobierane w całości. Skonfigurowane gałęzie pobieramy zawsze do końca.
-        /// </summary>
-        public int CategoryTreeDepth { get; set; } = 2;
-
-
         // ------------------------------------------------------------ wymiana plików CSV
 
         /// <summary>
@@ -72,5 +64,16 @@ namespace JSAGROSyncServices.Products.Settings
         public string DataUser { get; set; } = string.Empty;
 
         public string DataPassword { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Osobne konto na serwerze wymiany dla katalogu <c>Pictures</c>. Konto rolnicze ma tylko
+        /// listę asortymentu AGRO - zdjęcia wystawia konto z pełnym katalogiem. Puste pole oznacza,
+        /// że zdjęcia bierzemy z tego samego konta co resztę plików.
+        /// </summary>
+        public string PicturesCustomerNumber { get; set; } = string.Empty;
+
+        public string PicturesUser { get; set; } = string.Empty;
+
+        public string PicturesPassword { get; set; } = string.Empty;
     }
 }

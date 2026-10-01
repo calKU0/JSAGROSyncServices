@@ -1,5 +1,6 @@
 ﻿using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Products.Helpers;
 
 namespace JSAGROSyncServices.Products.Services.Allegro
 {
@@ -22,6 +23,19 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         {
             try
             {
+                // Parametry niezależne od danych produktu uzupełniamy w bazie, bo zwykły krok
+                // omija produkty, które mają już jakiekolwiek parametry - a brakujący parametr
+                // obowiązkowy blokuje wystawienie oferty w każdym cyklu.
+                var filled = await _parameterRepo.FillDataIndependentParametersAsync(
+                    ParameterDefaults.CountInOfferSqlPattern,
+                    ParameterDefaults.CountInOfferValue,
+                    ParameterDefaults.MountingSideParameterName,
+                    ParameterDefaults.UniversalMountingSidesOrdered,
+                    ct);
+
+                if (filled > 0)
+                    _logger.LogInformation("Data-independent parameters filled in: {Count}.", filled);
+
                 var products = await _productRepo.GetProductsToUpdateParameters(ct);
 
                 // Cache category parameters
@@ -112,6 +126,17 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
             if (name != null && directMappings.TryGetValue(name, out var resolver))
                 return resolver(product);
+
+            // "Liczba ... w ofercie" (tarcz, klocków, sztuk): sprzedajemy jedną pozycję
+            // w opakowaniu dostawcy, a dokładniejszej liczby dane dostawcy nie podają.
+            if (ParameterDefaults.IsCountInOffer(name))
+                return ParameterDefaults.CountInOfferValue;
+
+            // Strony zabudowy nie znamy, więc zamiast zgadywać "przód" albo "lewa" bierzemy
+            // z listy dopuszczalnych wartości tę, która nie zawęża zastosowania. Gdy kategoria
+            // żadnej takiej nie ma, zostawiamy parametr pusty - zmyślony bok wprowadzałby w błąd.
+            if (name == "strona zabudowy")
+                return ParameterDefaults.UniversalMountingSide(param.Values?.Select(v => v.Value));
 
             if (name == "producent" || name == "producent części")
                 return GetMatchingValue(product, param);

@@ -41,6 +41,15 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
         private static readonly string[] EanParameters = ["EAN (GTIN)", "EAN", "GTIN"];
 
+        /// <summary>Parametry Allegro z marką produktu - służą do potwierdzenia trafienia po samych cyfrach.</summary>
+        private static readonly string[] BrandParameters =
+        [
+            "Marka",
+            "Producent",
+            "Producent części",
+            "Marka części"
+        ];
+
         private readonly ILogger<AllegroProductService> _logger;
         private readonly AllegroApiClient _apiClient;
         private readonly IProductRepository _productRepository;
@@ -202,8 +211,8 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
             // Trafienie w "Numer katalogowy części" jest pewniejsze niż w numer zamiennika czy
             // oryginału, więc najpierw szukamy dopasowania po numerze własnym produktu.
-            var best = candidates.FirstOrDefault(c => Matches(c, identifiers, primaryOnly: true))
-                ?? candidates.FirstOrDefault(c => Matches(c, identifiers, primaryOnly: false));
+            var best = candidates.FirstOrDefault(c => Matches(c, identifiers, primaryOnly: true) && Confirms(c, identifiers, product))
+                ?? candidates.FirstOrDefault(c => Matches(c, identifiers, primaryOnly: false) && Confirms(c, identifiers, product));
 
             if (best != null)
                 return new CatalogProductMatch(best.Id, best.Category!.Id, best.Name);
@@ -222,7 +231,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         /// Czy produkt z katalogu ma któryś z naszych numerów. Porównujemy po uproszczeniu zapisu,
         /// bo ten sam numer bywa pisany na kilka sposobów ("GE 60 ES-2RS /SKF/" i "GE60ES2RS-SKF").
         /// </summary>
-        private static bool Matches(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers, bool primaryOnly)
+        internal static bool Matches(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers, bool primaryOnly)
         {
             foreach (var parameter in candidate.Parameters)
             {
@@ -244,6 +253,103 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             foreach (var token in TokenizeName(candidate.Name))
             {
                 if (identifiers.Contains(token))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Druga, niezależna przesłanka trafienia - wymagana, gdy produkt rozpoznaliśmy wyłącznie
+        /// po numerze złożonym z samych cyfr. Taki numer nie jest w katalogu Allegro unikalny:
+        /// "11119001" to u nas tarcza hamulcowa SRP, a w katalogu "Kod producenta" koralików
+        /// szklanych JABLONEX - i oferta tarczy trafiała pod koraliki. Numery z literami
+        /// ("STR-15A359", "ZK8021 LBPU312-31-22BBK") kolidują na tyle rzadko, że same wystarczają.
+        /// </summary>
+        internal static bool Confirms(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers, RolmarProduct product)
+        {
+            if (MatchesOnTextIdentifier(candidate, identifiers))
+                return true;
+
+            var brand = Normalize(product.SupplierName);
+
+            if (brand.Length > 0)
+            {
+                foreach (var parameter in candidate.Parameters)
+                {
+                    if (!BrandParameters.Contains(parameter.Name, StringComparer.OrdinalIgnoreCase))
+                        continue;
+
+                    foreach (var value in parameter.Values ?? [])
+                    {
+                        if (Normalize(value) == brand)
+                            return true;
+                    }
+                }
+
+                // Nazwy produktów katalogowych dla części zwykle zawierają markę.
+                if (Normalize(candidate.Name).Contains(brand, StringComparison.Ordinal))
+                    return true;
+            }
+
+            // Druga możliwość: nazwy mówią o tym samym. "TULEJA ZAWIESZENIA VOLVO WOZIDŁO"
+            // i nasze "Pozostałe elementy zawieszenia TUZ" dzielą "zawieszenia"; koraliki
+            // szklane z tarczą hamulcową nie dzielą nic.
+            return SharesMeaningfulWord(candidate.Name, product.Name);
+        }
+
+        /// <summary>Najkrótsze słowo, które coś znaczy. Krótsze ("do", "pod", "na") pasują do wszystkiego.</summary>
+        private const int MinSharedWordLength = 6;
+
+        /// <summary>
+        /// Słowa dość długie, a mimo to nic nie mówiące o tym, czym jest towar. Nazwy kategorii
+        /// Inter Cars składają się głównie z nich ("Pozostałe elementy zawieszenia"), więc bez tej
+        /// listy "Zestaw do Volvo" potwierdzałby "Zestaw do CAT".
+        /// </summary>
+        private static readonly HashSet<string> GenericWords = new(StringComparer.Ordinal)
+        {
+            "ZESTAW", "ZESTAWY", "KOMPLET", "POZOSTAŁE", "POZOSTALE", "ELEMENT", "ELEMENTY",
+            "CZĘŚCI", "CZESCI", "CZĘŚĆ", "CZESC", "AKCESORIA", "INNE", "UNIWERSALNY",
+            "UNIWERSALNE", "ORYGINALNY", "ORYGINALNE", "PRODUKT", "TOWAR"
+        };
+
+        /// <summary>Czy obie nazwy mają wspólne słowo na tyle długie, żeby mówić o tym samym towarze.</summary>
+        internal static bool SharesMeaningfulWord(string? first, string? second)
+        {
+            var words = MeaningfulWords(first);
+
+            return words.Count > 0 && MeaningfulWords(second).Any(words.Contains);
+        }
+
+        private static HashSet<string> MeaningfulWords(string? name) =>
+            (name ?? string.Empty)
+                .Split([' ', ',', ';', '/', '\\', '(', ')', '-', '.'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(Normalize)
+                .Where(word => word.Length >= MinSharedWordLength
+                               && word.All(char.IsLetter)
+                               && !GenericWords.Contains(word))
+                .ToHashSet(StringComparer.Ordinal);
+
+        /// <summary>Czy trafienie opiera się na numerze, który ma w sobie literę - a nie na samych cyfrach.</summary>
+        internal static bool MatchesOnTextIdentifier(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers)
+        {
+            foreach (var parameter in candidate.Parameters)
+            {
+                if (!IsIdentifyingParameter(parameter.Name, primaryOnly: false))
+                    continue;
+
+                foreach (var value in parameter.Values ?? [])
+                {
+                    var normalized = Normalize(value);
+
+                    if (identifiers.Contains(normalized) && !normalized.All(char.IsDigit))
+                        return true;
+                }
+            }
+
+            foreach (var token in TokenizeName(candidate.Name))
+            {
+                if (identifiers.Contains(token) && !token.All(char.IsDigit))
                     return true;
             }
 
@@ -283,12 +389,24 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
             return values
                 .Select(Normalize)
-                .Where(value => value.Length >= MinIdentifierLength)
+                .Where(IsUsableIdentifier)
                 .ToHashSet(StringComparer.Ordinal);
         }
 
         /// <summary>Krótsze ciągi to zwykle symbole typu "L" czy "24" - pasowałyby do wszystkiego.</summary>
         private const int MinIdentifierLength = 4;
+
+        /// <summary>
+        /// Numer złożony z samych cyfr musi być dłuższy: czterocyfrowe "480" trafia w katalogu
+        /// Allegro w dziesiątki niezwiązanych produktów, a jedno takie trafienie podmieniło
+        /// przenośnik na zacisk hamulca. Numery z literami rozróżniają same z siebie.
+        /// </summary>
+        private const int MinNumericIdentifierLength = 6;
+
+        /// <summary>Czy numer jest na tyle charakterystyczny, żeby nim szukać i potwierdzać trafienie.</summary>
+        internal static bool IsUsableIdentifier(string identifier) =>
+            identifier.Length >= MinIdentifierLength
+            && (identifier.Length >= MinNumericIdentifierLength || !identifier.All(char.IsDigit));
 
         /// <summary>Końcówka "-JD", "-CNH", "-MF" - znacznik marki dopisywany przez Inter Cars.</summary>
         private static readonly Regex BrandSuffix = new(@"-[A-Za-z]{2,4}$", RegexOptions.Compiled);
@@ -359,7 +477,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         }
 
         /// <summary>Zostawia same litery i cyfry, wielkimi literami - spacje, kropki i myślniki nic nie znaczą.</summary>
-        private static string Normalize(string? value)
+        internal static string Normalize(string? value)
         {
             if (string.IsNullOrWhiteSpace(value))
                 return string.Empty;

@@ -11,6 +11,8 @@ namespace JSAGROSyncServices.Contracts.Interfaces
         /// Najpierw produkty bez szczegółów, potem te odświeżane dawniej niż <paramref name="refreshAfterDays"/> temu.
         /// </summary>
         /// <param name="limit">Górny limit pozycji; wartość &lt;= 0 oznacza brak limitu.</param>
+        /// <param name="refreshAfterDays">Po ilu dniach odświeżać szczegóły produktu, który już je ma.</param>
+        /// <param name="ct">Token anulowania.</param>
         Task<List<string>> GetProductCodesForDetailUpdate(int limit, int refreshAfterDays, CancellationToken ct);
 
         /// <summary>Odnotowuje pobranie szczegółów - bez tego te same produkty wracałyby w każdym cyklu.</summary>
@@ -31,6 +33,8 @@ namespace JSAGROSyncServices.Contracts.Interfaces
         /// Produkt spoza nich nie jest pobierany wcale, więc jego brak nic nie znaczy - jego ofertę
         /// i tak kończy filtr kategorii. Pusta lista wyłącza to zawężenie.
         /// </param>
+        /// <param name="graceDays">Po ilu dniach nieobecności w danych dostawcy uznać produkt za wycofany.</param>
+        /// <param name="ct">Token anulowania.</param>
         /// <returns>Liczba nowo zarchiwizowanych produktów.</returns>
         Task<int> ArchiveMissingProductsAsync(int graceDays, IReadOnlyCollection<string> categories, CancellationToken ct);
 

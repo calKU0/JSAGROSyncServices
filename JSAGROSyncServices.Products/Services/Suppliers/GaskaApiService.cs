@@ -7,6 +7,7 @@ using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Infrastructure.Helpers;
+using JSAGROSyncServices.Infrastructure.Services;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Globalization;
@@ -304,10 +305,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 try
                 {
                     var url = $"/product?id={productId}&lng=pl";
-                    var response = await _http.GetAsync(url, ct);
+                    using var response = await GetProductDetails(url, ct);
 
                     if (!response.IsSuccessStatusCode)
                     {
+                        // Nieudane pobranie to nieudana aktualizacja produktu - licznik musi to
+                        // pokazac, inaczej podsumowanie cyklu raportuje "failed 0" przy setkach bledow.
+                        failed++;
                         _logger.LogError("API error while fetching product details for {Id}. Response Status: {StatusCode}", productId, response.StatusCode);
                         continue;
                     }
@@ -364,6 +368,28 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             }
 
             _logger.LogInformation("Gąska product details: updated {Updated}, failed {Failed}. Took {Elapsed}.", updated, failed, sw.Elapsed);
+        }
+
+        /// <summary>
+        /// Pobiera szczegoly jednego produktu, ponawiajac bledy przejsciowe. API Gaski potrafi
+        /// odpowiadac bledem 500 seriami - bez ponowienia tracilismy w takim okienku szczegoly
+        /// setek produktow na caly dzien, bo kolejna proba przypada dopiero w nastepnej dobie.
+        /// </summary>
+        private async Task<HttpResponseMessage> GetProductDetails(string url, CancellationToken ct)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                var response = await _http.GetAsync(url, ct);
+
+                if (!HttpRetryPolicy.ShouldRetry(response.StatusCode) || attempt >= HttpRetryPolicy.MaxAttempts)
+                    return response;
+
+                var delay = HttpRetryPolicy.GetDelay(response, attempt);
+                HttpRetryPolicy.LogRetry(_logger, "Gąska", HttpMethod.Get, url, response.StatusCode, attempt, delay);
+                response.Dispose();
+
+                await Task.Delay(delay, ct);
+            }
         }
 
         private async Task SaveProductImagesAsync(ApiProduct product, int productId, CancellationToken ct)

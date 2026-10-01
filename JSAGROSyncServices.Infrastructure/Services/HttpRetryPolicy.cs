@@ -44,13 +44,24 @@ namespace JSAGROSyncServices.Infrastructure.Services
         }
 
         /// <summary>
-        /// Jednolity wpis w logu o ponowieniu. Dzięki jednej treści widać w logach każdego serwisu
-        /// to samo: z którym API, czym i jak długo czekamy.
+        /// Jednolity wpis w logu o ponowieniu. Celowo na poziomie Debug: ponowienie, które się udało,
+        /// jest normalnym elementem pracy z limitowanym API i niczego od nikogo nie wymaga.
+        /// Przy 429 z Allegro potrafiło to zalewać log dziesiątkami tysięcy ostrzeżeń na cykl
+        /// i przykrywać błędy, które faktycznie trzeba obejrzeć.
         /// </summary>
         public static void LogRetry(ILogger logger, string api, HttpMethod method, string url, HttpStatusCode status, int attempt, TimeSpan delay) =>
-            logger.LogWarning(
+            logger.LogDebug(
                 "{Api} {Method} {Url} returned {Status}. Retry {Attempt}/{MaxAttempts} in {Delay}.",
                 api, method, url, (int)status, attempt, MaxAttempts, delay);
+
+        /// <summary>
+        /// Wyczerpane ponowienia - dopiero to jest ostrzeżeniem, bo zapytanie ostatecznie nie przeszło.
+        /// Jeden wpis na nieudane wywołanie, a nie jeden na każdą próbę.
+        /// </summary>
+        public static void LogGaveUp(ILogger logger, string api, HttpMethod method, string url, HttpStatusCode status, int attempts) =>
+            logger.LogWarning(
+                "{Api} {Method} {Url} still returns {Status} after {Attempts} attempts - giving up.",
+                api, method, url, (int)status, attempts);
 
         /// <summary>Odstęp, gdy odpowiedzi nie ma wcale - np. po zerwanym połączeniu.</summary>
         public static TimeSpan GetDelay(int attempt) =>

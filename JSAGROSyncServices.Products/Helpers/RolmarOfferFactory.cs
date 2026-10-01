@@ -28,7 +28,15 @@ namespace JSAGROSyncServices.Products.Helpers
 
         public Task PrepareAsync(CancellationToken ct) => Task.CompletedTask;
 
-        public decimal CalculatePrice(RolmarProduct product) => CalculatePrice(product, _priceSettings);
+        /// <summary>
+        /// Oferty Rolmaru wystawiamy wyłącznie na istniejącym produkcie z katalogu Allegro.
+        /// Propozycja nowego produktu wymaga kompletu parametrów produktowych, których dane
+        /// dostawcy nie zawierają - kończyła się błędem "Uzupełnij parametry obowiązkowe"
+        /// i oferta i tak nie powstawała, a próba wracała w każdym cyklu.
+        /// </summary>
+        public bool RequiresCatalogProduct => true;
+
+        public decimal CalculatePrice(RolmarProduct product) => CalculatePrice(product, _priceSettings, _appSettings.Deliveries);
 
         public ProductOfferRequest BuildOffer(RolmarProduct product)
         {
@@ -55,7 +63,7 @@ namespace JSAGROSyncServices.Products.Helpers
                     Format = "BUY_NOW",
                     Price = new Price
                     {
-                        Amount = CalculatePrice(product, priceSettings).ToString("F2", CultureInfo.InvariantCulture),
+                        Amount = CalculatePrice(product, priceSettings, appSettings.Deliveries).ToString("F2", CultureInfo.InvariantCulture),
                         Currency = "PLN"
                     }
                 },
@@ -74,7 +82,7 @@ namespace JSAGROSyncServices.Products.Helpers
                 {
                     ShippingRates = new ShippingRates
                     {
-                        Name = GetDelivery(product, appSettings.Deliveries)
+                        Name = DeliveryMatcher.Match(product, appSettings.Deliveries)
                     },
                     HandlingTime = allegroSettings.AllegroHandlingTime
                 },
@@ -107,7 +115,7 @@ namespace JSAGROSyncServices.Products.Helpers
                     ReturnPolicy = new ReturnPolicy { Name = allegroSettings.AllegroReturnPolicy },
                     ImpliedWarranty = new ImpliedWarranty { Name = allegroSettings.AllegroImpliedWarranty }
                 },
-                Parameters = BuildParameters(product.Parameters, false)
+                Parameters = BuildOfferParameters(product.Parameters)
             };
         }
 
@@ -221,7 +229,7 @@ namespace JSAGROSyncServices.Products.Helpers
                         Format = "BUY_NOW",
                         Price = new Price
                         {
-                            Amount = CalculatePrice(product, priceSettings).ToString("F2", CultureInfo.InvariantCulture),
+                            Amount = CalculatePrice(product, priceSettings, appSettings.Deliveries).ToString("F2", CultureInfo.InvariantCulture),
                             Currency = "PLN"
                         }
                     },
@@ -253,7 +261,7 @@ namespace JSAGROSyncServices.Products.Helpers
                     ? null
                     : new Delivery
                     {
-                        ShippingRates = new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
+                        ShippingRates = new ShippingRates { Name = DeliveryMatcher.Match(product, appSettings.Deliveries) },
                         HandlingTime = allegroSettings.AllegroHandlingTime
                     },
                 AfterSalesServices = new AfterSalesServices
@@ -266,10 +274,10 @@ namespace JSAGROSyncServices.Products.Helpers
         }
 
         /// <summary>
-        /// Produkt z katalogu Allegro: gdy znamy jego id, wysyłamy wyłącznie id. Dołożenie
-        /// zdjęć czy parametrów obok id Allegro traktuje jako propozycję zmiany produktu
-        /// i wymaga wtedy kompletu parametrów produktu - stąd "Uzupełnij parametry obowiązkowe"
-        /// mimo podpiętego produktu. Bez id wysyłamy pełną propozycję nowego produktu.
+        /// Produkt z katalogu Allegro - wysyłamy wyłącznie jego id. Nazwa, zdjęcia czy parametry
+        /// obok id to dla Allegro propozycja zmiany produktu, a wtedy wymaga kompletu parametrów
+        /// produktowych - stąd "Uzupełnij parametry obowiązkowe" mimo podpiętego produktu.
+        /// Oferta bez dopasowanego produktu tu nie dociera: odsiewa ją <see cref="RequiresCatalogProduct"/>.
         /// </summary>
         private static List<ProductSet> BuildProductSet(RolmarProduct product, int quantity, AllegroSettings allegroSettings, string? offerProductId = null)
         {
@@ -277,23 +285,10 @@ namespace JSAGROSyncServices.Products.Helpers
 
             // Id produktu z katalogu: najpierw to, które oferta już ma, potem zapamiętane przy produkcie.
             var catalogProductId = string.IsNullOrWhiteSpace(offerProductId) ? product.AllegroId : offerProductId;
-            var hasCatalogProduct = !string.IsNullOrWhiteSpace(catalogProductId);
-
-            var Product = hasCatalogProduct
-                ? new ProductObject { Id = catalogProductId }
-                : new ProductObject
-                {
-                    Name = BuildOfferName(product),
-                    Category = new Category { Id = product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture) },
-                    // Parametry opisujące produkt idą tutaj; parametry samej oferty - w sekcji parameters.
-                    Parameters = BuildParameters(product.Parameters, true),
-                    // Allegro przyjmuje maksymalnie 16 zdjec - przy wiekszej liczbie odrzuca cala oferte.
-                    Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).Take(MaxGalleryImages).ToList(),
-                };
 
             ProductSets.Add(new ProductSet
             {
-                ProductObject = Product,
+                ProductObject = new ProductObject { Id = catalogProductId },
                 Quantity = new Quantity
                 {
                     Value = quantity,
@@ -334,7 +329,11 @@ namespace JSAGROSyncServices.Products.Helpers
                 return "UNIT"; // fallback for unknown units
         }
 
-        private static List<Parameter> BuildParameters(ICollection<ProductParameter> parameters, bool isForProduct)
+        /// <summary>
+        /// Parametry samej oferty. Parametrów opisujących produkt nie budujemy wcale - produkt
+        /// bierzemy z katalogu Allegro, a on ma własne.
+        /// </summary>
+        private static List<Parameter> BuildOfferParameters(ICollection<ProductParameter> parameters)
         {
             var result = new List<Parameter>();
 
@@ -344,7 +343,7 @@ namespace JSAGROSyncServices.Products.Helpers
                 "numery katalogowe zamienników", "marka",
             };
 
-            foreach (var param in parameters.Where(p => p.IsForProduct == isForProduct))
+            foreach (var param in parameters.Where(p => !p.IsForProduct))
             {
                 if (string.IsNullOrWhiteSpace(param.Value))
                     continue;
@@ -570,7 +569,7 @@ namespace JSAGROSyncServices.Products.Helpers
             return description;
         }
 
-        public static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings)
+        public static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings, List<DeliverySettings> deliveries)
         {
             var calculatedPrice = product.PriceGross;
 
@@ -578,58 +577,11 @@ namespace JSAGROSyncServices.Products.Helpers
             decimal effectiveMargin = ResolveMargin(priceSettings, product.PriceGross);
             calculatedPrice = product.PriceGross * (1 + (effectiveMargin / 100m));
 
-            // Tiered pricing rules
-            if (calculatedPrice < 5m)
-            {
-                var withSmallMargin = calculatedPrice + priceSettings.AllegroMarginUnder5PLN;
-                calculatedPrice = withSmallMargin < 5m
-                    ? withSmallMargin
-                    : calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
-            }
-            else if (calculatedPrice <= 1000m)
-            {
-                var tempPrice = calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
-                calculatedPrice = tempPrice > 1000m
-                    ? calculatedPrice + priceSettings.AllegroMarginMoreThan1000PLN
-                    : tempPrice;
-            }
-            else
-            {
-                calculatedPrice += priceSettings.AllegroMarginMoreThan1000PLN;
-            }
-
-            // ----- New step: Add DPD shipping cost -----
-            decimal shippingCost = 0m;
-
-            if (calculatedPrice < 30m)
-                shippingCost = Math.Min(1.99m, Math.Round((calculatedPrice / 30m) * 1.99m, 2));
-            else if (calculatedPrice >= 30m && calculatedPrice <= 44.99m)
-                shippingCost = 1.99m;
-            else if (calculatedPrice >= 45m && calculatedPrice <= 64.99m)
-                shippingCost = 3.99m;
-            else if (calculatedPrice >= 65m && calculatedPrice <= 99.99m)
-                shippingCost = 5.79m;
-            else if (calculatedPrice >= 100m && calculatedPrice <= 149.99m)
-                shippingCost = 9.09m;
-            else if (calculatedPrice >= 150m)
-                shippingCost = 11.49m;
-
-            calculatedPrice += shippingCost;
-
-            // Produkt ponadgabarytowy - wysyłka droższa, dopłata idzie do finalnej ceny oferty.
-            if (priceSettings.OversizeSurcharge > 0 && IsOversized(product, priceSettings))
-                calculatedPrice += priceSettings.OversizeSurcharge;
-
-            return Math.Max(calculatedPrice, 1.00m);
-        }
-
-        private static bool IsOversized(RolmarProduct product, PriceSettings priceSettings)
-        {
-            IReadOnlyCollection<string> names = priceSettings.OversizeDimensionNames.Count > 0
-                ? priceSettings.OversizeDimensionNames
-                : ProductDimensions.DefaultDimensionNames;
-
-            return ProductDimensions.IsOversized(product, priceSettings.OversizeThresholdCm, names);
+            return OfferPricing.Finalize(
+                calculatedPrice,
+                priceSettings,
+                ProductDimensions.IsOversized(product, priceSettings.OversizeThresholdCm),
+                chargeShipping: DeliveryMatcher.MatchDelivery(product, deliveries)?.IsSmart == true);
         }
 
         private static decimal ResolveMargin(PriceSettings priceSettings, decimal grossPrice)
@@ -641,61 +593,6 @@ namespace JSAGROSyncServices.Products.Helpers
                 return priceSettings.MarginRanges.Last().Margin;
 
             return range.Margin;
-        }
-
-        private static string? GetDelivery(RolmarProduct product, List<DeliverySettings> deliveries)
-        {
-            if (deliveries == null || deliveries.Count == 0)
-                return null;
-
-            var productWeight = (decimal)product.Weight;
-
-            var length = GetDimensionCm(product, "Długość");
-            var width = GetDimensionCm(product, "Szerokość");
-            var height = GetDimensionCm(product, "Wysokość");
-
-            var matchingDelivery = deliveries
-                .Where(d =>
-                    d.Weight >= productWeight &&
-                    (length == null || d.Length >= length) &&
-                    (width == null || d.Width >= width) &&
-                    (height == null || d.Height >= height))
-                .OrderBy(d => d.Weight)
-                .ThenBy(d => d.Length * d.Width * d.Height) // smallest volume wins
-                .FirstOrDefault();
-
-            // Fallback: biggest delivery
-            return matchingDelivery?.DeliveryName
-                ?? deliveries
-                    .OrderByDescending(d => d.Weight)
-                    .ThenByDescending(d => d.Length * d.Width * d.Height)
-                    .First()
-                    .DeliveryName;
-        }
-
-        private static decimal? GetDimensionCm(RolmarProduct product, string dimensionName)
-        {
-            var spec = product.Specifications?
-                .FirstOrDefault(s =>
-                    string.Equals(s.Name, dimensionName, StringComparison.OrdinalIgnoreCase));
-
-            if (spec == null)
-                return null;
-
-            if (!decimal.TryParse(
-                    spec.Value.Replace(",", "."),
-                    NumberStyles.Any,
-                    CultureInfo.InvariantCulture,
-                    out var value))
-                return null;
-
-            return spec.UnitName?.ToLower() switch
-            {
-                "mm" => value / 10m,
-                "cm" => value,
-                "m" => value * 100m,
-                _ => null
-            };
         }
 
         private static string RemoveHiddenAscii(string input)

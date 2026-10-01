@@ -18,8 +18,16 @@
         /// <summary>Pobranie zdjęć od dostawcy (Rolmar).</summary>
         public bool FetchSupplierImages { get; init; }
 
-        /// <summary>Pobranie szczegółów produktów od dostawcy - raz dziennie w oknie nocnym (Gąska, Inter Cars).</summary>
+        /// <summary>Pobranie szczegółów produktów od dostawcy - raz dziennie w oknie nocnym (Gąska).</summary>
         public bool FetchSupplierProductDetailsDaily { get; init; }
+
+        /// <summary>
+        /// Pobranie szczegółów produktów w każdym cyklu, także w ciągu dnia (Inter Cars). U tego
+        /// dostawcy waga i wymiary przychodzą wyłącznie w zapytaniu o pojedyncze SKU, a bez nich
+        /// nie wolno wystawić oferty - czekanie na okno nocne wstrzymywałoby cały katalog.
+        /// Rozmiar porcji wyznacza <c>ProductDetailsPerRun</c>.
+        /// </summary>
+        public bool FetchSupplierProductDetails { get; init; }
 
         /// <summary>
         /// Pobranie pełnego drzewa kategorii dostawcy - raz dziennie w oknie nocnym (Inter Cars).

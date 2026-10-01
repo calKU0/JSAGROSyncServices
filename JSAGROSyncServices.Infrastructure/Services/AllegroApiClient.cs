@@ -32,16 +32,16 @@ namespace JSAGROSyncServices.Infrastructure.Services
         {
             return await DeserializeWithRetry<T>(async () =>
             {
-                var request = await CreateRequest(HttpMethod.Get, url, ct);
+                using var request = await CreateRequest(HttpMethod.Get, url, ct);
                 return await _http.SendAsync(request, ct);
-            }, url);
+            }, HttpMethod.Get, url, ct);
         }
 
         public async Task<T?> PostAsync<T>(string url, object body, CancellationToken ct, string contentType = "application/vnd.allegro.public.v1+json")
         {
             return await DeserializeWithRetry<T>(async () =>
             {
-                var request = await CreateRequest(HttpMethod.Post, url, ct);
+                using var request = await CreateRequest(HttpMethod.Post, url, ct);
 
                 if (body != null)
                 {
@@ -58,7 +58,7 @@ namespace JSAGROSyncServices.Infrastructure.Services
                 }
 
                 return await _http.SendAsync(request, ct);
-            }, url);
+            }, HttpMethod.Post, url, ct);
         }
 
         public async Task<HttpResponseMessage> SendWithResponseAsync(
@@ -69,7 +69,7 @@ namespace JSAGROSyncServices.Infrastructure.Services
         {
             return await SendWithRetry(async () =>
             {
-                var request = await CreateRequest(method, url, ct);
+                using var request = await CreateRequest(method, url, ct);
 
                 if (body != null)
                 {
@@ -78,7 +78,7 @@ namespace JSAGROSyncServices.Infrastructure.Services
                 }
 
                 return await _http.SendAsync(request, ct);
-            });
+            }, method, url, ct);
         }
 
         private async Task<HttpRequestMessage> CreateRequest(HttpMethod method, string url, CancellationToken ct)
@@ -94,19 +94,23 @@ namespace JSAGROSyncServices.Infrastructure.Services
         /// Zwraca default przy bledzie - wywolujacy sprawdza wynik na null.
         /// Powod bledu logujemy tutaj, inaczej wyzej widac tylko "brak danych".
         /// </summary>
-        private async Task<T?> DeserializeWithRetry<T>(Func<Task<HttpResponseMessage>> send, string url)
+        private async Task<T?> DeserializeWithRetry<T>(
+            Func<Task<HttpResponseMessage>> send,
+            HttpMethod method,
+            string url,
+            CancellationToken ct)
         {
-            var response = await SendWithRetry(send);
-            var body = await response.Content.ReadAsStringAsync();
+            using var response = await SendWithRetry(send, method, url, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
 
             if (!response.IsSuccessStatusCode)
             {
                 // 404 to normalna odpowiedz przy wyszukiwaniu - nie zasmiecamy nia logu bledow.
                 if (response.StatusCode == HttpStatusCode.NotFound)
-                    _logger.LogDebug("Allegro GET {Url} returned 404.", url);
+                    _logger.LogDebug("Allegro {Method} {Url} returned 404.", method, url);
                 else
-                    _logger.LogWarning("Allegro GET {Url} returned {Status}: {Body}",
-                        url, (int)response.StatusCode, body.Length <= 300 ? body : body[..300] + "...");
+                    _logger.LogWarning("Allegro {Method} {Url} returned {Status}: {Body}",
+                        method, url, (int)response.StatusCode, body.Length <= 300 ? body : body[..300] + "...");
 
                 return default;
             }
@@ -119,7 +123,11 @@ namespace JSAGROSyncServices.Infrastructure.Services
         /// (<see cref="HttpRetryPolicy"/>). Wygasły token odświeżamy raz - to nie jest błąd API,
         /// więc nie zużywa puli ponowień.
         /// </summary>
-        private async Task<HttpResponseMessage> SendWithRetry(Func<Task<HttpResponseMessage>> send)
+        private async Task<HttpResponseMessage> SendWithRetry(
+            Func<Task<HttpResponseMessage>> send,
+            HttpMethod method,
+            string url,
+            CancellationToken ct)
         {
             var tokenRefreshed = false;
 
@@ -137,26 +145,34 @@ namespace JSAGROSyncServices.Infrastructure.Services
                     attempt--;
 
                     var staleToken = response.RequestMessage?.Headers.Authorization?.Parameter;
+                    response.Dispose();
+
                     await _auth.RefreshAccessTokenAsync(staleToken);
 
                     _logger.LogInformation("Allegro returned 401. Token refreshed, retrying the request.");
                     continue;
                 }
 
-                if (attempt >= HttpRetryPolicy.MaxAttempts || !HttpRetryPolicy.ShouldRetry(response.StatusCode))
+                if (!HttpRetryPolicy.ShouldRetry(response.StatusCode))
                 {
                     // Pozostałe błędy obsługuje wywołujący - on zna kontekst (produkt, ofertę).
                     return response;
                 }
 
+                if (attempt >= HttpRetryPolicy.MaxAttempts)
+                {
+                    // Jedyny wpis na poziomie ostrzeżenia: tu ponawianie faktycznie się nie udało.
+                    HttpRetryPolicy.LogGaveUp(_logger, "Allegro", method, url, response.StatusCode, attempt);
+                    return response;
+                }
+
                 var delay = HttpRetryPolicy.GetDelay(response, attempt);
-                var request = response.RequestMessage;
 
-                HttpRetryPolicy.LogRetry(
-                    _logger, "Allegro", request?.Method ?? HttpMethod.Get, request?.RequestUri?.PathAndQuery ?? "-",
-                    response.StatusCode, attempt, delay);
+                HttpRetryPolicy.LogRetry(_logger, "Allegro", method, url, response.StatusCode, attempt, delay);
 
-                await Task.Delay(delay);
+                response.Dispose();
+
+                await Task.Delay(delay, ct);
             }
         }
     }

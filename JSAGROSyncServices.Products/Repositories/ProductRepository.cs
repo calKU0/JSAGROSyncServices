@@ -431,7 +431,17 @@ namespace JSAGROSyncServices.Products.Repositories
             }
             catch
             {
-                transaction.Rollback();
+                // Rollback na zerwanym połączeniu sam rzuca i przykryłby pierwotny błąd.
+                // Niedokończona transakcja i tak wycofuje się przy dispose.
+                try
+                {
+                    transaction.Rollback();
+                }
+                catch (Exception rollbackEx)
+                {
+                    _logger.LogWarning(rollbackEx, "Rolling back the product upsert transaction failed.");
+                }
+
                 throw;
             }
         }

@@ -22,6 +22,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
     {
         public const string HttpClientName = "InterCarsData";
 
+        /// <summary>Klient katalogu ze zdjęciami - loguje się innym kontem niż reszta plików.</summary>
+        public const string PicturesHttpClientName = "InterCarsDataPictures";
+
         /// <summary>Wiersz listingu Apache: nazwa pliku, data modyfikacji, rozmiar.</summary>
         private static readonly Regex ListingEntry = new(
             @"<a href=""(?<name>[^""?/][^""]*)""[^>]*>[^<]*</a>\s*</td>\s*<td[^>]*>\s*(?<date>[^<]*?)\s*</td>\s*<td[^>]*>\s*(?<size>[^<]*?)\s*</td>",
@@ -61,7 +64,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
             try
             {
-                file = await GetNewestFileAsync(ProductInformationDirectory, ".csv.zip", ct);
+                file = await GetNewestFileAsync(ProductsAccount, ProductInformationDirectory, ".csv.zip", ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
@@ -130,7 +133,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
             try
             {
-                file = await GetNewestFileAsync(PicturesDirectory, ".csv.zip", ct);
+                file = await GetNewestFileAsync(PicturesAccount, PicturesDirectory, ".csv.zip", ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
@@ -205,19 +208,27 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
         // ---------------------------------------------------------------- listing katalogu
 
+        /// <summary>
+        /// Konto na serwerze wymiany: katalog klienta i klient HTTP z jego danymi logowania.
+        /// </summary>
+        private sealed record DataAccount(string Customer, string HttpClientName);
+
+        /// <param name="Account">Konto, z którego pobieramy plik.</param>
+        /// <param name="Directory">Katalog na serwerze wymiany.</param>
+        /// <param name="Name">Nazwa pliku z listingu.</param>
         /// <param name="Url">Adres pliku względem bazowego adresu klienta, razem z katalogiem klienta.</param>
         /// <param name="Signature">Nazwa, data i rozmiar z listingu - po niej poznajemy, że plik się zmienił.</param>
-        private sealed record RemoteFile(string Directory, string Name, string Url, string Signature);
+        private sealed record RemoteFile(DataAccount Account, string Directory, string Name, string Url, string Signature);
 
         /// <summary>
         /// Najnowszy plik w katalogu. Pliki dzienne mają datę w nazwie, więc wystarczy porządek
         /// malejący po nazwie; katalogi z jednym, nadpisywanym plikiem (zdjęcia) zwracają go zawsze.
         /// </summary>
-        private async Task<RemoteFile> GetNewestFileAsync(string directory, string extension, CancellationToken ct)
+        private async Task<RemoteFile> GetNewestFileAsync(DataAccount account, string directory, string extension, CancellationToken ct)
         {
-            var http = CreateClient();
+            var http = CreateClient(account);
 
-            using var response = await http.GetAsync($"{CustomerPath}/{directory}/", ct);
+            using var response = await http.GetAsync($"{account.Customer}/{directory}/", ct);
             response.EnsureSuccessStatusCode();
 
             var html = await response.Content.ReadAsStringAsync(ct);
@@ -236,9 +247,10 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             var newest = files[0];
 
             return new RemoteFile(
+                account,
                 directory,
                 newest.Name,
-                $"{CustomerPath}/{directory}/{Uri.EscapeDataString(newest.Name)}",
+                $"{account.Customer}/{directory}/{Uri.EscapeDataString(newest.Name)}",
                 $"{newest.Name}|{newest.Stamp}");
         }
 
@@ -306,7 +318,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             var sw = Stopwatch.StartNew();
             var temporaryPath = path + ".part";
 
-            var http = CreateClient();
+            var http = CreateClient(file.Account);
 
             using (var response = await http.GetAsync(file.Url, HttpCompletionOption.ResponseHeadersRead, ct))
             {
@@ -331,9 +343,19 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             return path;
         }
 
-        private string CustomerPath => _credentials.DataCustomerNumber.Trim();
+        /// <summary>Konto, z którego bierzemy listę SKU i pozostałe pliki asortymentowe.</summary>
+        private DataAccount ProductsAccount => new(_credentials.DataCustomerNumber.Trim(), HttpClientName);
 
-        private HttpClient CreateClient() => _httpClientFactory.CreateClient(HttpClientName);
+        /// <summary>
+        /// Konto katalogu ze zdjęciami. Konto rolnicze nie ma katalogu <c>Pictures</c>, więc zdjęcia
+        /// pobieramy z konta z pełnym katalogiem; bez osobnej konfiguracji zostaje konto główne.
+        /// </summary>
+        private DataAccount PicturesAccount =>
+            string.IsNullOrWhiteSpace(_credentials.PicturesCustomerNumber)
+                ? ProductsAccount
+                : new(_credentials.PicturesCustomerNumber.Trim(), PicturesHttpClientName);
+
+        private HttpClient CreateClient(DataAccount account) => _httpClientFactory.CreateClient(account.HttpClientName);
 
         // ---------------------------------------------------------------- parser CSV
 
