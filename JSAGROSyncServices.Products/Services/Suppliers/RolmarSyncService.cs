@@ -29,11 +29,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         private readonly IProductRepository _productRepository;
         private readonly ISyncCategoryRepository _syncCategoryRepository;
         private readonly ISupplierCategoryRepository _categoryRepository;
+        private readonly IImageRepository _imageRepo;
         private readonly RolmarApiCredentials _rolmarSettings;
         private readonly AppSettings _appSettings;
 
-        public RolmarSyncService(HttpClient httpClient, ILogger<RolmarSyncService> logger, IProductRepository productRepository, ISyncCategoryRepository syncCategoryRepository, ISupplierCategoryRepository categoryRepository, IOptions<RolmarApiCredentials> options, IOptions<AppSettings> appSettings, ServiceContext serviceContext)
+        public RolmarSyncService(HttpClient httpClient, ILogger<RolmarSyncService> logger, IProductRepository productRepository, ISyncCategoryRepository syncCategoryRepository, ISupplierCategoryRepository categoryRepository, IImageRepository imageRepository, IOptions<RolmarApiCredentials> options, IOptions<AppSettings> appSettings, ServiceContext serviceContext)
         {
+            _imageRepo = imageRepository;
             _service = serviceContext;
             _httpClient = httpClient;
             _logger = logger;
@@ -344,6 +346,12 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                         {
                             // Pobieramy tylko te zdjecia, ktorych jeszcze nie mamy na dysku.
                             var result = await ImageHelper.SaveNewImagesAsync(_httpClient, validUrls, product.Id, _service.ImagesFolder, token);
+
+                            // Zmieniony zestaw plikow uniewaznia adresy wyslane juz do Allegro -
+                            // bez tego oferta trzymalaby stara galerie, bo wysylamy tylko to,
+                            // czego jeszcze nie ma.
+                            if (result.Downloaded > 0 || result.Removed > 0)
+                                await _imageRepo.DeleteProductImagesAsync(product.Id, token);
 
                             if (result.Failed > 0)
                             {

@@ -54,6 +54,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         private readonly IProductRepository _productRepo;
         private readonly ISupplierCategoryRepository _categoryRepo;
         private readonly ISyncCategoryRepository _syncCategoryRepo;
+        private readonly IImageRepository _imageRepo;
         private readonly IInterCarsDataFileService _dataFiles;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ServiceContext _service;
@@ -71,6 +72,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             IProductRepository productRepo,
             ISupplierCategoryRepository categoryRepo,
             ISyncCategoryRepository syncCategoryRepo,
+            IImageRepository imageRepo,
             IInterCarsDataFileService dataFiles,
             IHttpClientFactory httpClientFactory,
             ServiceContext service,
@@ -82,6 +84,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             _productRepo = productRepo;
             _categoryRepo = categoryRepo;
             _syncCategoryRepo = syncCategoryRepo;
+            _imageRepo = imageRepo;
             _dataFiles = dataFiles;
             _httpClientFactory = httpClientFactory;
             _service = service;
@@ -266,10 +269,15 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                     return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
             }
 
+            // Niekompletne, choc bez bledu: produktow powyzej limitu nie zobaczylismy, wiec nie
+            // wolno ich uznac za wycofane u dostawcy. Completed=true archiwizowaloby cala reszte
+            // kategorii razem z jej ofertami.
             _logger.LogWarning(
-                "Category {Category} is larger than the Inter Cars page limit - only the first {Count} products were fetched.",
+                "Category {Category} is larger than the Inter Cars page limit - only the first {Count} products were fetched. " +
+                "Archiving is skipped this cycle; configure deeper categories to stay under the limit.",
                 categoryKey, (MaxPageNumber + 1) * perPage);
-            return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
+
+            return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: false);
         }
 
         /// <summary>Podsumowanie pobrania jednej kategorii katalogu.</summary>
@@ -467,6 +475,12 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                             // Pobieramy tylko te zdjęcia, których jeszcze nie ma na dysku.
                             var result = await ImageHelper.SaveNewImagesAsync(
                                 imageClient, item.Urls.Cast<string?>().ToList(), product.Id, _service.ImagesFolder, token);
+
+                            // Zmieniony zestaw plikow unmiewaznia adresy wyslane juz do Allegro -
+                            // bez tego oferta trzymalaby stara galerie, bo wysylamy tylko to,
+                            // czego jeszcze nie ma.
+                            if (result.Downloaded > 0 || result.Removed > 0)
+                                await _imageRepo.DeleteProductImagesAsync(product.Id, token);
 
                             if (result.Failed > 0)
                             {
@@ -1060,10 +1074,14 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
             foreach (var key in configured)
             {
-                // Kategorii spoza pobranego drzewa nie odrzucamy - drzewo mogło się nie pobrać,
-                // a produkty z niej i tak chcemy mieć.
-                if (!_nodes.ContainsKey(key))
+                // Skonfigurowany korzeń bywa w drzewie tylko jako rodzic: przejście zaczynane od
+                // niego dodaje jego dzieci, ale jego samego już nie. Obecność dzieci znaczy więc
+                // to samo co obecność węzła - inaczej schodzilibyśmy o poziom za wysoko i
+                // pobierali całą gałąź jednym zapytaniem, które API ucina na 10 000 produktach.
+                if (!_nodes.ContainsKey(key) && !childrenByParent.Contains(key))
                 {
+                    // Kategorii spoza pobranego drzewa nie odrzucamy - drzewo mogło się nie pobrać,
+                    // a produkty z niej i tak chcemy mieć.
                     result.Add(key);
                     continue;
                 }
