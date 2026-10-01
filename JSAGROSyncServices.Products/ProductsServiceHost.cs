@@ -51,6 +51,7 @@ namespace JSAGROSyncServices.Products
                     services.Configure<AllegroApiCredentials>(configuration.GetSection("AllegroApiCredentials"));
                     services.Configure<GaskaApiCredentials>(configuration.GetSection("GaskaApiCredentials"));
                     services.Configure<RolmarApiCredentials>(configuration.GetSection("RolmarApiCredentials"));
+                    services.Configure<InterCarsApiCredentials>(configuration.GetSection("InterCarsApiCredentials"));
                     services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
                     services.Configure<PriceSettings>(configuration.GetSection("PriceSettings"));
                     services.Configure<AllegroSettings>(configuration.GetSection("AllegroSettings"));
@@ -87,10 +88,20 @@ namespace JSAGROSyncServices.Products
                     services.AddScoped<IAllegroShippingRateService, AllegroShippingRateService>();
                     services.AddScoped<IEmailService, EmailService>();
 
-                    if (serviceContext.Company == IntegrationCompany.Gaska)
-                        services.AddScoped<IOfferFactory, GaskaOfferFactory>();
-                    else
-                        services.AddScoped<IOfferFactory, RolmarOfferFactory>();
+                    switch (serviceContext.Company)
+                    {
+                        case IntegrationCompany.Gaska:
+                            services.AddScoped<IOfferFactory, GaskaOfferFactory>();
+                            break;
+
+                        case IntegrationCompany.InterCars:
+                            services.AddScoped<IOfferFactory, InterCarsOfferFactory>();
+                            break;
+
+                        default:
+                            services.AddScoped<IOfferFactory, RolmarOfferFactory>();
+                            break;
+                    }
 
                     services.AddHostedService<Worker>();
                     services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(15));
@@ -127,10 +138,17 @@ namespace JSAGROSyncServices.Products
             var needsSupplierApi = pipeline.FetchSupplierProducts
                 || pipeline.FetchSupplierStock
                 || pipeline.FetchSupplierImages
-                || pipeline.FetchSupplierProductDetailsDaily;
+                || pipeline.FetchSupplierProductDetailsDaily
+                || pipeline.FetchSupplierProductDetails;
 
             if (!needsSupplierApi)
                 return;
+
+            if (serviceContext.Company == IntegrationCompany.InterCars)
+            {
+                AddInterCarsHttpClients(services);
+                return;
+            }
 
             if (serviceContext.Company == IntegrationCompany.Gaska)
             {
@@ -159,6 +177,79 @@ namespace JSAGROSyncServices.Products
                 });
             }
         }
+
+        /// <summary>
+        /// Inter Cars autoryzuje zapytania tokenem OAuth2 z osobnego hosta, dlatego klient
+        /// pobierający token jest oddzielny, a token dokłada do zapytań dedykowany handler.
+        /// Pliki wymiany CSV i zdjęcia leżą na jeszcze innych hostach - każdy dostaje swojego klienta,
+        /// żeby poświadczenia nie wychodziły poza host, do którego należą.
+        /// </summary>
+        private static void AddInterCarsHttpClients(IServiceCollection services)
+        {
+            services.AddHttpClient(InterCarsTokenProvider.AuthHttpClientName, client =>
+                client.Timeout = TimeSpan.FromMinutes(1));
+
+            services.AddSingleton<InterCarsTokenProvider>();
+            services.AddTransient<InterCarsAuthHandler>();
+
+            // Serwer wymiany plików obsługuje dwa konta: rolnicze (lista SKU AGRO) i pełne (zdjęcia),
+            // bo katalog Pictures istnieje tylko na tym drugim. Konta różnią się wyłącznie logowaniem,
+            // więc oba klienty są takie same poza nagłówkiem Authorization.
+            static void AddDataExchangeClient(
+                IServiceCollection services,
+                string name,
+                Func<InterCarsApiCredentials, (string User, string Password)> login)
+            {
+                services.AddHttpClient(name, (sp, client) =>
+                {
+                    var interCarsApi = sp.GetRequiredService<IOptions<InterCarsApiCredentials>>().Value;
+                    var (user, password) = login(interCarsApi);
+
+                    client.BaseAddress = new Uri(EnsureTrailingSlash(interCarsApi.DataBaseUrl));
+                    // Plik ze zdjęciami ma kilkadziesiąt megabajtów - pobranie bywa wolniejsze niż zapytanie do API.
+                    client.Timeout = TimeSpan.FromMinutes(30);
+                    client.DefaultRequestHeaders.UserAgent.ParseAdd(InterCarsUserAgent);
+
+                    var credentials = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}"));
+
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+                });
+            }
+
+            AddDataExchangeClient(services, InterCarsDataFileService.HttpClientName, c => (c.DataUser, c.DataPassword));
+            AddDataExchangeClient(services, InterCarsDataFileService.PicturesHttpClientName, c => (c.PicturesUser, c.PicturesPassword));
+
+            // Host ze zdjęciami nie wymaga autoryzacji - klient jest celowo bez tokenu i bez Basic Auth.
+            // Wymaga za to nagłówka User-Agent: zapytanie bez niego kończy się kodem 403,
+            // a HttpClient sam z siebie tego nagłówka nie wysyła.
+            services.AddHttpClient(InterCarsApiService.ImagesHttpClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(2);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd(InterCarsUserAgent);
+            });
+
+            services.AddSingleton<IInterCarsDataFileService, InterCarsDataFileService>();
+
+            services.AddHttpClient<IInterCarsApiService, InterCarsApiService>((sp, client) =>
+            {
+                var interCarsApi = sp.GetRequiredService<IOptions<InterCarsApiCredentials>>().Value;
+
+                client.BaseAddress = new Uri(interCarsApi.BaseUrl);
+                client.Timeout = TimeSpan.FromMinutes(5);
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                client.DefaultRequestHeaders.AcceptLanguage.ParseAdd(interCarsApi.Language);
+            })
+            .AddHttpMessageHandler<InterCarsAuthHandler>();
+        }
+
+        /// <summary>
+        /// Serwery plików i zdjęć Inter Cars odrzucają zapytania bez nagłówka User-Agent kodem 403,
+        /// a <see cref="HttpClient"/> domyślnie go nie wysyła.
+        /// </summary>
+        private const string InterCarsUserAgent = "JSAGROSyncServices/1.0 (+https://github.com/calKU0/JSAGROSyncServices)";
+
+        private static string EnsureTrailingSlash(string url) =>
+            url.EndsWith('/') ? url : url + "/";
 
         private static string GetGaskaSignature(GaskaApiCredentials apiSettings)
         {

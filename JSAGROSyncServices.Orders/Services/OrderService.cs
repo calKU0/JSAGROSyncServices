@@ -634,7 +634,19 @@ namespace JSAGROSyncServices.Orders.Services
                 var response = await _allegroApiClient.GetAsync<AllegroShipmentsResponse>(
                     $"/order/checkout-forms/{order.AllegroId}/shipments", ct);
 
-                foreach (var shipment in response?.Shipments ?? new List<AllegroShipmentsResponse.Shipment>())
+                if (response == null)
+                {
+                    // Klient oddaje null przy nieudanej odpowiedzi - pusta lista znaczylaby "brak przesylek",
+                    // a po oznaczeniu zamowienia jako sprawdzone nigdy bysmy tego nie zweryfikowali
+                    // i mogliby wyslac numer, ktory Allegro juz ma.
+                    _logger.LogWarning(
+                        "Reading shipments of Allegro order {AllegroOrderId} returned no data - the order stays unreconciled.",
+                        order.AllegroId);
+
+                    return known;
+                }
+
+                foreach (var shipment in response.Shipments ?? new List<AllegroShipmentsResponse.Shipment>())
                 {
                     if (string.IsNullOrWhiteSpace(shipment.Waybill))
                         continue;

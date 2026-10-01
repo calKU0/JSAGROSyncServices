@@ -115,9 +115,7 @@ namespace JSAGROSyncServices.Products
                 _logger.LogInformation("{Step} finished in {Duration}.", name, Format(sw.Elapsed));
             }
 
-            var configuredCategories = _service.Company == IntegrationCompany.Rolmar
-                ? _appSettings.CategoriesName
-                : _appSettings.CategoriesId.Select(id => id.ToString()).ToList();
+            var configuredCategories = _appSettings.GetConfiguredCategories(_service.Company);
 
             await Step("Category configuration", () => syncCategoryRepo.ReplaceAccountCategoriesAsync(configuredCategories, ct));
 
@@ -132,17 +130,19 @@ namespace JSAGROSyncServices.Products
             }
 
             if (_pipeline.FetchSupplierProducts)
-            {
-                await Step("Supplier products", () => _service.Company == IntegrationCompany.Gaska
-                    ? services.GetRequiredService<IGaskaApiService>().SyncProducts()
-                    : services.GetRequiredService<IRolmarSyncService>().SyncProductsAsync());
-            }
+                await Step("Supplier products", () => FetchSupplierProducts(services));
 
             if (_pipeline.FetchSupplierStock)
-                await Step("Supplier stock", () => services.GetRequiredService<IRolmarSyncService>().SyncStockAsync());
+                await Step("Supplier stock", () => FetchSupplierStock(services));
 
             if (_pipeline.FetchSupplierImages)
-                await Step("Supplier images", () => services.GetRequiredService<IRolmarSyncService>().SyncImagesAsync());
+                await Step("Supplier images", () => FetchSupplierImages(services));
+
+            // Szczegoly poza oknem nocnym: porcja na cykl, najpierw produkty bez szczegolow,
+            // potem najdawniej odswiezane. Bez nich produkt nie ma wagi ani wymiarow,
+            // wiec nie przechodzi do wystawienia.
+            if (_pipeline.FetchSupplierProductDetails)
+                await Step("Supplier product details", () => FetchSupplierProductDetails(services));
 
             await Step("Allegro offers", () => offerService.SyncAllegroOffers());
 
@@ -151,8 +151,11 @@ namespace JSAGROSyncServices.Products
 
             if (IsDailyStepDue())
             {
+                if (_pipeline.FetchSupplierCategoryTreeDaily)
+                    await Step("Supplier category tree", () => services.GetRequiredService<IInterCarsApiService>().SyncCategoryTreeAsync());
+
                 if (_pipeline.FetchSupplierProductDetailsDaily)
-                    await Step("Supplier product details", () => services.GetRequiredService<IGaskaApiService>().SyncProductDetails());
+                    await Step("Supplier product details", () => FetchSupplierProductDetails(services));
 
                 if (_pipeline.UpdateAllegroCategoriesDaily)
                     await Step("Allegro categories", () => services.GetRequiredService<IAllegroCategoryService>().UpdateAllegroCategories());
@@ -185,9 +188,36 @@ namespace JSAGROSyncServices.Products
             }
         }
 
+        private Task FetchSupplierProducts(IServiceProvider services) => _service.Company switch
+        {
+            IntegrationCompany.Gaska => services.GetRequiredService<IGaskaApiService>().SyncProducts(),
+            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncProductsAsync(),
+            _ => services.GetRequiredService<IRolmarSyncService>().SyncProductsAsync()
+        };
+
+        private Task FetchSupplierStock(IServiceProvider services) => _service.Company switch
+        {
+            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncStockAsync(),
+            _ => services.GetRequiredService<IRolmarSyncService>().SyncStockAsync()
+        };
+
+        private Task FetchSupplierImages(IServiceProvider services) => _service.Company switch
+        {
+            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncImagesAsync(),
+            _ => services.GetRequiredService<IRolmarSyncService>().SyncImagesAsync()
+        };
+
+        private Task FetchSupplierProductDetails(IServiceProvider services) => _service.Company switch
+        {
+            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncProductDetailsAsync(),
+            _ => services.GetRequiredService<IGaskaApiService>().SyncProductDetails()
+        };
+
         private bool IsDailyStepDue()
         {
-            if (!_pipeline.FetchSupplierProductDetailsDaily && !_pipeline.UpdateAllegroCategoriesDaily)
+            if (!_pipeline.FetchSupplierProductDetailsDaily
+                && !_pipeline.UpdateAllegroCategoriesDaily
+                && !_pipeline.FetchSupplierCategoryTreeDaily)
                 return false;
 
             if (_lastDailyStepDate.Date >= DateTime.Today)

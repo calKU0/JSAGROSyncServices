@@ -1,6 +1,7 @@
 ﻿using JSAGROSyncServices.Products.Configuration;
 using Dapper;
 using JSAGROSyncServices.Contracts.Interfaces;
+using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Infrastructure.Data;
 using System.Data;
 
@@ -26,6 +27,22 @@ namespace JSAGROSyncServices.Products.Repositories
                 new { ProductId = productId, Url = url, Account = _service.Account },
                 commandType: CommandType.StoredProcedure
             );
+        }
+
+        public async Task<List<AllegroImages>> GetProductImagesAsync(int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            var rows = await connection.QueryAsync<AllegroImages>(
+                new CommandDefinition(
+                    @"SELECT Id, ProductId, Url, Connected
+                      FROM dbo.AllegroImages
+                      WHERE ProductId = @ProductId AND Account = @Account
+                      ORDER BY Id;",
+                    new { ProductId = productId, Account = _service.Account },
+                    cancellationToken: ct));
+
+            return rows.ToList();
         }
 
         public async Task DeleteNotConnectedImages(int productId, CancellationToken ct)

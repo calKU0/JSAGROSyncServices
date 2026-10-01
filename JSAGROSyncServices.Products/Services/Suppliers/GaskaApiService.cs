@@ -7,6 +7,7 @@ using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
 using JSAGROSyncServices.Infrastructure.Helpers;
+using JSAGROSyncServices.Infrastructure.Services;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Globalization;
@@ -64,6 +65,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             }
 
             int fetched = 0, incomplete = 0;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var sw = Stopwatch.StartNew();
 
             foreach (var categoryId in categoryIds)
@@ -72,6 +74,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
                 var (codes, completed) = await FetchCategoryAsync(categoryId, ct);
                 fetched += codes.Count;
+                seen.UnionWith(codes);
 
                 if (completed)
                 {
@@ -91,6 +94,47 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             _logger.LogInformation(
                 "Gąska products fetched: {Fetched} from {Categories} categories (incomplete: {Incomplete}). Took {Elapsed}.",
                 fetched, categoryIds.Count, incomplete, sw.Elapsed);
+
+            await MarkSeenAndArchiveAsync(seen, categoryIds, incomplete, ct);
+        }
+
+        /// <summary>
+        /// Odnotowuje obecność produktów u dostawcy i archiwizuje te, których nie oddał od kilku dni.
+        /// Produkt archiwalny nie trafia na Allegro, a jego oferta jest kończona.
+        ///
+        /// Przy niekompletnym pobraniu pomijamy archiwizację - produkty kategorii, której API nie oddało
+        /// do końca, wyglądałyby na wycofane, choć u dostawcy nadal są.
+        /// </summary>
+        private async Task MarkSeenAndArchiveAsync(
+            IReadOnlyCollection<string> seenCodes,
+            IReadOnlyCollection<int> categoryIds,
+            int incompleteCategories,
+            CancellationToken ct)
+        {
+            try
+            {
+                await _productRepo.MarkProductsSeenAsync(seenCodes, ct);
+
+                if (incompleteCategories > 0)
+                {
+                    _logger.LogWarning("{Count} categories were fetched incompletely - archiving of missing products was skipped this cycle.", incompleteCategories);
+                    return;
+                }
+
+                var categories = categoryIds.Select(id => id.ToString(CultureInfo.InvariantCulture)).ToList();
+                var archived = await _productRepo.ArchiveMissingProductsAsync(_appSettings.ArchiveAfterDaysMissing, categories, ct);
+
+                if (archived > 0)
+                {
+                    _logger.LogInformation(
+                        "{Count} products have been missing from the Gąska catalog for over {Days} days - marked as archived, their offers will be ended.",
+                        archived, _appSettings.ArchiveAfterDaysMissing);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "Archiving products missing from the Gąska catalog failed.");
+            }
         }
 
         /// <summary>Pobiera wszystkie strony jednej kategorii. Zwraca kody produktów i to, czy pobranie się udało.</summary>
@@ -261,10 +305,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 try
                 {
                     var url = $"/product?id={productId}&lng=pl";
-                    var response = await _http.GetAsync(url, ct);
+                    using var response = await GetProductDetails(url, ct);
 
                     if (!response.IsSuccessStatusCode)
                     {
+                        // Nieudane pobranie to nieudana aktualizacja produktu - licznik musi to
+                        // pokazac, inaczej podsumowanie cyklu raportuje "failed 0" przy setkach bledow.
+                        failed++;
                         _logger.LogError("API error while fetching product details for {Id}. Response Status: {StatusCode}", productId, response.StatusCode);
                         continue;
                     }
@@ -321,6 +368,28 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             }
 
             _logger.LogInformation("Gąska product details: updated {Updated}, failed {Failed}. Took {Elapsed}.", updated, failed, sw.Elapsed);
+        }
+
+        /// <summary>
+        /// Pobiera szczegoly jednego produktu, ponawiajac bledy przejsciowe. API Gaski potrafi
+        /// odpowiadac bledem 500 seriami - bez ponowienia tracilismy w takim okienku szczegoly
+        /// setek produktow na caly dzien, bo kolejna proba przypada dopiero w nastepnej dobie.
+        /// </summary>
+        private async Task<HttpResponseMessage> GetProductDetails(string url, CancellationToken ct)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                var response = await _http.GetAsync(url, ct);
+
+                if (!HttpRetryPolicy.ShouldRetry(response.StatusCode) || attempt >= HttpRetryPolicy.MaxAttempts)
+                    return response;
+
+                var delay = HttpRetryPolicy.GetDelay(response, attempt);
+                HttpRetryPolicy.LogRetry(_logger, "Gąska", HttpMethod.Get, url, response.StatusCode, attempt, delay);
+                response.Dispose();
+
+                await Task.Delay(delay, ct);
+            }
         }
 
         private async Task SaveProductImagesAsync(ApiProduct product, int productId, CancellationToken ct)
@@ -445,7 +514,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             }
 
             var json = await response.Content.ReadAsStringAsync(ct);
-            var apiResponse = JsonSerializer.Deserialize<ProductsChangedReponse>(json, _jsonOptions);
+            var apiResponse = JsonSerializer.Deserialize<ProductsChangedResponse>(json, _jsonOptions);
 
             if (apiResponse?.Products == null || !apiResponse.Products.Any())
             {

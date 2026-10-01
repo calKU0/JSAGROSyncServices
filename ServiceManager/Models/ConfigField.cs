@@ -18,7 +18,7 @@ namespace ServiceManager.Models
         public ConfigFieldType FieldType { get; set; } = ConfigFieldType.String;
 
         /// <summary>
-        /// Dla list kategorii: dostawca (1 = Rolmar, 2 = Gąska), którego kategorie podpowiadać z bazy.
+        /// Dla list kategorii: dostawca (1 = Rolmar, 2 = Gąska, 3 = Inter Cars), którego kategorie podpowiadać z bazy.
         /// <c>null</c> - zwykła lista wpisywana ręcznie.
         /// </summary>
         public int? CategoryCompany { get; set; }

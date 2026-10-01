@@ -157,7 +157,7 @@ namespace JSAGROSyncServices.Products.Helpers
                     ? null
                     : new Delivery
                     {
-                        ShippingRates = new ShippingRates { Name = GetDelivery(product, appSettings.Deliveries) },
+                        ShippingRates = new ShippingRates { Name = DeliveryMatcher.Match(product, appSettings.Deliveries) },
                         HandlingTime = product.DeliveryType == 0
                             ? allegroSettings.AllegroHandlingTime
                             : allegroSettings.AllegroHandlingTimeCustomProducts
@@ -574,67 +574,6 @@ namespace JSAGROSyncServices.Products.Helpers
             return description;
         }
 
-        private static string? GetDelivery(RolmarProduct product, List<DeliverySettings> deliveries)
-        {
-            if (deliveries == null || deliveries.Count == 0)
-                return null;
-
-            if (product.DeliveryType != 0)
-                return deliveries.OrderByDescending(d => d.Weight)
-                    .ThenByDescending(d => d.Length * d.Width * d.Height)
-                    .First()
-                    .DeliveryName;
-
-            var productWeight = (decimal)product.Weight;
-
-            var length = GetDimensionCm(product, "Długość");
-            var width = GetDimensionCm(product, "Szerokość");
-            var height = GetDimensionCm(product, "Wysokość");
-
-            var matchingDelivery = deliveries
-                .Where(d =>
-                    d.Weight >= productWeight &&
-                    (length == null || d.Length >= length) &&
-                    (width == null || d.Width >= width) &&
-                    (height == null || d.Height >= height))
-                .OrderBy(d => d.Weight)
-                .ThenBy(d => d.Length * d.Width * d.Height) // smallest volume wins
-                .FirstOrDefault();
-
-            // Fallback: biggest delivery
-            return matchingDelivery?.DeliveryName
-                ?? deliveries
-                    .OrderByDescending(d => d.Weight)
-                    .ThenByDescending(d => d.Length * d.Width * d.Height)
-                    .First()
-                    .DeliveryName;
-        }
-
-        private static decimal? GetDimensionCm(RolmarProduct product, string dimensionName)
-        {
-            var spec = product.Specifications?
-                .FirstOrDefault(s =>
-                    string.Equals(s.Name, dimensionName, StringComparison.OrdinalIgnoreCase));
-
-            if (spec == null)
-                return null;
-
-            if (!decimal.TryParse(
-                    spec.Value.Replace(",", "."),
-                    NumberStyles.Any,
-                    CultureInfo.InvariantCulture,
-                    out var value))
-                return null;
-
-            return spec.UnitName?.ToLower() switch
-            {
-                "mm" => value / 10m,
-                "cm" => value,
-                "m" => value * 100m,
-                _ => null
-            };
-        }
-
         private static decimal CalculatePrice(RolmarProduct product, PriceSettings priceSettings, List<DeliverySettings> deliveries, int quantity)
         {
             var calculatedPrice = product.PriceGross;
@@ -649,53 +588,18 @@ namespace JSAGROSyncServices.Products.Helpers
                 _ => 0m
             };
 
-            if (GetDelivery(product, deliveries) == deliveries
-                    .OrderByDescending(d => d.Weight)
-                    .ThenByDescending(d => d.Length * d.Width * d.Height)
-                    .First()
-                    .DeliveryName)
+            var delivery = DeliveryMatcher.MatchDelivery(product, deliveries);
+
+            if (delivery != null && string.Equals(delivery.DeliveryName, DeliveryMatcher.Largest(deliveries), StringComparison.OrdinalIgnoreCase))
             {
                 calculatedPrice += priceSettings.DropshippingPriceNet * 1.23m;
             }
 
-            if (calculatedPrice < 5m)
-            {
-                var withSmallMargin = calculatedPrice + priceSettings.AllegroMarginUnder5PLN;
-                calculatedPrice = withSmallMargin < 5m
-                    ? withSmallMargin
-                    : calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
-            }
-            else if (calculatedPrice <= 1000m)
-            {
-                var tempPrice = calculatedPrice * (1 + priceSettings.AllegroMarginBetween5and1000PLNPercent / 100m);
-                calculatedPrice = tempPrice > 1000m
-                    ? calculatedPrice + priceSettings.AllegroMarginMoreThan1000PLN
-                    : tempPrice;
-            }
-            else
-            {
-                calculatedPrice += priceSettings.AllegroMarginMoreThan1000PLN;
-            }
-
-            // ----- New step: Add DPD shipping cost -----
-            decimal shippingCost = 0m;
-
-            if (calculatedPrice < 30m)
-                shippingCost = Math.Min(1.99m, Math.Round((calculatedPrice / 30m) * 1.99m, 2));
-            else if (calculatedPrice >= 30m && calculatedPrice <= 44.99m)
-                shippingCost = 1.99m;
-            else if (calculatedPrice >= 45m && calculatedPrice <= 64.99m)
-                shippingCost = 3.99m;
-            else if (calculatedPrice >= 65m && calculatedPrice <= 99.99m)
-                shippingCost = 5.79m;
-            else if (calculatedPrice >= 100m && calculatedPrice <= 149.99m)
-                shippingCost = 9.09m;
-            else if (calculatedPrice >= 150m)
-                shippingCost = 11.49m;
-
-            calculatedPrice += shippingCost;
-
-            return Math.Max(calculatedPrice, 1.00m);
+            return OfferPricing.Finalize(
+                calculatedPrice,
+                priceSettings,
+                ProductDimensions.IsOversized(product, priceSettings.OversizeThresholdCm),
+                chargeShipping: delivery?.IsSmart == true);
         }
 
         private static decimal ResolveMargin(PriceSettings priceSettings, decimal grossPrice)

@@ -1,6 +1,6 @@
 ﻿namespace JSAGROSyncServices.Products.DTOs.Gaska
 {
-    public class ProductsChangedReponse
+    public class ProductsChangedResponse
     {
         public List<ProductChanged> Products { get; set; } = new();
     }

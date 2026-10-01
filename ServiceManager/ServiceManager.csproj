@@ -30,6 +30,9 @@
     <None Update="Resources\erli-sync-logo.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Resources\intercars-products-sync-logo.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\gaska-products-sync-logo.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

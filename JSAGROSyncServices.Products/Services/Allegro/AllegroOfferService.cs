@@ -19,9 +19,9 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 {
     public class AllegroOfferService : IAllegroOfferService
     {
-        private const int MaxParallelism = 25;
         private const int OfferPageSize = 1000;
-        private const int OfferDetailsParallelism = 8;
+        /// <summary>Ile zapytań wysyłamy równolegle. Z konfiguracji, bo zależy od limitów konta.</summary>
+        private int MaxParallelism => Math.Clamp(_appSettings.AllegroParallelism, 1, 25);
         private const int MaxOfferDetailsPerCycle = 3000;
 
         /// <summary>Ile ofert konczymy jedna komenda publikacji.</summary>
@@ -185,6 +185,8 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 .Select(page => page * OfferPageSize)
                 .ToList();
 
+            var failedOffsets = new ConcurrentBag<int>();
+
             await Parallel.ForEachAsync(offsets, ParallelOptions(ct), async (offset, token) =>
             {
                 try
@@ -199,9 +201,34 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Fetching offers page (offset {Offset}) failed.", offset);
+                    // Zerwane polaczenie albo blad TLS nie jest kodem HTTP, wiec polityka ponowien
+                    // w kliencie go nie obsluguje. Utraconej strony nie wolno zostawic: oferty z niej
+                    // nie dostalyby w tym cyklu ani aktualizacji ceny, ani stanu.
+                    failedOffsets.Add(offset);
+                    _logger.LogWarning(ex, "Fetching offers page (offset {Offset}) failed - retrying once after the other pages.", offset);
                 }
             });
+
+            foreach (var offset in failedOffsets)
+            {
+                try
+                {
+                    var page = await _apiClient.GetAsync<OffersResponse>($"/sale/offers?limit={OfferPageSize}&offset={offset}", ct);
+
+                    if (page?.Offers == null)
+                        continue;
+
+                    foreach (var offer in page.Offers)
+                        allOffers.Add(offer);
+
+                    _logger.LogInformation("Offers page (offset {Offset}) fetched on the second attempt.", offset);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Fetching offers page (offset {Offset}) failed twice - up to {Count} offers are missing from this cycle.",
+                        offset, OfferPageSize);
+                }
+            }
 
             return allOffers.ToList();
         }
@@ -223,11 +250,10 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
                 _logger.LogInformation(
                     "Offer details: {Pending} offers pending, fetching {Batch} in this cycle ({Parallelism} in parallel).",
-                    pending.Count, offers.Count, OfferDetailsParallelism);
+                    pending.Count, offers.Count, MaxParallelism);
 
                 var details = new ConcurrentBag<AllegroOfferDetails.Root>();
-                var fetchedIds = new ConcurrentBag<string>();
-                var detailsOptions = new ParallelOptions { CancellationToken = ct, MaxDegreeOfParallelism = OfferDetailsParallelism };
+                var detailsOptions = ParallelOptions(ct);
 
                 int notFound = 0, empty = 0, failed = 0;
                 var sw = Stopwatch.StartNew();
@@ -255,11 +281,10 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             Interlocked.Increment(ref empty);
                         }
 
-                        details.Add(detailedOffer);
-
-                        // Znacznik stawiamy niezależnie od tego, czy oferta miała własny opis -
+                        // Dokładamy do zapisu niezależnie od tego, czy oferta miała własny opis -
                         // inaczej wracałaby do kolejki w każdym cyklu.
-                        fetchedIds.Add(offer.Id);
+                        detailedOffer.Id ??= offer.Id;
+                        details.Add(detailedOffer);
                     }
                     catch (Exception ex)
                     {
@@ -270,18 +295,21 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
                 sw.Stop();
 
-                if (!details.IsEmpty)
-                    await _offerRepo.UpsertOfferDetails(details.ToList(), ct);
+                // Znacznik "pobrane" stawiamy dopiero po udanym zapisie - inaczej chwilowy błąd bazy
+                // wypchnąłby oferty z kolejki bez zapisanych opisów i parametrów.
+                var savedIds = details.IsEmpty
+                    ? Array.Empty<string>()
+                    : (await _offerRepo.UpsertOfferDetails(details.ToList(), ct)).ToArray();
 
-                if (!fetchedIds.IsEmpty)
-                    await _offerRepo.MarkDetailsFetched(fetchedIds, ct);
+                if (savedIds.Length > 0)
+                    await _offerRepo.MarkDetailsFetched(savedIds, ct);
 
-                var remaining = pending.Count - fetchedIds.Count;
+                var remaining = pending.Count - savedIds.Length;
 
                 _logger.LogInformation(
                     "Offer details fetched: {Fetched} (no own description: {Empty}), no data returned: {NotFound}, failed: {Failed}. " +
                     "Still pending: {Remaining}. Took {Duration}.",
-                    fetchedIds.Count, empty, notFound, failed, remaining, Format(sw.Elapsed));
+                    savedIds.Length, empty, notFound, failed, remaining, Format(sw.Elapsed));
             }
             catch (Exception ex)
             {
@@ -304,9 +332,8 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 }
 
                 _logger.LogInformation(
-                    "Products to create offers for: {Count} (min stock {MinStock}, min net price {MinPrice}, images upload: {Images}).",
-                    products.Count, _appSettings.MinProductStock, _appSettings.MinProductPriceNet,
-                    _appSettings.UploadImagesToAllegro ? "on" : "OFF");
+                    "Products to create offers for: {Count} (min stock {MinStock}, min net price {MinPrice}).",
+                    products.Count, _appSettings.MinProductStock, _appSettings.MinProductPriceNet);
 
                 await _offerFactory.PrepareAsync(ct);
 
@@ -314,6 +341,8 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 int failed = 0;
                 int fixedData = 0;
                 int skipped = 0;
+                int noDelivery = 0;
+                int noCatalogProduct = 0;
 
                 await Parallel.ForEachAsync(products, ParallelOptions(ct), async (product, token) =>
                 {
@@ -333,11 +362,32 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             return;
                         }
 
+                        // Dostawca, u ktorego wystawiamy tylko na gotowym produkcie z katalogu
+                        // (Inter Cars): bez dopasowanego produktu oferta czeka na krok wyszukiwania.
+                        if (_offerFactory.RequiresCatalogProduct && string.IsNullOrWhiteSpace(product.AllegroId))
+                        {
+                            Interlocked.Increment(ref noCatalogProduct);
+                            _logger.LogDebug("No Allegro catalog product for {Code} - offer not created.", product.Code);
+                            return;
+                        }
+
                         product.AllegroImages = await ImportImages(product, token);
 
+                        // Allegro wymaga co najmniej jednego zdjecia - bez niego odrzuca oferte
+                        // bledem GallerySize. Brak zdjec to brak danych od dostawcy albo nieudane
+                        // pobranie, wiec produkt czeka na kolejny cykl.
                         if (product.AllegroImages.Count == 0)
                         {
                             Interlocked.Increment(ref skipped);
+                            _logger.LogDebug("No images for {Code} - offer not created.", product.Code);
+                            return;
+                        }
+
+                        // Bez pasującego cennika nie ma czym wysłać - Allegro i tak odrzuciłoby ofertę.
+                        if (DeliveryMatcher.Match(product, _appSettings.Deliveries) == null)
+                        {
+                            Interlocked.Increment(ref noDelivery);
+                            _logger.LogDebug("No delivery price list fits {Code} - offer not created.", product.Code);
                             return;
                         }
 
@@ -361,7 +411,10 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     }
                 });
 
-                _logger.LogInformation("Offers created: {Created}, failed: {Failed}, skipped: {Skipped}, data fixed (retry next cycle): {Fixed}.", created, failed, skipped, fixedData);
+                _logger.LogInformation(
+                    "Offers created: {Created}, failed: {Failed}, skipped: {Skipped}, no matching delivery price list: {NoDelivery}, " +
+                    "no Allegro catalog product: {NoCatalogProduct}, data fixed (retry next cycle): {Fixed}.",
+                    created, failed, skipped, noDelivery, noCatalogProduct, fixedData);
                 LogErrorSummary("Offers creation");
             }
             catch (Exception ex)
@@ -379,20 +432,60 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 await _offerFactory.PrepareAsync(ct);
 
                 var offersToEnd = await _offerRepo.GetOffersToEnd(ct);
-                var endedCount = await EndOffersOutsideCategories(offersToEnd, ct);
+
+                var endedCount = await EndOffers(
+                    offersToEnd,
+                    "are outside the configured categories or their product was withdrawn by the supplier",
+                    ct);
 
                 // Zakończonych ofert nie aktualizujemy - patch ustawiłby im status z powrotem na ACTIVE.
                 var offerIdsToEnd = offersToEnd
                     .Select(o => o.Id)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                var offers = (await _offerRepo.GetOffersToUpdate(ct))
+                var candidates = (await _offerRepo.GetOffersToUpdate(ct))
                     .Where(o => !offerIdsToEnd.Contains(o.Id))
                     .ToList();
 
+                // Produkt, który przestał mieścić się w jakimkolwiek cenniku (zmienione wymiary
+                // u dostawcy albo zmieniona konfiguracja cenników), nie ma czym jechać - oferty
+                // nie da się dalej realizować, więc ją kończymy. Ofert z cenników prowadzonych
+                // ręcznie to nie dotyczy, bo ich dostawy w ogóle nie ustawiamy.
+                var undeliverable = candidates
+                    .Where(o => !PriceHelper.IsManuallyManagedDelivery(o.DeliveryName, _appSettings.DeliveriesWithoutPriceUpdate)
+                                && DeliveryMatcher.Match(o.Product!, _appSettings.Deliveries) == null)
+                    .ToList();
+
+                if (undeliverable.Count > 0)
+                    endedCount += await EndOffers(undeliverable, "no longer fit any delivery price list", ct);
+
+                var undeliverableIds = undeliverable
+                    .Select(o => o.Id)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var offers = candidates
+                    .Where(o => !undeliverableIds.Contains(o.Id))
+                    .ToList();
+
+                // Przy dostawcy wystawianym tylko na produkcie z katalogu patch bez id produktu
+                // bylby propozycja nowego produktu - Allegro odrzuca ja brakiem parametrow.
+                // Oferta zostaje bez zmian do czasu, gdy krok wyszukiwania znajdzie produkt.
+                var withoutCatalogProduct = 0;
+
+                if (_offerFactory.RequiresCatalogProduct)
+                {
+                    var linked = offers
+                        .Where(o => !string.IsNullOrWhiteSpace(o.ProductId) || !string.IsNullOrWhiteSpace(o.Product?.AllegroId))
+                        .ToList();
+
+                    withoutCatalogProduct = offers.Count - linked.Count;
+                    offers = linked;
+                }
+
                 _logger.LogInformation(
-                    "Offers to update: {Count} (in {Parallel} parallel requests), to end: {ToEnd}.",
-                    offers.Count, MaxParallelism, offersToEnd.Count);
+                    "Offers to update: {Count} (in {Parallel} parallel requests), to end: {ToEnd} (including {NoDelivery} with no matching delivery price list), " +
+                    "waiting for an Allegro catalog product: {WithoutProduct}.",
+                    offers.Count, MaxParallelism, offersToEnd.Count + undeliverable.Count, undeliverable.Count, withoutCatalogProduct);
 
                 if (offers.Count == 0)
                 {
@@ -418,6 +511,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             if (images.Count == 0)
                             {
                                 Interlocked.Increment(ref skipped);
+                                _logger.LogDebug("No images for {Code} - offer not updated.", product.Code);
                                 return;
                             }
 
@@ -458,26 +552,28 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         }
 
         /// <summary>
-        /// Kończy oferty produktów, które wypadły ze skonfigurowanych kategorii.
-        /// Dotyczy wyłącznie ofert z cenników obsługiwanych przez serwis - ofert wystawionych ręcznie nie ruszamy.
+        /// Kończy podane oferty. Dotyczy wyłącznie ofert z cenników obsługiwanych przez serwis -
+        /// ofert wystawionych ręcznie nie ruszamy.
         ///
         /// Używamy komendy publikacji zamiast PATCH-a na ofercie: PATCH przechodzi pełną walidację
         /// i Allegro odrzuca oferty bez podpiętego produktu ("ValidProductization"), mimo że
         /// chcemy je tylko zakończyć.
         /// </summary>
-        private async Task<int> EndOffersOutsideCategories(List<AllegroOffer> offersToEnd, CancellationToken ct)
+        private async Task<int> EndOffers(List<AllegroOffer> offersToEnd, string reason, CancellationToken ct)
         {
             if (offersToEnd.Count == 0)
                 return 0;
 
-            // Zakonczone juz wczesniej tylko pilnujemy, zeby nie wrocily do aktualizacji.
-            // Ponowne wysylanie komendy nic by nie zmienilo, a kosztuje zapytanie do Allegro.
-            var alreadyEnded = offersToEnd.Count(o => string.Equals(o.Status, "ENDED", StringComparison.OrdinalIgnoreCase));
-            var toEnd = offersToEnd.Where(o => !string.Equals(o.Status, "ENDED", StringComparison.OrdinalIgnoreCase)).ToList();
+            // Komende END wysylamy tylko do ofert faktycznie opublikowanych. Oferta ENDED jest juz
+            // zakonczona, a INACTIVE nigdy nie byla wystawiona - w obu przypadkach komenda nic nie
+            // zmienia, wiec status zostaje taki sam i ta sama oferta wracalaby tu w kazdym cyklu.
+            // Z aktualizacji wypada niezaleznie od tego, czy komenda poszla.
+            var toEnd = offersToEnd.Where(o => AllegroOfferStatus.IsPublished(o.Status)).ToList();
+            var notPublished = offersToEnd.Count - toEnd.Count;
 
             _logger.LogInformation(
-                "{Count} offers are outside the configured categories - ending {ToEnd} (already ended: {Ended}).",
-                offersToEnd.Count, toEnd.Count, alreadyEnded);
+                "{Count} offers {Reason} - ending {ToEnd} (already not published: {NotPublished}).",
+                offersToEnd.Count, reason, toEnd.Count, notPublished);
 
             if (toEnd.Count == 0)
                 return 0;
@@ -520,7 +616,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                         _logger.LogInformation("Ending {Count} offers requested (command {CommandId}).", batch.Length, commandId);
 
                         foreach (var offer in batch)
-                            _logger.LogDebug("Offer {OfferId} ({Code}) queued to end: product outside configured categories.", offer.Id, offer.Product?.Code);
+                            _logger.LogDebug("Offer {OfferId} ({Code}) queued to end: {Reason}.", offer.Id, offer.Product?.Code, reason);
                     }
                     else
                     {
@@ -638,7 +734,6 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
                 case 400:
                 case 422:
-                case 433:
                     await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
                     return await HandleAllegroErrors(product, response, body, isUpdate, offerId);
 
@@ -849,42 +944,32 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             }
 
             // Produkt z katalogu Allegro zniknal (scalony albo usuniety). Czyscimy jego id,
-            // zeby kolejna proba poszla bez niego - Allegro dopasuje produkt po EAN i parametrach.
-            if (code == "ProductNotFoundException" && !string.IsNullOrWhiteSpace(product.AllegroId))
+            // zeby kolejna proba nie poszla z martwym id.
+            //
+            // Samo czyszczenie nie wystarcza: Allegro zglasza ten blad takze wtedy, gdy my zadnego
+            // id nie wyslalismy, bo sama oferta jest u nich nadal podpieta pod usuniety produkt.
+            // Dlatego po wyczyszczeniu szukamy zastepnika w katalogu - inaczej ta sama oferta
+            // wracalaby z tym samym bledem w kazdym cyklu.
+            if (code == "ProductNotFoundException")
             {
-                await _productRepo.UpdateProductAllegroId(product.Id, null, product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture), CancellationToken.None);
-                product.AllegroId = null;
+                if (!string.IsNullOrWhiteSpace(product.AllegroId))
+                {
+                    await _productRepo.UpdateProductAllegroId(product.Id, null, product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture), null, CancellationToken.None);
+                    product.AllegroId = null;
+
+                    _logger.LogWarning("Allegro product id cleared for {Code}: the product no longer exists in the catalog.", product.Code);
+                }
 
                 if (!string.IsNullOrEmpty(offerId))
                     await _offerRepo.UpdateProductId(offerId, null, CancellationToken.None);
 
-                _logger.LogWarning("Allegro product id cleared for {Code}: the product no longer exists in the catalog.", product.Code);
-                return true;
+                return await RelinkCatalogProduct(product, offerId);
             }
 
             // Oferta nie jest podpieta pod produkt z katalogu. Szukamy produktu po EAN,
             // kodzie i nazwie, zapisujemy jego id i kategorie - patch wyjdzie juz z productSet.
             if (code == "OfferWithoutProductException" || code == "ProductNotFoundExceptionForOffer")
-            {
-                var found = await _allegroProductService.FindCatalogProduct(product, CancellationToken.None);
-
-                if (found.ProductId == null || found.CategoryId == null)
-                {
-                    _logger.LogWarning("No catalog product found for {Code} (EAN {Ean}) - the offer stays unlinked.", product.Code, product.Ean ?? "-");
-                    return false;
-                }
-
-                await _productRepo.UpdateProductAllegroId(product.Id, found.ProductId, found.CategoryId, CancellationToken.None);
-                product.AllegroId = found.ProductId;
-
-                if (!string.IsNullOrEmpty(offerId))
-                    await _offerRepo.UpdateProductId(offerId, found.ProductId, CancellationToken.None);
-
-                _logger.LogInformation("Offer {OfferId} ({Code}) linked to Allegro product {ProductId} in category {CategoryId}.",
-                    offerId ?? "-", product.Code, found.ProductId, found.CategoryId);
-
-                return true;
-            }
+                return await RelinkCatalogProduct(product, offerId);
 
             if (code == "MultipleProductsFoundException" && !string.IsNullOrEmpty(offerId))
             {
@@ -904,16 +989,55 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             return false;
         }
 
+        /// <summary>
+        /// Podpina ofertę pod produkt z katalogu Allegro: szuka go po EAN, kodzie i nazwie,
+        /// a znalezione id zapisuje przy produkcie i przy ofercie - dzięki temu kolejna próba
+        /// wychodzi już z poprawnym productSet. Zwraca false, gdy w katalogu nic nie pasuje.
+        /// </summary>
+        private async Task<bool> RelinkCatalogProduct(RolmarProduct product, string? offerId)
+        {
+            var found = await _allegroProductService.FindCatalogProduct(product, CancellationToken.None);
+
+            if (found.ProductId == null || found.CategoryId == null)
+            {
+                _logger.LogWarning("No catalog product found for {Code} (EAN {Ean}) - the offer stays unlinked.", product.Code, product.Ean ?? "-");
+                return false;
+            }
+
+            await _productRepo.UpdateProductAllegroId(product.Id, found.ProductId, found.CategoryId, found.Name, CancellationToken.None);
+            product.AllegroId = found.ProductId;
+            product.AllegroName = found.Name ?? product.AllegroName;
+
+            if (!string.IsNullOrEmpty(offerId))
+                await _offerRepo.UpdateProductId(offerId, found.ProductId, CancellationToken.None);
+
+            _logger.LogInformation("Offer {OfferId} ({Code}) linked to Allegro product {ProductId} in category {CategoryId}.",
+                offerId ?? "-", product.Code, found.ProductId, found.CategoryId);
+
+            return true;
+        }
+
         private bool HasDefaultManufacturer => !string.IsNullOrWhiteSpace(_allegroSettings.DefaultPartsManufacturer);
 
         // ---------------------------------------------------------------- zdjecia
 
+        /// <summary>
+        /// Zdjęcia oferty. Adresy raz wysłane do Allegro zapisujemy przy produkcie i używamy
+        /// ponownie - dostawcy czyszczą te wpisy dopiero wtedy, gdy zestaw plików na dysku się
+        /// zmieni, więc ich obecność znaczy "te same zdjęcia, już wgrane". Dzięki temu nie
+        /// wysyłamy co cykl tych samych plików od nowa.
+        ///
+        /// Oferta bez zdjęcia nie przechodzi walidacji Allegro (błąd GallerySize), więc pusta
+        /// lista oznacza "nie wystawiaj w tym cyklu".
+        /// </summary>
         private async Task<List<AllegroImages>> ImportImages(RolmarProduct product, CancellationToken ct)
         {
-            if (!_appSettings.UploadImagesToAllegro)
+            var alreadyUploaded = await _imageRepo.GetProductImagesAsync(product.Id, ct);
+
+            if (alreadyUploaded.Count > 0)
             {
-                _logger.LogDebug("Image upload is disabled - skipping images for {Code}.", product.Code);
-                return new List<AllegroImages>();
+                _logger.LogDebug("Reusing {Count} images already uploaded for {Code}.", alreadyUploaded.Count, product.Code);
+                return alreadyUploaded;
             }
 
             if (!Directory.Exists(_service.ImagesFolder))
@@ -1002,14 +1126,13 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
         // ---------------------------------------------------------------- pomocnicze
 
-        private static ParallelOptions ParallelOptions(CancellationToken ct) => new()
+        private ParallelOptions ParallelOptions(CancellationToken ct) => new()
         {
             CancellationToken = ct,
             MaxDegreeOfParallelism = MaxParallelism
         };
 
-        private static string Shorten(string body) =>
-            string.IsNullOrEmpty(body) || body.Length <= 300 ? body : body.Substring(0, 300) + "...";
+        private static string Shorten(string body) => Utils.Shorten(body);
 
         private static string Format(TimeSpan elapsed) => $"{(int)elapsed.TotalMinutes:D2}m {elapsed.Seconds:D2}s";
 

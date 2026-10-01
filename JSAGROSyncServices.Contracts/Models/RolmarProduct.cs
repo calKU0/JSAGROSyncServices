@@ -6,6 +6,12 @@ namespace JSAGROSyncServices.Contracts.Models
     {
         public int Id { get; set; }
         public string? AllegroId { get; set; }
+
+        /// <summary>
+        /// Nazwa produktu z katalogu Allegro, zapisana przy dopasowaniu. Dla dostawców, którzy
+        /// podają tylko nazwę grupy asortymentowej (Inter Cars), jest to jedyna sensowna nazwa oferty.
+        /// </summary>
+        public string? AllegroName { get; set; }
         public string Code { get; set; } = string.Empty;
         public string? CustomerCode { get; set; }
         public string Name { get; set; } = string.Empty;
@@ -30,6 +36,27 @@ namespace JSAGROSyncServices.Contracts.Models
 
         /// <summary>Kiedy wykryto zbyt duży spadek ceny zakupu. <c>null</c> = cena bez zastrzeżeń.</summary>
         public DateTime? PriceDropDetectedAt { get; set; }
+
+        /// <summary>
+        /// Towar bez prawa zwrotu do dostawcy (Inter Cars). Takich produktów nie wystawiamy
+        /// ani nie aktualizujemy na Allegro. Pozostali dostawcy zostawiają tu <c>false</c>.
+        /// </summary>
+        public bool BlockedReturn { get; set; }
+
+        /// <summary>
+        /// Kiedy pobraliśmy szczegóły produktu (waga, wymiary, EAN). <c>null</c> = jeszcze nigdy.
+        /// Dotyczy dostawców, u których szczegóły wymagają osobnego zapytania na produkt.
+        /// </summary>
+        public DateTime? DetailsFetchedAt { get; set; }
+
+        /// <summary>Kiedy dostawca ostatni raz oddał ten produkt (API lub plik CSV).</summary>
+        public DateTime? LastSeenAt { get; set; }
+
+        /// <summary>
+        /// Kiedy uznaliśmy produkt za wycofany u dostawcy. <c>null</c> = produkt jest w ofercie dostawcy.
+        /// Produktu archiwalnego nie wystawiamy ani nie aktualizujemy, a jego ofertę kończymy.
+        /// </summary>
+        public DateTime? ArchivedAt { get; set; }
         public int DefaultAllegroCategory { get; set; }
         public decimal Package { get; set; }
         public bool BuildCompatibilitySet { get; set; } = true;
@@ -41,7 +68,11 @@ namespace JSAGROSyncServices.Contracts.Models
         public int DeliveryType { get; set; }
         public List<ProductPackage> Packages { get; set; } = new();
         public List<ProductApplication> Applications { get; set; } = new();
-        public List<ProductSpecification> Specifications { get; set; } = new();
+        /// <summary>
+        /// Specyfikacje produktu. <c>null</c> oznacza "nie znamy ich w tej operacji" - zapis
+        /// NIE rusza wtedy specyfikacji w bazie. Pusta lista czyści je, tak jak przy kategoriach.
+        /// </summary>
+        public List<ProductSpecification>? Specifications { get; set; } = new();
         public List<ProductParameter> Parameters { get; set; } = new();
         /// <summary>
         /// Klucze kategorii-lisci dostawcy (Gąska: id z API, Rolmar: znormalizowana ścieżka).

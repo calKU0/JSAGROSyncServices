@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace JSAGROSyncServices.Products.Services.Suppliers
@@ -28,11 +29,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         private readonly IProductRepository _productRepository;
         private readonly ISyncCategoryRepository _syncCategoryRepository;
         private readonly ISupplierCategoryRepository _categoryRepository;
+        private readonly IImageRepository _imageRepo;
         private readonly RolmarApiCredentials _rolmarSettings;
         private readonly AppSettings _appSettings;
 
-        public RolmarSyncService(HttpClient httpClient, ILogger<RolmarSyncService> logger, IProductRepository productRepository, ISyncCategoryRepository syncCategoryRepository, ISupplierCategoryRepository categoryRepository, IOptions<RolmarApiCredentials> options, IOptions<AppSettings> appSettings, ServiceContext serviceContext)
+        public RolmarSyncService(HttpClient httpClient, ILogger<RolmarSyncService> logger, IProductRepository productRepository, ISyncCategoryRepository syncCategoryRepository, ISupplierCategoryRepository categoryRepository, IImageRepository imageRepository, IOptions<RolmarApiCredentials> options, IOptions<AppSettings> appSettings, ServiceContext serviceContext)
         {
+            _imageRepo = imageRepository;
             _service = serviceContext;
             _httpClient = httpClient;
             _logger = logger;
@@ -72,7 +75,16 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 };
 
                 var response = await _httpClient.PostAsJsonAsync(requestUri, body, options, ct);
-                response.EnsureSuccessStatusCode();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Bez tresci odpowiedzi zostawal sam kod 400 i nie bylo z czego ustalic przyczyny,
+                    // a nieudane pobranie oznacza cykl bez zadnego produktu od dostawcy.
+                    var error = await response.Content.ReadAsStringAsync(ct);
+
+                    throw new HttpRequestException(
+                        $"Rolmar getProducts returned {(int)response.StatusCode}: {Utils.Shorten(error)}");
+                }
 
                 var rolmarResponseArray =
                     await response.Content.ReadFromJsonAsync<List<RolmarProductReponse>>(ct);
@@ -129,10 +141,43 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 }
 
                 _logger.LogInformation("Product sync completed. Upserted: {Upserted}, Failed: {Failed}", upsertedCount, failedCount);
+
+                // Rolmar oddaje caly katalog w jednej odpowiedzi, wiec za "widziane" uznajemy wszystkie
+                // zwrocone produkty - takze te spoza skonfigurowanych kategorii. Produkt poza kategoriami
+                // nie jest wycofany u dostawcy, a jego oferte i tak konczy filtr kategorii.
+                await MarkSeenAndArchiveAsync(
+                    rolmarResponse.Products.Select(p => p.ProductIndex).Where(c => !string.IsNullOrWhiteSpace(c))!,
+                    allowedCategories,
+                    ct);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error occurred while syncing products from Rolmar.");
+            }
+        }
+
+        /// <summary>
+        /// Odnotowuje obecność produktów u dostawcy i archiwizuje te, których nie oddał od kilku dni.
+        /// Produkt archiwalny nie trafia na Allegro, a jego oferta jest kończona.
+        /// </summary>
+        private async Task MarkSeenAndArchiveAsync(IEnumerable<string> seenCodes, IReadOnlyCollection<string> categories, CancellationToken ct)
+        {
+            try
+            {
+                await _productRepository.MarkProductsSeenAsync(seenCodes, ct);
+
+                var archived = await _productRepository.ArchiveMissingProductsAsync(_appSettings.ArchiveAfterDaysMissing, categories, ct);
+
+                if (archived > 0)
+                {
+                    _logger.LogInformation(
+                        "{Count} products have been missing from the Rolmar catalog for over {Days} days - marked as archived, their offers will be ended.",
+                        archived, _appSettings.ArchiveAfterDaysMissing);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "Archiving products missing from the Rolmar catalog failed.");
             }
         }
 
@@ -274,6 +319,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                     groups.Count, totalPhotos, ImageParallelism);
 
                 var processed = 0;
+                // Kody produktow z nieudanym pobraniem - bez nich w logu zostaje sama liczba
+                // i nie da sie ustalic, ktorych ofert dotyczy brak zdjec.
+                var failedCodes = new ConcurrentBag<string>();
                 var sw = Stopwatch.StartNew();
 
                 // Pobieramy rownolegle - przy kilkudziesieciu tysiacach produktow sekwencyjne pobieranie
@@ -299,8 +347,19 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                             // Pobieramy tylko te zdjecia, ktorych jeszcze nie mamy na dysku.
                             var result = await ImageHelper.SaveNewImagesAsync(_httpClient, validUrls, product.Id, _service.ImagesFolder, token);
 
-                            if (result.Failed > 0 && result.LastError != null)
-                                lastDownloadError = result.LastError;
+                            // Zmieniony zestaw plikow uniewaznia adresy wyslane juz do Allegro -
+                            // bez tego oferta trzymalaby stara galerie, bo wysylamy tylko to,
+                            // czego jeszcze nie ma.
+                            if (result.Downloaded > 0 || result.Removed > 0)
+                                await _imageRepo.DeleteProductImagesAsync(product.Id, token);
+
+                            if (result.Failed > 0)
+                            {
+                                failedCodes.Add(product.Code);
+
+                                if (result.LastError != null)
+                                    lastDownloadError = result.LastError;
+                            }
 
                             Interlocked.Add(ref downloaded, result.Downloaded);
                             Interlocked.Add(ref reused, result.Reused);
@@ -310,6 +369,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                         catch (Exception ex)
                         {
                             Interlocked.Add(ref failed, validUrls.Count);
+                            failedCodes.Add(product.Code);
                             _logger.LogError(ex, "Downloading images failed for {Code}.", product.Code);
                         }
                         finally
@@ -330,9 +390,11 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
                 if (failed > 0)
                 {
-                    _logger.LogError(
-                        "Downloading {Failed} images failed (last error: {Error}). Existing files were kept.",
-                        failed, lastDownloadError ?? "-");
+                    // Brak zdjecia u dostawcy to jego dane, nie awaria synchronizacji - ostrzezenie,
+                    // tak samo jak u Gaski. Dotychczasowe pliki zostaja, wiec oferta jedzie dalej.
+                    _logger.LogWarning(
+                        "Downloading {Failed} images failed for {Products} products (last error: {Error}). Existing files were kept. Products: {Codes}.",
+                        failed, failedCodes.Distinct().Count(), lastDownloadError ?? "-", Utils.FormatCodes(failedCodes));
                 }
 
                 _logger.LogInformation(

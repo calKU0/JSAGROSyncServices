@@ -21,6 +21,29 @@
         /// <summary>Pobranie szczegółów produktów od dostawcy - raz dziennie w oknie nocnym (Gąska).</summary>
         public bool FetchSupplierProductDetailsDaily { get; init; }
 
+        /// <summary>
+        /// Pobranie szczegółów produktów w każdym cyklu, także w ciągu dnia (Inter Cars). U tego
+        /// dostawcy waga i wymiary przychodzą wyłącznie w zapytaniu o pojedyncze SKU, a bez nich
+        /// nie wolno wystawić oferty - czekanie na okno nocne wstrzymywałoby cały katalog.
+        /// Rozmiar porcji wyznacza <c>ProductDetailsPerRun</c>.
+        /// </summary>
+        public bool FetchSupplierProductDetails { get; init; }
+
+        /// <summary>
+        /// Pobranie pełnego drzewa kategorii dostawcy - raz dziennie w oknie nocnym (Inter Cars).
+        /// Katalog ma kilka tysięcy węzłów, więc w zwykłym cyklu odświeżamy tylko wierzchnie poziomy
+        /// i skonfigurowane gałęzie; pełne drzewo jest potrzebne wyłącznie do wyboru kategorii
+        /// w Menadżerze Serwisów.
+        /// </summary>
+        public bool FetchSupplierCategoryTreeDaily { get; init; }
+
+        /// <summary>
+        /// Czy wystawiać wyłącznie produkty z pobranymi szczegółami. Dotyczy dostawców,
+        /// u których waga i wymiary przychodzą osobnym zapytaniem (Inter Cars) - bez nich
+        /// cennik dostawy wybrałby się na podstawie zerowej wagi.
+        /// </summary>
+        public bool RequireProductDetails { get; init; }
+
         /// <summary>Pobranie szczegółów ofert z Allegro (opisy, parametry).</summary>
         public bool SyncOfferDetails { get; init; }
 

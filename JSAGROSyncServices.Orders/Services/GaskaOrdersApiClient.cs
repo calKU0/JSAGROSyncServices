@@ -1,3 +1,4 @@
+﻿using JSAGROSyncServices.Infrastructure.Services;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -11,9 +12,6 @@ namespace JSAGROSyncServices.Orders.Services
     /// </summary>
     public class GaskaOrdersApiClient
     {
-        private const int MaxReadRetries = 3;
-        private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(3);
-
         private readonly ILogger<GaskaOrdersApiClient> _logger;
         private readonly HttpClient _http;
 
@@ -35,14 +33,31 @@ namespace JSAGROSyncServices.Orders.Services
                 try
                 {
                     using var response = await _http.GetAsync(url, ct);
+
+                    if (!response.IsSuccessStatusCode
+                        && attempt < HttpRetryPolicy.MaxAttempts
+                        && HttpRetryPolicy.ShouldRetry(response.StatusCode))
+                    {
+                        var delay = HttpRetryPolicy.GetDelay(response, attempt);
+
+                        HttpRetryPolicy.LogRetry(_logger, "Gąska", HttpMethod.Get, url, response.StatusCode, attempt, delay);
+
+                        await Task.Delay(delay, ct);
+                        continue;
+                    }
+
                     return await ReadAsync<T>(response, HttpMethod.Get, url, ct);
                 }
-                catch (Exception ex) when (attempt < MaxReadRetries && IsTransient(ex) && !ct.IsCancellationRequested)
+                catch (Exception ex) when (attempt < HttpRetryPolicy.MaxAttempts && IsTransient(ex) && !ct.IsCancellationRequested)
                 {
-                    _logger.LogWarning("Gąska API GET {Url} failed ({Reason}). Retry {Attempt}/{Max}.",
-                        url, ex.Message, attempt, MaxReadRetries);
+                    // Zerwane połączenie albo przekroczony czas - odpowiedzi nie ma, więc powtórzenie odczytu jest bezpieczne.
+                    var delay = HttpRetryPolicy.GetDelay(attempt);
 
-                    await Task.Delay(RetryDelay, ct);
+                    _logger.LogWarning(
+                        "Gąska GET {Url} failed ({Reason}). Retry {Attempt}/{MaxAttempts} in {Delay}.",
+                        url, ex.Message, attempt, HttpRetryPolicy.MaxAttempts, delay);
+
+                    await Task.Delay(delay, ct);
                 }
             }
         }
@@ -87,17 +102,12 @@ namespace JSAGROSyncServices.Orders.Services
             return result;
         }
 
+        /// <summary>Wyjątki połączeniowe - odpowiedź nie dotarła, więc odczyt można powtórzyć.</summary>
         private static bool IsTransient(Exception ex) => ex switch
         {
             TaskCanceledException => true,
             TimeoutException => true,
-            HttpRequestException http => http.StatusCode is null
-                or HttpStatusCode.RequestTimeout
-                or HttpStatusCode.TooManyRequests
-                or HttpStatusCode.InternalServerError
-                or HttpStatusCode.BadGateway
-                or HttpStatusCode.ServiceUnavailable
-                or HttpStatusCode.GatewayTimeout,
+            HttpRequestException http => http.StatusCode is null || HttpRetryPolicy.ShouldRetry(http.StatusCode.Value),
             _ => false
         };
 

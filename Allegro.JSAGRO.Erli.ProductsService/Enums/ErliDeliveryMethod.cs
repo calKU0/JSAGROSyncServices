@@ -1,4 +1,4 @@
-using System.Runtime.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace Allegro.JSAGRO.Erli.ProductsService.Enums
 {
@@ -31,7 +31,9 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Enums
         erliDPDKurier15kg,
         erliDPDKurier20kg,
         erliDPDKurier25kg,
-        [EnumMember(Value = "erliDPDKurier31,5kg")]
+        // Nazwa po stronie Erli ma przecinek, wiec nie da sie jej zapisac jako identyfikator C#.
+        // EnumMember tu nie dziala - System.Text.Json czyta wylacznie JsonStringEnumMemberName.
+        [JsonStringEnumMemberName("erliDPDKurier31,5kg")]
         erliDPDKurier31_5kg,
         erliDPDKurier40kg,
         erliDPDKurier50kg,

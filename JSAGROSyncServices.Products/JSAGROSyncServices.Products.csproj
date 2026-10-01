@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Reguly dopasowania produktu do katalogu Allegro sa testowane jednostkowo,
+         a nie naleza do publicznego API biblioteki. -->
+    <InternalsVisibleTo Include="JSAGROSyncServices.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Microsoft.Extensions.Configuration" />
     <Using Include="Microsoft.Extensions.DependencyInjection" />
     <Using Include="Microsoft.Extensions.Hosting" />

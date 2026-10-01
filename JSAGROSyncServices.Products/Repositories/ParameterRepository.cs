@@ -1,18 +1,47 @@
 ﻿using Dapper;
+using JSAGROSyncServices.Products.Configuration;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Infrastructure.Data;
 using System.Data;
+using System.Text.Json;
 
 namespace JSAGROSyncServices.Products.Repositories
 {
     public class ParameterRepository : IParameterRepository
     {
         private readonly DapperContext _context;
+        private readonly ServiceContext _service;
 
-        public ParameterRepository(DapperContext context)
+        public ParameterRepository(DapperContext context, ServiceContext serviceContext)
         {
             _context = context;
+            _service = serviceContext;
+        }
+
+        public async Task<int> FillDataIndependentParametersAsync(
+            string countInOfferSqlPattern,
+            string countInOfferValue,
+            string mountingSideName,
+            IReadOnlyList<string> universalMountingSides,
+            CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            return await connection.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "RolmarProductParameters_FillDataIndependent",
+                    new
+                    {
+                        IntegrationCompany = _service.Company,
+                        CountInOfferPattern = countInOfferSqlPattern,
+                        CountInOfferValue = countInOfferValue,
+                        MountingSideName = mountingSideName,
+                        UniversalSides = JsonSerializer.Serialize(universalMountingSides)
+                    },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct));
         }
 
         public async Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct)

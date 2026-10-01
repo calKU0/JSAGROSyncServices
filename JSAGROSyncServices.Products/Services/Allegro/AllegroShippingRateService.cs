@@ -51,7 +51,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, $"Error fetching details for shipping rate {shippingRate.Name}");
+                        _logger.LogError(ex, "Fetching details of shipping rate {ShippingRate} failed.", shippingRate.Name);
                     }
                 }
 
@@ -59,7 +59,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error syncing shipping rates from Allegro");
+                _logger.LogError(ex, "Syncing shipping rates from Allegro failed.");
             }
         }
 
