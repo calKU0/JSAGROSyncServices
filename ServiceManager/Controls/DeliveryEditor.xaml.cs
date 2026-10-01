@@ -1,4 +1,4 @@
-using ServiceManager.Models;
+﻿using ServiceManager.Models;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -11,7 +11,10 @@ namespace ServiceManager.Controls
 {
     public partial class DeliveryEditor : UserControl
     {
-        private readonly List<(TextBox Length, TextBox Width, TextBox Height, TextBox Weight, TextBox Name)> _rows = new();
+        private readonly List<DeliveryRow> _rows = new();
+
+        /// <summary>Kontrolki jednego wiersza cennika.</summary>
+        private sealed record DeliveryRow(TextBox Length, TextBox Width, TextBox Height, TextBox Weight, TextBox Name, CheckBox Smart);
 
         public DeliveryEditor()
         {
@@ -29,10 +32,10 @@ namespace ServiceManager.Controls
             }
         }
 
-        public IReadOnlyList<(string Length, string Width, string Height, string Weight, string Name)> GetInputs()
+        public IReadOnlyList<(string Length, string Width, string Height, string Weight, string Name, bool IsSmart)> GetInputs()
         {
             return _rows
-                .Select(r => (r.Length.Text, r.Width.Text, r.Height.Text, r.Weight.Text, r.Name.Text))
+                .Select(r => (r.Length.Text, r.Width.Text, r.Height.Text, r.Weight.Text, r.Name.Text, r.Smart.IsChecked == true))
                 .ToList();
         }
 
@@ -45,20 +48,30 @@ namespace ServiceManager.Controls
         {
             var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
 
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 7; i++)
                 grid.ColumnDefinitions.Add(new ColumnDefinition());
 
-            var lengthBox = new TextBox { Text = delivery.Length.ToString(), Margin = new Thickness(2) };
-            var widthBox = new TextBox { Text = delivery.Width.ToString(), Margin = new Thickness(2) };
-            var heightBox = new TextBox { Text = delivery.Height.ToString(), Margin = new Thickness(2) };
+            var lengthBox = new TextBox { Text = delivery.Length.ToString(CultureInfo.InvariantCulture), Margin = new Thickness(2) };
+            var widthBox = new TextBox { Text = delivery.Width.ToString(CultureInfo.InvariantCulture), Margin = new Thickness(2) };
+            var heightBox = new TextBox { Text = delivery.Height.ToString(CultureInfo.InvariantCulture), Margin = new Thickness(2) };
             var weightBox = new TextBox { Text = delivery.Weight.ToString(CultureInfo.InvariantCulture), Margin = new Thickness(2) };
             var nameBox = new TextBox { Text = delivery.DeliveryName, Margin = new Thickness(2) };
+
+            var smartBox = new CheckBox
+            {
+                IsChecked = delivery.IsSmart,
+                Margin = new Thickness(6, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                ToolTip = "Cennik objęty Allegro Smart - koszt wysyłki doliczamy do ceny oferty."
+            };
 
             Grid.SetColumn(lengthBox, 0);
             Grid.SetColumn(widthBox, 1);
             Grid.SetColumn(heightBox, 2);
             Grid.SetColumn(weightBox, 3);
             Grid.SetColumn(nameBox, 4);
+            Grid.SetColumn(smartBox, 5);
 
             var removeBtn = new Button
             {
@@ -72,20 +85,21 @@ namespace ServiceManager.Controls
             removeBtn.Click += (_, _) =>
             {
                 RowsPanel.Children.Remove(grid);
-                _rows.Remove((lengthBox, widthBox, heightBox, weightBox, nameBox));
+                _rows.RemoveAll(r => r.Length == lengthBox);
             };
 
-            Grid.SetColumn(removeBtn, 5);
+            Grid.SetColumn(removeBtn, 6);
 
             grid.Children.Add(lengthBox);
             grid.Children.Add(widthBox);
             grid.Children.Add(heightBox);
             grid.Children.Add(weightBox);
             grid.Children.Add(nameBox);
+            grid.Children.Add(smartBox);
             grid.Children.Add(removeBtn);
 
             RowsPanel.Children.Add(grid);
-            _rows.Add((lengthBox, widthBox, heightBox, weightBox, nameBox));
+            _rows.Add(new DeliveryRow(lengthBox, widthBox, heightBox, weightBox, nameBox, smartBox));
         }
     }
 }

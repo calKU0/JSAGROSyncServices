@@ -1,17 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace ServiceManager.Models
+﻿namespace ServiceManager.Models
 {
+    /// <summary>Cennik dostawy: gabaryty paczki w centymetrach i waga w kilogramach.</summary>
     public class Delivery
     {
-        public int Width { get; set; }
-        public int Length { get; set; }
-        public int Height { get; set; }
+        public decimal Width { get; set; }
+        public decimal Length { get; set; }
+        public decimal Height { get; set; }
         public decimal Weight { get; set; }
         public string DeliveryName { get; set; } = string.Empty;
+
+        /// <summary>Cennik objęty Allegro Smart - tylko dla takich doliczamy koszt wysyłki do ceny oferty.</summary>
+        public bool IsSmart { get; set; } = true;
     }
 }

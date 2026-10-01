@@ -1,4 +1,5 @@
 ﻿using ServiceManager.Models;
+using System.IO;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;
@@ -27,7 +28,7 @@ namespace ServiceManager.Services
                     Id = key,
                     Name = ConfigurationManager.AppSettings[$"Service_{key}_Name"] ?? key,
                     Account = ConfigurationManager.AppSettings[$"Service_{key}_Account"] ?? string.Empty,
-                    LogoPath = ConfigurationManager.AppSettings[$"Service_{key}_LogoPath"] ?? string.Empty,
+                    LogoPath = ResolveLogoPath(ConfigurationManager.AppSettings[$"Service_{key}_LogoPath"]),
                     ServiceName = ConfigurationManager.AppSettings[$"Service_{key}_ServiceName"] ?? string.Empty,
                     LogFolderPath = ConfigurationManager.AppSettings[$"Service_{key}_LogFolder"] ?? string.Empty,
                     ExternalConfigPath = ConfigurationManager.AppSettings[$"Service_{key}_ConfigPath"] ?? string.Empty
@@ -35,6 +36,21 @@ namespace ServiceManager.Services
             }
 
             return services;
+        }
+
+        /// <summary>
+        /// Ścieżka do ikony serwisu. Ścieżkę względną liczymy od katalogu aplikacji - inaczej
+        /// konfiguracja zawiera bezwzględne ścieżki z wersją frameworka w środku i po każdej
+        /// zmianie TargetFramework ikony przestają się pokazywać.
+        /// </summary>
+        private static string ResolveLogoPath(string? configured)
+        {
+            var path = (configured ?? string.Empty).Trim();
+
+            if (path.Length == 0 || Path.IsPathRooted(path))
+                return path;
+
+            return Path.Combine(AppContext.BaseDirectory, path);
         }
 
         public List<string> GetAccounts(IEnumerable<ServiceItem> services)

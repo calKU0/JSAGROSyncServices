@@ -1,4 +1,4 @@
-using ServiceManager.Models;
+﻿using ServiceManager.Models;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -7,16 +7,16 @@ namespace ServiceManager.Validation
 {
     public static class DeliveryValidator
     {
-        public static (List<Delivery> Deliveries, List<string> Errors) Validate(IEnumerable<(string Length, string Width, string Height, string Weight, string Name)> inputs)
+        public static (List<Delivery> Deliveries, List<string> Errors) Validate(IEnumerable<(string Length, string Width, string Height, string Weight, string Name, bool IsSmart)> inputs)
         {
             var deliveries = new List<Delivery>();
             var errors = new List<string>();
 
             foreach (var input in inputs)
             {
-                if (!int.TryParse(input.Length, out var length) ||
-                    !int.TryParse(input.Width, out var width) ||
-                    !int.TryParse(input.Height, out var height) ||
+                if (!TryParseDecimal(input.Length, out var length) ||
+                    !TryParseDecimal(input.Width, out var width) ||
+                    !TryParseDecimal(input.Height, out var height) ||
                     !TryParseDecimal(input.Weight, out var weight))
                 {
                     errors.Add(ValidationMessages.DeliveryInvalidNumbers);
@@ -35,7 +35,8 @@ namespace ServiceManager.Validation
                     Width = width,
                     Height = height,
                     Weight = weight,
-                    DeliveryName = input.Name.Trim()
+                    DeliveryName = input.Name.Trim(),
+                    IsSmart = input.IsSmart
                 });
             }
 
