@@ -477,8 +477,11 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
                 if (_offerFactory.RequiresCatalogProduct)
                 {
+                    // Decyduje id zapamiętane przy produkcie. Id na samej ofercie bywa nieaktualne:
+                    // zostaje po produkcie, który zniknął z katalogu albo został odpięty, a patch
+                    // z takim id wraca błędem w każdym cyklu.
                     var linked = offers
-                        .Where(o => !string.IsNullOrWhiteSpace(o.ProductId) || !string.IsNullOrWhiteSpace(o.Product?.AllegroId))
+                        .Where(o => !string.IsNullOrWhiteSpace(o.Product?.AllegroId))
                         .ToList();
 
                     withoutCatalogProduct = offers.Count - linked.Count;
