@@ -73,6 +73,39 @@ namespace JSAGROSyncServices.Tests
             Assert.False(AllegroProductService.Confirms(beads, Identifiers("11119001"), Product(null)));
         }
 
+        [Fact]
+        public void A_short_number_with_a_letter_does_not_confirm_on_its_own()
+        {
+            // Z produkcji: "279-V" to u nas pierścień SBP, a w katalogu Allegro lakier do włosów.
+            // Sama litera w numerze niczego nie dowodzi, jeśli numer jest krótki.
+            var hairspray = Candidate("HELEN SEWARD QUICK&EASY LAKIER MOCNY DO WŁOSÓW 300ml",
+                ("Kod producenta", "279-V"));
+            var ours = new RolmarProduct
+            {
+                Id = 1,
+                Code = "H1CCVC",
+                Name = "Pierścień sworznia szczęki hamulcowej",
+                SupplierName = "SBP"
+            };
+
+            Assert.True(AllegroProductService.Matches(hairspray, Identifiers("279-V"), primaryOnly: true));
+            Assert.False(AllegroProductService.Confirms(hairspray, Identifiers("279-V"), ours));
+        }
+
+        [Theory]
+        // Granica: numer z literą potwierdza sam dopiero od sześciu znaków.
+        [InlineData("279V", false)]
+        [InlineData("AG159", false)]
+        [InlineData("AG1592", true)]
+        [InlineData("STR15A359", true)]
+        // Same cyfry nie potwierdzają nigdy - kody numeryczne powtarzają się między branżami.
+        [InlineData("11119001", false)]
+        [InlineData("070696", false)]
+        public void Only_a_long_enough_number_with_a_letter_stands_alone(string identifier, bool expected)
+        {
+            Assert.Equal(expected, AllegroProductService.IsStrongIdentifier(identifier));
+        }
+
         // ------------------------------------------------------------ numery z literami
 
         [Theory]

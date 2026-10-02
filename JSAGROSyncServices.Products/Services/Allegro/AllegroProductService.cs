@@ -260,15 +260,15 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         }
 
         /// <summary>
-        /// Druga, niezależna przesłanka trafienia - wymagana, gdy produkt rozpoznaliśmy wyłącznie
-        /// po numerze złożonym z samych cyfr. Taki numer nie jest w katalogu Allegro unikalny:
-        /// "11119001" to u nas tarcza hamulcowa SRP, a w katalogu "Kod producenta" koralików
-        /// szklanych JABLONEX - i oferta tarczy trafiała pod koraliki. Numery z literami
-        /// ("STR-15A359", "ZK8021 LBPU312-31-22BBK") kolidują na tyle rzadko, że same wystarczają.
+        /// Druga, niezależna przesłanka trafienia - wymagana zawsze, gdy numer, po którym
+        /// rozpoznaliśmy produkt, nie jest dość charakterystyczny (<see cref="IsStrongIdentifier"/>).
+        /// Takie numery nie są w katalogu Allegro unikalne: "11119001" to u nas tarcza hamulcowa SRP,
+        /// a w katalogu "Kod producenta" koralików szklanych JABLONEX; "279-V" to pierścień SBP
+        /// i zarazem lakier do włosów. W obu przypadkach oferta trafiała pod zupełnie inny produkt.
         /// </summary>
         internal static bool Confirms(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers, RolmarProduct product)
         {
-            if (MatchesOnTextIdentifier(candidate, identifiers))
+            if (MatchesOnStrongIdentifier(candidate, identifiers))
                 return true;
 
             var brand = Normalize(product.SupplierName);
@@ -330,8 +330,23 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                                && !GenericWords.Contains(word))
                 .ToHashSet(StringComparer.Ordinal);
 
-        /// <summary>Czy trafienie opiera się na numerze, który ma w sobie literę - a nie na samych cyfrach.</summary>
-        internal static bool MatchesOnTextIdentifier(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers)
+        /// <summary>
+        /// Najkrótszy numer, który sam w sobie identyfikuje towar. Krótsze trafiają w katalogu
+        /// Allegro w produkty z zupełnie innych branż - "279-V" to u nas pierścień, a w katalogu
+        /// lakier do włosów.
+        /// </summary>
+        private const int StrongIdentifierLength = 6;
+
+        /// <summary>
+        /// Czy numer jest dość charakterystyczny, żeby samo jego trafienie potwierdzało produkt:
+        /// dość długi i z literą. Same cyfry odpadają niezależnie od długości, bo numeryczne kody
+        /// producenta powtarzają się między branżami.
+        /// </summary>
+        internal static bool IsStrongIdentifier(string identifier) =>
+            identifier.Length >= StrongIdentifierLength && identifier.Any(char.IsLetter);
+
+        /// <summary>Czy trafienie opiera się na numerze dość charakterystycznym, by wystarczył sam.</summary>
+        internal static bool MatchesOnStrongIdentifier(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers)
         {
             foreach (var parameter in candidate.Parameters)
             {
@@ -342,14 +357,14 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 {
                     var normalized = Normalize(value);
 
-                    if (identifiers.Contains(normalized) && !normalized.All(char.IsDigit))
+                    if (identifiers.Contains(normalized) && IsStrongIdentifier(normalized))
                         return true;
                 }
             }
 
             foreach (var token in TokenizeName(candidate.Name))
             {
-                if (identifiers.Contains(token) && !token.All(char.IsDigit))
+                if (identifiers.Contains(token) && IsStrongIdentifier(token))
                     return true;
             }
 
