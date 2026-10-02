@@ -17,8 +17,6 @@ ProductsServiceHost.Run(
         SyncAllegroDictionaries = true,
         FetchSupplierProducts = true,
         FetchSupplierStock = true,
-        // Adresy zdjęć są wyłącznie w plikach wymiany CSV - API katalogu ich nie zwraca.
-        FetchSupplierImages = true,
         FetchSupplierProductDetails = true,
         // Katalog ma kilka tysięcy kategorii - pełne drzewo do wyboru w konfiguratorze budujemy raz na dobę.
         FetchSupplierCategoryTreeDaily = true,

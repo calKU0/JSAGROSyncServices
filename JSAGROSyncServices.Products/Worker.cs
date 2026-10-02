@@ -201,11 +201,10 @@ namespace JSAGROSyncServices.Products
             _ => services.GetRequiredService<IRolmarSyncService>().SyncStockAsync()
         };
 
-        private Task FetchSupplierImages(IServiceProvider services) => _service.Company switch
-        {
-            IntegrationCompany.InterCars => services.GetRequiredService<IInterCarsApiService>().SyncImagesAsync(),
-            _ => services.GetRequiredService<IRolmarSyncService>().SyncImagesAsync()
-        };
+        // Inter Cars nie ma wlasnych zdjec - galerie pokazuje produkt z katalogu Allegro,
+        // wiec ten krok dotyczy wylacznie dostawcow z wlasnymi plikami.
+        private Task FetchSupplierImages(IServiceProvider services) =>
+            services.GetRequiredService<IRolmarSyncService>().SyncImagesAsync();
 
         private Task FetchSupplierProductDetails(IServiceProvider services) => _service.Company switch
         {

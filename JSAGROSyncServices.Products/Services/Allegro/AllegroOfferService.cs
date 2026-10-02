@@ -371,16 +371,19 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             return;
                         }
 
-                        product.AllegroImages = await ImportImages(product, token);
-
-                        // Allegro wymaga co najmniej jednego zdjecia - bez niego odrzuca oferte
-                        // bledem GallerySize. Brak zdjec to brak danych od dostawcy albo nieudane
-                        // pobranie, wiec produkt czeka na kolejny cykl.
-                        if (product.AllegroImages.Count == 0)
+                        if (_offerFactory.UsesOwnImages)
                         {
-                            Interlocked.Increment(ref skipped);
-                            _logger.LogDebug("No images for {Code} - offer not created.", product.Code);
-                            return;
+                            product.AllegroImages = await ImportImages(product, token);
+
+                            // Allegro wymaga co najmniej jednego zdjecia - bez niego odrzuca oferte
+                            // bledem GallerySize. Brak zdjec to brak danych od dostawcy albo nieudane
+                            // pobranie, wiec produkt czeka na kolejny cykl.
+                            if (product.AllegroImages.Count == 0)
+                            {
+                                Interlocked.Increment(ref skipped);
+                                _logger.LogDebug("No images for {Code} - offer not created.", product.Code);
+                                return;
+                            }
                         }
 
                         // Bez pasującego cennika nie ma czym wysłać - Allegro i tak odrzuciłoby ofertę.
@@ -504,7 +507,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     {
                         var product = offer.Product!;
 
-                        if (product.AllegroImages.Count == 0)
+                        if (_offerFactory.UsesOwnImages && product.AllegroImages.Count == 0)
                         {
                             var images = await ImportImages(product, token);
 

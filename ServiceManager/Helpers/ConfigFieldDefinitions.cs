@@ -31,9 +31,6 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "InterCarsApiCredentials:DataCustomerNumber", Label = "Numer klienta (katalog z plikami)", Group = "Inter Cars pliki CSV", Description = "Nazwa katalogu z plikami CSV na serwerze wymiany Inter Cars." },
             new ConfigField { Key = "InterCarsApiCredentials:DataUser", Label = "Użytkownik wymiany plików", Group = "Inter Cars pliki CSV", IsVisable = false },
             new ConfigField { Key = "InterCarsApiCredentials:DataPassword", Label = "Hasło wymiany plików", Group = "Inter Cars pliki CSV", IsVisable = false },
-            new ConfigField { Key = "InterCarsApiCredentials:PicturesCustomerNumber", Label = "Numer klienta dla zdjęć", Group = "Inter Cars pliki CSV", Description = "Katalog z plikiem zdjęć. Konto rolnicze go nie ma - zdjęcia idą z konta z pełnym katalogiem. Puste = to samo konto co wyżej." },
-            new ConfigField { Key = "InterCarsApiCredentials:PicturesUser", Label = "Użytkownik dla zdjęć", Group = "Inter Cars pliki CSV", IsVisable = false },
-            new ConfigField { Key = "InterCarsApiCredentials:PicturesPassword", Label = "Hasło dla zdjęć", Group = "Inter Cars pliki CSV", IsVisable = false },
             new ConfigField { Key = "InterCarsApiCredentials:Parallelism", Label = "Równoległych zapytań", Group = "Inter Cars API", FieldType = ConfigFieldType.Int, IsVisable = false },
 
             // Allegro API

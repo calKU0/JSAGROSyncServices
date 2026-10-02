@@ -54,16 +54,20 @@ namespace JSAGROSyncServices.Products.Helpers
         /// </summary>
         public bool RequiresCatalogProduct => true;
 
+        /// <summary>
+        /// Zdjęć Inter Carsu nie pobieramy ani nie wysyłamy - galerię bierze Allegro z produktu
+        /// w katalogu, pod który oferta jest podpięta.
+        /// </summary>
+        public bool UsesOwnImages => false;
+
         public decimal CalculatePrice(RolmarProduct product) => CalculatePrice(product, _priceSettings, _appSettings.Deliveries);
 
         public ProductOfferRequest BuildOffer(RolmarProduct product)
         {
-            var images = GalleryImages(product);
-
             return new ProductOfferRequest
             {
                 Name = BuildOfferName(product),
-                ProductSet = BuildProductSet(product, images),
+                ProductSet = BuildProductSet(product),
                 Category = new Category { Id = product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture) },
                 Stock = new Stock
                 {
@@ -79,8 +83,7 @@ namespace JSAGROSyncServices.Products.Helpers
                         Currency = "PLN"
                     }
                 },
-                Images = images,
-                Description = BuildDescription(product, images),
+                Description = BuildDescription(product),
                 External = new External { Id = product.Code },
                 Publication = new Publication
                 {
@@ -115,22 +118,11 @@ namespace JSAGROSyncServices.Products.Helpers
             // Oferta z cennika zarządzanego ręcznie: nie ruszamy ceny, cennika dostawy ani czasu realizacji.
             var manuallyManagedDelivery = PriceHelper.IsManuallyManagedDelivery(offer.DeliveryName, _appSettings.DeliveriesWithoutPriceUpdate);
 
-            var connectedImages = product.AllegroImages?
-                .Where(i => i.Connected)
-                .Select(i => i.Url)
-                .Distinct()
-                .Take(MaxGalleryImages)
-                .ToList();
-
-            // Pusta lista zdjęć to u Inter Cars norma - wtedy pomijamy galerię i opis,
-            // żeby patch nie skasował tego, co Allegro bierze z produktu w katalogu.
-            var images = connectedImages is { Count: > 0 } ? connectedImages : null;
-
             return new ProductOfferRequest
             {
                 // Bez productSet Allegro odrzuca patch: nie widzi podpietego produktu,
                 // producenta odpowiedzialnego ani informacji o bezpieczenstwie (GPSR).
-                ProductSet = BuildProductSet(product, images, offer.ProductId),
+                ProductSet = BuildProductSet(product, offer.ProductId),
                 Stock = new Stock
                 {
                     Available = Convert.ToInt32(Math.Floor(product.InStock)),
@@ -149,8 +141,9 @@ namespace JSAGROSyncServices.Products.Helpers
                             Currency = "PLN"
                         }
                     },
-                Images = images,
-                Description = images != null ? BuildDescription(product, images) : null,
+                // Nazwy nie wysylamy: na Allegro jest zarzadzana recznie.
+                // Galerii tez nie - pokazuje ja produkt z katalogu.
+                Description = BuildDescription(product),
                 External = new External { Id = product.Code },
                 Publication = new Publication
                 {
@@ -189,7 +182,7 @@ namespace JSAGROSyncServices.Products.Helpers
         /// produktowych - stąd "Uzupełnij parametry obowiązkowe" mimo podpiętego produktu.
         /// Oferta bez dopasowanego produktu tu nie dociera: odsiewa ją <see cref="RequiresCatalogProduct"/>.
         /// </summary>
-        private List<ProductSet> BuildProductSet(RolmarProduct product, List<string>? images, string? offerProductId = null)
+        private List<ProductSet> BuildProductSet(RolmarProduct product, string? offerProductId = null)
         {
             // Id produktu z katalogu: najpierw to, które oferta już ma, potem zapamiętane przy produkcie.
             var catalogProductId = string.IsNullOrWhiteSpace(offerProductId) ? product.AllegroId : offerProductId;
@@ -350,22 +343,9 @@ namespace JSAGROSyncServices.Products.Helpers
         /// Opis oferty. Zdjęcia wstawiamy tylko wtedy, gdy je mamy - przy produktach Inter Cars
         /// opis jest czysto tekstowy, a galerię pokazuje Allegro z podpiętego produktu.
         /// </summary>
-        private static Description BuildDescription(RolmarProduct product, List<string>? images)
+        private static Description BuildDescription(RolmarProduct product)
         {
             var description = new Description();
-            var gallery = images ?? new List<string>();
-            var imageIndex = 0;
-
-            if (imageIndex < gallery.Count)
-            {
-                description.Sections.Add(new Section
-                {
-                    SectionItems = new List<SectionItem>
-                    {
-                        new() { Type = "IMAGE", Url = gallery[imageIndex++] }
-                    }
-                });
-            }
 
             var content = new StringBuilder()
                 .Append($"<p><b>{Encode(product.Name)}</b></p>")
@@ -378,34 +358,19 @@ namespace JSAGROSyncServices.Products.Helpers
                     : string.Empty)
                 .ToString();
 
-            var mainSection = new List<SectionItem> { new() { Type = "TEXT", Content = content } };
-
-            if (imageIndex < gallery.Count)
-                mainSection.Add(new SectionItem { Type = "IMAGE", Url = gallery[imageIndex++] });
-
-            description.Sections.Add(new Section { SectionItems = mainSection });
+            description.Sections.Add(new Section
+            {
+                SectionItems = new List<SectionItem> { new() { Type = "TEXT", Content = content } }
+            });
 
             var specifications = BuildSpecificationsHtml(product);
 
             if (specifications.Length > 0)
             {
-                var items = new List<SectionItem>();
-
-                if (imageIndex < gallery.Count)
-                    items.Add(new SectionItem { Type = "IMAGE", Url = gallery[imageIndex++] });
-
-                items.Add(new SectionItem { Type = "TEXT", Content = specifications });
-                description.Sections.Add(new Section { SectionItems = items });
-            }
-
-            while (imageIndex < gallery.Count)
-            {
-                var items = new List<SectionItem> { new() { Type = "IMAGE", Url = gallery[imageIndex++] } };
-
-                if (imageIndex < gallery.Count)
-                    items.Add(new SectionItem { Type = "IMAGE", Url = gallery[imageIndex++] });
-
-                description.Sections.Add(new Section { SectionItems = items });
+                description.Sections.Add(new Section
+                {
+                    SectionItems = new List<SectionItem> { new() { Type = "TEXT", Content = specifications } }
+                });
             }
 
             return description;

@@ -1,4 +1,4 @@
-namespace JSAGROSyncServices.Products.Services.Suppliers
+﻿namespace JSAGROSyncServices.Products.Services.Suppliers
 {
     public interface IInterCarsApiService
     {
@@ -10,10 +10,6 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
         /// <summary>Szczegóły produktów - waga, wymiary i EAN. Jedno zapytanie na SKU, więc porcjami.</summary>
         Task SyncProductDetailsAsync(CancellationToken ct = default);
-
-        /// <summary>Zdjęcia produktów z pliku wymiany - API katalogu ich nie zwraca.</summary>
-        Task SyncImagesAsync(CancellationToken ct = default);
-
         /// <summary>
         /// Pełne drzewo kategorii do listy wyboru w konfiguratorze. Ponad tysiąc zapytań,
         /// więc krok dzienny - pobieranie produktów korzysta z płytszego drzewa z każdego cyklu.

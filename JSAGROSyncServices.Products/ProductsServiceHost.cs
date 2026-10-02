@@ -192,9 +192,8 @@ namespace JSAGROSyncServices.Products
             services.AddSingleton<InterCarsTokenProvider>();
             services.AddTransient<InterCarsAuthHandler>();
 
-            // Serwer wymiany plików obsługuje dwa konta: rolnicze (lista SKU AGRO) i pełne (zdjęcia),
-            // bo katalog Pictures istnieje tylko na tym drugim. Konta różnią się wyłącznie logowaniem,
-            // więc oba klienty są takie same poza nagłówkiem Authorization.
+            // Klient serwera wymiany plików: poza nagłówkiem Authorization nie różni się niczym,
+            // więc logowanie wstrzykujemy, zamiast powielać konfigurację.
             static void AddDataExchangeClient(
                 IServiceCollection services,
                 string name,
@@ -217,16 +216,6 @@ namespace JSAGROSyncServices.Products
             }
 
             AddDataExchangeClient(services, InterCarsDataFileService.HttpClientName, c => (c.DataUser, c.DataPassword));
-            AddDataExchangeClient(services, InterCarsDataFileService.PicturesHttpClientName, c => (c.PicturesUser, c.PicturesPassword));
-
-            // Host ze zdjęciami nie wymaga autoryzacji - klient jest celowo bez tokenu i bez Basic Auth.
-            // Wymaga za to nagłówka User-Agent: zapytanie bez niego kończy się kodem 403,
-            // a HttpClient sam z siebie tego nagłówka nie wysyła.
-            services.AddHttpClient(InterCarsApiService.ImagesHttpClientName, client =>
-            {
-                client.Timeout = TimeSpan.FromMinutes(2);
-                client.DefaultRequestHeaders.UserAgent.ParseAdd(InterCarsUserAgent);
-            });
 
             services.AddSingleton<IInterCarsDataFileService, InterCarsDataFileService>();
 

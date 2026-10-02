@@ -23,7 +23,6 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         public const string HttpClientName = "InterCarsData";
 
         /// <summary>Klient katalogu ze zdjęciami - loguje się innym kontem niż reszta plików.</summary>
-        public const string PicturesHttpClientName = "InterCarsDataPictures";
 
         /// <summary>Wiersz listingu Apache: nazwa pliku, data modyfikacji, rozmiar.</summary>
         private static readonly Regex ListingEntry = new(
@@ -31,7 +30,6 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private const string ProductInformationDirectory = "ProductInformation";
-        private const string PicturesDirectory = "Pictures";
 
         private readonly SemaphoreSlim _downloadLock = new(1, 1);
         private readonly IHttpClientFactory _httpClientFactory;
@@ -113,92 +111,6 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             {
                 _logger.LogError(ex, "Downloading the Inter Cars SKU whitelist ({File}) failed.", file.Name);
                 return null;
-            }
-            finally
-            {
-                _downloadLock.Release();
-            }
-        }
-
-        // ---------------------------------------------------------------- zdjecia
-
-        public async Task<List<InterCarsProductImages>> GetImagesAsync(IReadOnlySet<string> skus, CancellationToken ct = default)
-        {
-            var result = new List<InterCarsProductImages>();
-
-            if (skus.Count == 0)
-                return result;
-
-            RemoteFile file;
-
-            try
-            {
-                file = await GetNewestFileAsync(PicturesAccount, PicturesDirectory, ".csv.zip", ct);
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                _logger.LogError(ex, "Reading the Inter Cars {Directory} directory listing failed.", PicturesDirectory);
-                return result;
-            }
-
-            await _downloadLock.WaitAsync(ct);
-
-            try
-            {
-                var sw = Stopwatch.StartNew();
-
-                // Plik obejmuje caly katalog Inter Cars (ponad milion wierszy), a interesuje nas
-                // tylko asortyment, ktory mamy w bazie - dlatego filtrujemy w trakcie czytania.
-                var bySku = new Dictionary<string, List<(int Sort, string Url)>>(StringComparer.OrdinalIgnoreCase);
-                var rows = 0;
-
-                await ReadCsvAsync(file, (header, fields) =>
-                {
-                    rows++;
-
-                    var sku = Value(header, fields, "TOW_KOD")?.Trim();
-                    var url = Value(header, fields, "IMAGE_LINK")?.Trim();
-
-                    if (string.IsNullOrWhiteSpace(sku) || string.IsNullOrWhiteSpace(url) || !skus.Contains(sku))
-                        return;
-
-                    if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-                        (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-                        return;
-
-                    // SORTNR ustala kolejnosc zdjec w galerii. Brak wartosci wrzucamy na koniec.
-                    var sort = int.TryParse(Value(header, fields, "SORTNR"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
-                        ? parsed
-                        : int.MaxValue;
-
-                    if (!bySku.TryGetValue(sku, out var urls))
-                        bySku[sku] = urls = new List<(int, string)>();
-
-                    urls.Add((sort, url));
-                }, ct);
-
-                sw.Stop();
-
-                foreach (var (sku, urls) in bySku)
-                {
-                    result.Add(new InterCarsProductImages(
-                        sku,
-                        urls.OrderBy(u => u.Sort)
-                            .Select(u => u.Url)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList()));
-                }
-
-                _logger.LogInformation(
-                    "Inter Cars pictures file {File}: {Rows} rows read, {Products} of our products have photos ({Photos} in total). Took {Elapsed}.",
-                    file.Name, rows, result.Count, result.Sum(r => r.Urls.Count), sw.Elapsed);
-
-                return result;
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                _logger.LogError(ex, "Downloading the Inter Cars pictures file ({File}) failed.", file.Name);
-                return result;
             }
             finally
             {
@@ -345,15 +257,6 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
         /// <summary>Konto, z którego bierzemy listę SKU i pozostałe pliki asortymentowe.</summary>
         private DataAccount ProductsAccount => new(_credentials.DataCustomerNumber.Trim(), HttpClientName);
-
-        /// <summary>
-        /// Konto katalogu ze zdjęciami. Konto rolnicze nie ma katalogu <c>Pictures</c>, więc zdjęcia
-        /// pobieramy z konta z pełnym katalogiem; bez osobnej konfiguracji zostaje konto główne.
-        /// </summary>
-        private DataAccount PicturesAccount =>
-            string.IsNullOrWhiteSpace(_credentials.PicturesCustomerNumber)
-                ? ProductsAccount
-                : new(_credentials.PicturesCustomerNumber.Trim(), PicturesHttpClientName);
 
         private HttpClient CreateClient(DataAccount account) => _httpClientFactory.CreateClient(account.HttpClientName);
 

@@ -1,4 +1,4 @@
-namespace JSAGROSyncServices.Products.Settings
+﻿namespace JSAGROSyncServices.Products.Settings
 {
     /// <summary>
     /// Dostęp do API Inter Cars. Token OAuth2 (client_credentials) serwis pobiera sam
@@ -65,15 +65,5 @@ namespace JSAGROSyncServices.Products.Settings
 
         public string DataPassword { get; set; } = string.Empty;
 
-        /// <summary>
-        /// Osobne konto na serwerze wymiany dla katalogu <c>Pictures</c>. Konto rolnicze ma tylko
-        /// listę asortymentu AGRO - zdjęcia wystawia konto z pełnym katalogiem. Puste pole oznacza,
-        /// że zdjęcia bierzemy z tego samego konta co resztę plików.
-        /// </summary>
-        public string PicturesCustomerNumber { get; set; } = string.Empty;
-
-        public string PicturesUser { get; set; } = string.Empty;
-
-        public string PicturesPassword { get; set; } = string.Empty;
     }
 }

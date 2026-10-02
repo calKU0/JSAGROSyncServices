@@ -20,6 +20,13 @@ namespace JSAGROSyncServices.Products.Helpers
         /// </summary>
         bool RequiresCatalogProduct => false;
 
+        /// <summary>
+        /// Czy oferty tego dostawcy mają własną galerię. Przy <c>false</c> nie pobieramy ani nie
+        /// wysyłamy zdjęć: galerię pokazuje produkt z katalogu Allegro, pod który oferta jest
+        /// podpięta, a wysłanie własnych zdjęć tylko by ją nadpisało.
+        /// </summary>
+        bool UsesOwnImages => true;
+
         ProductOfferRequest BuildOffer(RolmarProduct product);
 
         ProductOfferRequest PatchOffer(AllegroOffer offer, bool keepCurrentPrice);

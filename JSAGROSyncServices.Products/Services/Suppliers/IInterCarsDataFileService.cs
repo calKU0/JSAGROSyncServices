@@ -1,7 +1,6 @@
-namespace JSAGROSyncServices.Products.Services.Suppliers
+﻿namespace JSAGROSyncServices.Products.Services.Suppliers
 {
     /// <summary>Zdjęcia jednego produktu z pliku wymiany, w kolejności ustalonej przez dostawcę.</summary>
-    public sealed record InterCarsProductImages(string Sku, IReadOnlyList<string> Urls);
 
     /// <summary>
     /// Pliki CSV wystawiane przez Inter Cars pod <c>data.webapi.intercars.eu</c>. API nie umie
@@ -16,11 +15,5 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         /// bo bez filtra do bazy trafiłby cały, kilkumilionowy katalog Inter Cars.
         /// </summary>
         Task<HashSet<string>?> GetAllowedSkusAsync(CancellationToken ct = default);
-
-        /// <summary>
-        /// Adresy zdjęć produktów (plik <c>Pictures</c>), wyłącznie dla podanych SKU.
-        /// Plik obejmuje cały katalog i ma ponad milion wierszy, więc filtrujemy go w trakcie czytania.
-        /// </summary>
-        Task<List<InterCarsProductImages>> GetImagesAsync(IReadOnlySet<string> skus, CancellationToken ct = default);
     }
 }

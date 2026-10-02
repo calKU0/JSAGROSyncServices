@@ -40,23 +40,11 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
         /// <summary>Zabezpieczenie przed cyklem w drzewie kategorii od dostawcy.</summary>
         private const int MaxTreeDepth = 30;
-
-        /// <summary>Klient HTTP do pobierania zdjęć - bez tokenu, bo host zdjęć nie wymaga autoryzacji.</summary>
-        public const string ImagesHttpClientName = "InterCarsImages";
-
-        /// <summary>Ile zdjęć pobierać równolegle. Zdjęcia idą z osobnego hosta, bez limitów API.</summary>
-        private const int ImageParallelism = 8;
-
-        /// <summary>Co ile produktów wypisać postęp pobierania zdjęć.</summary>
-        private const int ImageProgressEvery = 500;
-
         private readonly HttpClient _http;
         private readonly IProductRepository _productRepo;
         private readonly ISupplierCategoryRepository _categoryRepo;
         private readonly ISyncCategoryRepository _syncCategoryRepo;
-        private readonly IImageRepository _imageRepo;
         private readonly IInterCarsDataFileService _dataFiles;
-        private readonly IHttpClientFactory _httpClientFactory;
         private readonly ServiceContext _service;
         private readonly InterCarsApiCredentials _api;
         private readonly AppSettings _appSettings;
@@ -72,9 +60,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             IProductRepository productRepo,
             ISupplierCategoryRepository categoryRepo,
             ISyncCategoryRepository syncCategoryRepo,
-            IImageRepository imageRepo,
             IInterCarsDataFileService dataFiles,
-            IHttpClientFactory httpClientFactory,
             ServiceContext service,
             IOptions<InterCarsApiCredentials> api,
             IOptions<AppSettings> appSettings,
@@ -84,9 +70,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             _productRepo = productRepo;
             _categoryRepo = categoryRepo;
             _syncCategoryRepo = syncCategoryRepo;
-            _imageRepo = imageRepo;
             _dataFiles = dataFiles;
-            _httpClientFactory = httpClientFactory;
             _service = service;
             _api = api.Value;
             _appSettings = appSettings.Value;
@@ -419,118 +403,6 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 _logger.LogError(ex, "Syncing stock from Inter Cars failed.");
-            }
-        }
-
-        // ---------------------------------------------------------------- zdjecia
-
-        public async Task SyncImagesAsync(CancellationToken ct = default)
-        {
-            int downloaded = 0, reused = 0, failed = 0, removed = 0;
-            string? lastError = null;
-
-            try
-            {
-                // Produktow wycofanych u dostawcy nie wystawiamy, wiec nie ma po co pobierac ich zdjec.
-                var products = (await _productRepo.GetAllProducts(ct))
-                    .Where(p => !string.IsNullOrWhiteSpace(p.Code) && p.ArchivedAt == null)
-                    .GroupBy(p => p.Code, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-
-                if (products.Count == 0)
-                {
-                    _logger.LogInformation("No Inter Cars products in the database - skipping image sync.");
-                    return;
-                }
-
-                // Adresy zdjęć są wyłącznie w pliku wymiany - API katalogu ich nie zwraca.
-                var images = await _dataFiles.GetImagesAsync(products.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), ct);
-
-                if (images.Count == 0)
-                {
-                    _logger.LogWarning("The Inter Cars pictures file has no photos for products in our database.");
-                    return;
-                }
-
-                var processed = 0;
-                // Kody produktow z nieudanym pobraniem - sama liczba nie mowi, ktore oferty
-                // pojada bez zdjec.
-                var failedCodes = new ConcurrentBag<string>();
-                var sw = Stopwatch.StartNew();
-
-                // Zdjęcia leżą na osobnym, publicznym hoście. Klient API dokłada do każdego zapytania
-                // token OAuth2, więc do pobierania zdjęć bierzemy klienta bez żadnej autoryzacji -
-                // nie ma powodu wysyłać poświadczeń poza host API.
-                var imageClient = _httpClientFactory.CreateClient(ImagesHttpClientName);
-
-                await Parallel.ForEachAsync(
-                    images,
-                    new ParallelOptions { MaxDegreeOfParallelism = ImageParallelism, CancellationToken = ct },
-                    async (item, token) =>
-                    {
-                        var product = products[item.Sku];
-
-                        try
-                        {
-                            // Pobieramy tylko te zdjęcia, których jeszcze nie ma na dysku.
-                            var result = await ImageHelper.SaveNewImagesAsync(
-                                imageClient, item.Urls.Cast<string?>().ToList(), product.Id, _service.ImagesFolder, token);
-
-                            // Zmieniony zestaw plikow unmiewaznia adresy wyslane juz do Allegro -
-                            // bez tego oferta trzymalaby stara galerie, bo wysylamy tylko to,
-                            // czego jeszcze nie ma.
-                            if (result.Downloaded > 0 || result.Removed > 0)
-                                await _imageRepo.DeleteProductImagesAsync(product.Id, token);
-
-                            if (result.Failed > 0)
-                            {
-                                failedCodes.Add(product.Code);
-
-                                if (result.LastError != null)
-                                    lastError = result.LastError;
-                            }
-
-                            Interlocked.Add(ref downloaded, result.Downloaded);
-                            Interlocked.Add(ref reused, result.Reused);
-                            Interlocked.Add(ref failed, result.Failed);
-                            Interlocked.Add(ref removed, result.Removed);
-                        }
-                        catch (Exception ex) when (!token.IsCancellationRequested)
-                        {
-                            Interlocked.Add(ref failed, item.Urls.Count);
-                            failedCodes.Add(product.Code);
-                            _logger.LogError(ex, "Downloading images failed for {Code}.", product.Code);
-                        }
-                        finally
-                        {
-                            // Krok potrafi trwac dlugo - bez postepu log milczy i nie wiadomo, czy cos sie dzieje.
-                            var done = Interlocked.Increment(ref processed);
-
-                            if (done % ImageProgressEvery == 0)
-                            {
-                                _logger.LogInformation(
-                                    "Inter Cars images progress: {Done}/{Total} products, downloaded {Downloaded}, present {Reused}, failed {Failed} ({Elapsed}).",
-                                    done, images.Count, Volatile.Read(ref downloaded), Volatile.Read(ref reused), Volatile.Read(ref failed), sw.Elapsed);
-                            }
-                        }
-                    });
-
-                sw.Stop();
-
-                if (failed > 0)
-                {
-                    _logger.LogWarning(
-                        "Downloading {Failed} Inter Cars images failed for {Products} products (last error: {Error}). Existing files were kept. Products: {Codes}.",
-                        failed, failedCodes.Distinct().Count(), lastError ?? "-", Utils.FormatCodes(failedCodes));
-                }
-
-                _logger.LogInformation(
-                    "Inter Cars images downloaded: {Downloaded}, already present: {Reused}, failed: {Failed}, removed: {Removed}. Took {Elapsed}.",
-                    downloaded, reused, failed, removed, sw.Elapsed);
-            }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            {
-                _logger.LogError(ex, "Syncing images from Inter Cars failed.");
             }
         }
 
