@@ -70,7 +70,10 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             {
                                 ProductId = product.Id,
                                 CategoryParameterId = catParam.Id,
-                                IsForProduct = catParam.DescribesProduct,
+                                // Parametr wymagany na ofercie musi z nią pojechać, nawet jeśli
+                                // opisuje produkt - inaczej Allegro odrzuca ofertę komunikatem
+                                // "Uzupełnij parametry obowiązkowe", choć wartość mamy zapisaną.
+                                IsForProduct = catParam.DescribesProduct && !catParam.Required,
                                 Value = value!
                             });
                         }

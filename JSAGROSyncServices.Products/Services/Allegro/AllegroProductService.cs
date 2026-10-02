@@ -2,6 +2,7 @@
 using JSAGROSyncServices.Contracts.DTOs.Allegro;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Products.Helpers;
 using JSAGROSyncServices.Infrastructure.Services;
 using JSAGROSyncServices.Products.Configuration;
 
@@ -53,19 +54,29 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         private readonly ILogger<AllegroProductService> _logger;
         private readonly AllegroApiClient _apiClient;
         private readonly IProductRepository _productRepository;
+        private readonly IOfferFactory _offerFactory;
         private readonly ServiceContext _service;
 
         public AllegroProductService(
             ILogger<AllegroProductService> logger,
             AllegroApiClient apiClient,
             IProductRepository productRepository,
+            IOfferFactory offerFactory,
             ServiceContext serviceContext)
         {
             _logger = logger;
             _apiClient = apiClient;
             _productRepository = productRepository;
+            _offerFactory = offerFactory;
             _service = serviceContext;
         }
+
+        /// <summary>
+        /// Czy produkt z katalogu musi mieć własne zdjęcia. Dotyczy dostawców, którzy nie wysyłają
+        /// swojej galerii (Inter Cars): oferta bierze zdjęcia z produktu, więc podpięcie jej pod
+        /// produkt bez zdjęć kończy się odrzuceniem - Allegro wymaga co najmniej jednego.
+        /// </summary>
+        private bool RequiresCatalogImages => !_offerFactory.UsesOwnImages;
 
         public async Task SearchProducts(CancellationToken ct = default)
         {
@@ -207,6 +218,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
             var candidates = (result?.Products ?? []).Take(MaxCandidates)
                 .Where(c => c.Id != null && c.Category?.Id != null)
+                .Where(c => !RequiresCatalogImages || c.Images.Count > 0)
                 .ToList();
 
             // Trafienie w "Numer katalogowy części" jest pewniejsze niż w numer zamiennika czy

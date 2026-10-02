@@ -974,6 +974,28 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             if (code == "OfferWithoutProductException" || code == "ProductNotFoundExceptionForOffer")
                 return await RelinkCatalogProduct(product, offerId);
 
+            // Oferta bez galerii: u dostawcy bez własnych zdjęć pokazuje ją produkt z katalogu,
+            // a ten żadnych nie ma. Odpinamy go - wyszukiwanie pomija kandydatów bez zdjęć,
+            // więc albo znajdzie się produkt z galerią, albo oferta zaczeka, zamiast wracać
+            // z tym samym błędem w każdym cyklu.
+            if (code == "ConstraintViolationException.GallerySize" && !_offerFactory.UsesOwnImages)
+            {
+                if (!string.IsNullOrWhiteSpace(product.AllegroId))
+                {
+                    await _productRepo.UpdateProductAllegroId(product.Id, null, product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture), null, CancellationToken.None);
+                    product.AllegroId = null;
+                }
+
+                if (!string.IsNullOrEmpty(offerId))
+                    await _offerRepo.UpdateProductId(offerId, null, CancellationToken.None);
+
+                _logger.LogWarning(
+                    "Allegro catalog product for {Code} has no images - unlinked, the offer waits for one with a gallery.",
+                    product.Code);
+
+                return false;
+            }
+
             if (code == "MultipleProductsFoundException" && !string.IsNullOrEmpty(offerId))
             {
                 await _offerRepo.UpdateProductId(offerId, null, CancellationToken.None);
