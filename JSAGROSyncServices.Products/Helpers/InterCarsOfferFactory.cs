@@ -124,6 +124,7 @@ namespace JSAGROSyncServices.Products.Helpers
                 // producenta odpowiedzialnego ani informacji o bezpieczenstwie (GPSR).
                 //Name = BuildOfferName(product),
                 ProductSet = BuildProductSet(product, null),
+                Category = new Category { Id = product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture) },
                 Stock = new Stock
                 {
                     Available = Convert.ToInt32(Math.Floor(product.InStock)),
