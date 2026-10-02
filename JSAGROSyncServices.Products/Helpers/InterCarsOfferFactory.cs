@@ -122,8 +122,8 @@ namespace JSAGROSyncServices.Products.Helpers
             {
                 // Bez productSet Allegro odrzuca patch: nie widzi podpietego produktu,
                 // producenta odpowiedzialnego ani informacji o bezpieczenstwie (GPSR).
-                Name = BuildOfferName(product),
-                ProductSet = BuildProductSet(product, offer.ProductId),
+                //Name = BuildOfferName(product),
+                ProductSet = BuildProductSet(product, null),
                 Stock = new Stock
                 {
                     Available = Convert.ToInt32(Math.Floor(product.InStock)),

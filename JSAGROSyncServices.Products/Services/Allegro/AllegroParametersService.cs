@@ -70,10 +70,11 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             {
                                 ProductId = product.Id,
                                 CategoryParameterId = catParam.Id,
-                                // Parametr wymagany na ofercie musi z nią pojechać, nawet jeśli
-                                // opisuje produkt - inaczej Allegro odrzuca ofertę komunikatem
-                                // "Uzupełnij parametry obowiązkowe", choć wartość mamy zapisaną.
-                                IsForProduct = catParam.DescribesProduct && !catParam.Required,
+                                // O sekcji decyduje wyłącznie DescribesProduct. Parametr opisujący
+                                // produkt Allegro przyjmuje tylko w sekcji produktu - wysłany przy
+                                // ofercie wraca błędem "should not be specified as in section offer",
+                                // nawet gdy kategoria oznacza go jako wymagany.
+                                IsForProduct = catParam.DescribesProduct,
                                 Value = value!
                             });
                         }
