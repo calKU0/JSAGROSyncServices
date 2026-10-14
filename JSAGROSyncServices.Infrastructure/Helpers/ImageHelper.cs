@@ -4,7 +4,9 @@ using System.Text.RegularExpressions;
 
 namespace JSAGROSyncServices.Infrastructure.Helpers
 {
-    public record ImageSyncResult(int Downloaded, int Reused, int Failed, int Removed, string? LastError = null);
+    /// <param name="Moved">Zdjecia, ktore zmienily pozycje w galerii - zestaw plikow jest ten sam,
+/// ale kolejnosc wyslana do Allegro juz nie.</param>
+    public record ImageSyncResult(int Downloaded, int Reused, int Failed, int Removed, int Moved = 0, string? LastError = null);
 
     public static class ImageHelper
     {
@@ -64,6 +66,7 @@ namespace JSAGROSyncServices.Infrastructure.Helpers
             int downloaded = 0;
             int reused = 0;
             int failed = 0;
+            int moved = 0;
             string? lastError = null;
 
             foreach (var expected in expectedFiles)
@@ -76,7 +79,10 @@ namespace JSAGROSyncServices.Infrastructure.Helpers
                     {
                         // Zdjęcie jest już pobrane, może się jedynie zmienić jego pozycja w kolejności.
                         if (!string.Equals(existingPath, targetPath, StringComparison.OrdinalIgnoreCase))
+                        {
                             File.Move(existingPath, targetPath, overwrite: true);
+                            moved++;
+                        }
 
                         reused++;
                         continue;
@@ -126,7 +132,7 @@ namespace JSAGROSyncServices.Infrastructure.Helpers
                 }
             }
 
-            return new ImageSyncResult(downloaded, reused, failed, removed, lastError);
+            return new ImageSyncResult(downloaded, reused, failed, removed, moved, lastError);
         }
 
         private static string GetUrlHash(string url)

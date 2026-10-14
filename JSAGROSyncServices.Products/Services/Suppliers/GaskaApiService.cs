@@ -424,11 +424,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 return;
 
             // Pobieramy tylko brakujące zdjęcia. Adresy wysłane do Allegro kasujemy dopiero wtedy,
-            // gdy zestaw plików faktycznie się zmienił - inaczej co cykl wgrywalibyśmy te same zdjęcia od nowa.
+            // gdy zestaw plików albo ich kolejność faktycznie się zmieniły - inaczej co cykl
+            // wgrywalibyśmy te same zdjęcia od nowa. Kasujemy je na wszystkich kontach: pliki są
+            // wspólne, a pobiera je tylko to konto, które ciągnie dane od dostawcy.
             var result = await ImageHelper.SaveNewImagesAsync(_http, urls, productId, _service.ImagesFolder, ct);
 
-            if (result.Downloaded > 0 || result.Removed > 0)
-                await _imageRepo.DeleteProductImagesAsync(productId, ct);
+            if (result.Downloaded > 0 || result.Removed > 0 || result.Moved > 0)
+                await _imageRepo.DeleteProductImagesForAllAccountsAsync(productId, ct);
 
             if (result.Failed > 0)
                 _logger.LogWarning("Downloading {Count} images failed for {Code} ({Error}).", result.Failed, product.CodeGaska, result.LastError ?? "-");

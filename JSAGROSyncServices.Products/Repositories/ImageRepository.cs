@@ -67,6 +67,19 @@ namespace JSAGROSyncServices.Products.Repositories
             );
         }
 
+        public async Task<int> DeleteProductImagesForAllAccountsAsync(int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+            connection.Open();
+
+            // NULL w procedurze znaczy "wszystkie konta".
+            return await connection.ExecuteScalarAsync<int>(
+                "AllegroImages_DeleteByProductId",
+                new { ProductId = productId, Account = (int?)null },
+                commandType: CommandType.StoredProcedure
+            );
+        }
+
         public async Task MarkImagesAsConnectedAsync(int productId, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();

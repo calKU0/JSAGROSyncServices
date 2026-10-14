@@ -347,11 +347,12 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                             // Pobieramy tylko te zdjecia, ktorych jeszcze nie mamy na dysku.
                             var result = await ImageHelper.SaveNewImagesAsync(_httpClient, validUrls, product.Id, _service.ImagesFolder, token);
 
-                            // Zmieniony zestaw plikow uniewaznia adresy wyslane juz do Allegro -
-                            // bez tego oferta trzymalaby stara galerie, bo wysylamy tylko to,
-                            // czego jeszcze nie ma.
-                            if (result.Downloaded > 0 || result.Removed > 0)
-                                await _imageRepo.DeleteProductImagesAsync(product.Id, token);
+                            // Zmieniony zestaw plikow albo ich kolejnosc uniewaznia adresy wyslane
+                            // juz do Allegro - bez tego oferta trzymalaby stara galerie, bo wysylamy
+                            // tylko to, czego jeszcze nie ma. Na wszystkich kontach, bo pliki sa
+                            // wspolne, a pobiera je tylko konto ciagnace dane od dostawcy.
+                            if (result.Downloaded > 0 || result.Removed > 0 || result.Moved > 0)
+                                await _imageRepo.DeleteProductImagesForAllAccountsAsync(product.Id, token);
 
                             if (result.Failed > 0)
                             {
