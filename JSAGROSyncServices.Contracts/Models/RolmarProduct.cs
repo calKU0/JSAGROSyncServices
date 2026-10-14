@@ -71,8 +71,10 @@ namespace JSAGROSyncServices.Contracts.Models
         /// <summary>
         /// Specyfikacje produktu. <c>null</c> oznacza "nie znamy ich w tej operacji" - zapis
         /// NIE rusza wtedy specyfikacji w bazie. Pusta lista czyści je, tak jak przy kategoriach.
+        /// Dlatego domyślną wartością jest <c>null</c>, a nie pusta lista: operacja, która
+        /// specyfikacji nie zna, nie może ich przy okazji usunąć.
         /// </summary>
-        public List<ProductSpecification>? Specifications { get; set; } = new();
+        public List<ProductSpecification>? Specifications { get; set; }
         public List<ProductParameter> Parameters { get; set; } = new();
         /// <summary>
         /// Klucze kategorii-lisci dostawcy (Gąska: id z API, Rolmar: znormalizowana ścieżka).

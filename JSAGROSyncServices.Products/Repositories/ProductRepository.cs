@@ -6,6 +6,7 @@ using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Infrastructure.Data;
 using System.Data;
 using JSAGROSyncServices.Infrastructure.Helpers;
+using JSAGROSyncServices.Products.Helpers;
 using JSAGROSyncServices.Products.Settings;
 using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
@@ -43,7 +44,7 @@ namespace JSAGROSyncServices.Products.Repositories
             connection.Open();
 
             if (_service.Company == IntegrationCompany.Gaska)
-                await ApplyGaskaNamingAsync(connection, products);
+                await PrepareGaskaProductsAsync(connection, products);
 
             var table = new DataTable();
             table.Columns.Add("Code", typeof(string));
@@ -109,10 +110,11 @@ namespace JSAGROSyncServices.Products.Repositories
         }
 
         /// <summary>
-        /// Gaska przysyla nazwy wymagajace oczyszczenia (kody JAG, marki, numery zamienne).
-        /// Do tego potrzebne sa dane juz zapisane w bazie, wiec dociagamy je jednym zapytaniem na paczke.
+        /// Gaska przysyla nazwy wymagajace oczyszczenia (kody JAG, marki, numery zamienne), a jej
+        /// lista produktow nie niesie czesci danych, ktore znaja dopiero szczegoly. Jedno i drugie
+        /// wymaga stanu z bazy, wiec dociagamy go jednym zapytaniem na paczke.
         /// </summary>
-        private async Task ApplyGaskaNamingAsync(IDbConnection connection, List<RolmarProduct> products)
+        private async Task PrepareGaskaProductsAsync(IDbConnection connection, List<RolmarProduct> products)
         {
             var codes = products
                 .Select(p => p.Code)
@@ -123,17 +125,17 @@ namespace JSAGROSyncServices.Products.Repositories
             if (codes.Count == 0)
                 return;
 
-            var existingRows = (await connection.QueryAsync<(string Code, string? Substitutes, string? RootBrand)>(
-                @"SELECT rp.Code, rp.Substitutes, pa.Name AS RootBrand
+            var existingRows = (await connection.QueryAsync<(string Code, string? Substitutes, string? Fits, decimal Package, string? RootBrand)>(
+                @"SELECT rp.Code, rp.Substitutes, rp.Fits, rp.Package, pa.Name AS RootBrand
                   FROM RolmarProducts rp
                   LEFT JOIN ProductApplications pa ON pa.ProductId = rp.Id AND pa.ParentID = 0
                   WHERE rp.IntegrationCompany = @IntegrationCompany
                     AND rp.Code IN @Codes",
                 new { IntegrationCompany = _service.Company, Codes = codes })).ToList();
 
-            var substitutesByCode = existingRows
+            var savedByCode = existingRows
                 .GroupBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.Select(x => x.Substitutes).FirstOrDefault(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
             var rootBrandsByCode = existingRows
                 .Where(x => !string.IsNullOrWhiteSpace(x.RootBrand))
@@ -146,15 +148,18 @@ namespace JSAGROSyncServices.Products.Repositories
             foreach (var product in products)
             {
                 rootBrandsByCode.TryGetValue(product.Code, out var rootBrands);
-                substitutesByCode.TryGetValue(product.Code, out var existingSubstitutes);
-                var substitutes = product.Substitutes ?? existingSubstitutes;
+
+                // Lista produktow nie niesie zamiennikow ani wielokrotnosci opakowania - bez
+                // przepisania zapisanych wartosci MERGE wyczyscilby je co cykl.
+                if (savedByCode.TryGetValue(product.Code, out var saved))
+                    SupplierProductMerge.CarryOverDetailOnlyFields(product, saved.Substitutes, saved.Package, saved.Fits);
 
                 product.Name = FixName(
                     product.Name,
                     product.Code,
                     product.SupplierName,
                     rootBrands,
-                    substitutes?.Split(',').Distinct().ToList());
+                    product.Substitutes?.Split(',').Distinct().ToList());
             }
         }
 

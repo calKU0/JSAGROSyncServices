@@ -21,6 +21,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
         private readonly ServiceContext _service;
         private const int UpsertBatchSize = 1000;
 
+        /// <summary>Co ile pobranych produktow zapisujemy znacznik pobrania szczegolow.</summary>
+        private const int DetailMarkBatchSize = 500;
+
         private readonly ILogger<GaskaApiService> _logger;
         private readonly IProductRepository _productRepo;
         private readonly IImageRepository _imageRepo;
@@ -300,6 +303,11 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
             int updated = 0, failed = 0;
             var sw = Stopwatch.StartNew();
 
+            // Kolejka szczegolow ustawia produkty od najdawniej odswiezanych, wiec po udanym
+            // pobraniu musimy odnotowac znacznik - inaczej te same produkty staly na jej czole
+            // w kazdym przebiegu, a reszta katalogu nigdy by na nie trafila.
+            var fetchedCodes = new List<string>();
+
             foreach (var productId in productsToUpdate)
             {
                 try
@@ -348,6 +356,13 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                         ct);
 
                     updated++;
+                    fetchedCodes.Add(existingProduct.Code);
+
+                    if (fetchedCodes.Count >= DetailMarkBatchSize)
+                    {
+                        await _productRepo.MarkDetailsFetched(fetchedCodes, ct);
+                        fetchedCodes.Clear();
+                    }
 
                     _logger.LogDebug("Product details updated for {ProductCode}.", existingProduct.Code);
                 }
@@ -366,6 +381,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                         await Task.Delay(TimeSpan.FromSeconds(_apiSettings.Value.ProductInterval), ct);
                 }
             }
+
+            if (fetchedCodes.Count > 0)
+                await _productRepo.MarkDetailsFetched(fetchedCodes, ct);
 
             _logger.LogInformation("Gąska product details: updated {Updated}, failed {Failed}. Took {Elapsed}.", updated, failed, sw.Elapsed);
         }
@@ -416,7 +434,12 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 _logger.LogWarning("Downloading {Count} images failed for {Code} ({Error}).", result.Failed, product.CodeGaska, result.LastError ?? "-");
         }
 
-        private static RolmarProduct MapToRolmarProduct(ApiProducts product)
+        /// <summary>
+        /// Produkt z listy kategorii. Lista nie niesie parametrow ani kategorii, wiec
+        /// <see cref="RolmarProduct.Specifications"/> i <see cref="RolmarProduct.CategoryKeys"/>
+        /// zostaja <c>null</c> - zapis nie moze ruszac danych, ktorych ta odpowiedz nie zna.
+        /// </summary>
+        internal static RolmarProduct MapToRolmarProduct(ApiProducts product)
         {
             return new RolmarProduct
             {
