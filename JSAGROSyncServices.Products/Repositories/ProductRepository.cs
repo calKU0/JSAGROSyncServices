@@ -302,7 +302,7 @@ namespace JSAGROSyncServices.Products.Repositories
         {
             using var conn = _context.CreateConnection();
 
-            return await conn.ExecuteScalarAsync<int>(
+            var result = await conn.QuerySingleAsync<ArchiveMissingResult>(
                 new CommandDefinition(
                     "RolmarProducts_ArchiveMissing",
                     new
@@ -314,6 +314,21 @@ namespace JSAGROSyncServices.Products.Repositories
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 900,
                     cancellationToken: ct));
+
+            // Bez tego "zarchiwizowano 0" nie odrozniało braku kandydatow od wyciecia ich filtrem kategorii.
+            if (result.SkippedOutsideCategories > 0)
+                _logger.LogInformation(
+                    "{Count} products have not been returned by the supplier beyond the grace period but sit outside the configured categories - left alone.",
+                    result.SkippedOutsideCategories);
+
+            return result.Archived;
+        }
+
+        /// <summary>Wynik archiwizacji: ile produktow oznaczono i ile pominiely kategorie.</summary>
+        private sealed class ArchiveMissingResult
+        {
+            public int Archived { get; set; }
+            public int SkippedOutsideCategories { get; set; }
         }
 
         /// <summary>
