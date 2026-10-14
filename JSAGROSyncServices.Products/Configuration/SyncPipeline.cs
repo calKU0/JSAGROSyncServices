@@ -63,6 +63,6 @@
         public int DailyWindowStartHour { get; init; } = 2;
 
         /// <summary>Godzina, do której może ruszyć krok dzienny.</summary>
-        public int DailyWindowEndHour { get; init; } = 8;
+        public int DailyWindowEndHour { get; init; } = 24;
     }
 }
