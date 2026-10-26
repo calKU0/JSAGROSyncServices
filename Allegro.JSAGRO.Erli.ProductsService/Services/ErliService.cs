@@ -238,7 +238,9 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Services
         /// <summary>Czas dostawy uzywany, gdy cennik jest zakladany od zera.</summary>
         private static DeliveryTime DefaultDeliveryTime() => new()
         {
-            Unit = "DAY",
+            // Erli przyjmuje wylacznie "days" albo "hours" - inna wartosc konczy sie bledem
+            // "prices[0] does not match any of the allowed types".
+            Unit = "days",
             MinPeriod = 1,
             MaxPeriod = 2
         };
