@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\JSAGROSyncServices.Products\JSAGROSyncServices.Products.csproj" />
     <ProjectReference Include="..\JSAGROSyncServices.Infrastructure\JSAGROSyncServices.Infrastructure.csproj" />
+    <ProjectReference Include="..\Allegro.JSAGRO.InPost.ProductsService\Allegro.JSAGRO.InPost.ProductsService.csproj" />
   </ItemGroup>
 
 </Project>
