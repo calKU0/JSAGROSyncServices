@@ -67,15 +67,9 @@ namespace ServiceManager
 
                     _configFieldUiBuilder.AddFields(groupPanel, existingFields, config);
 
-                    if (group.Key == "Narzuty")
-                    {
-                        LoadMarginRanges(config, groupPanel);
-                    }
-
                     groupBox.Content = groupPanel;
                     ConfigStackPanel.Children.Add(groupBox);
                 }
-                LoadDeliveries(config);
 
                 var saveButton = new Button
                 {
@@ -104,7 +98,7 @@ namespace ServiceManager
 
         private bool FieldExists(IConfiguration config, ConfigField field)
         {
-            if (field.FieldType == ConfigFieldType.StringList || field.FieldType == ConfigFieldType.IntList)
+            if (field.FieldType is ConfigFieldType.StringList or ConfigFieldType.IntList or ConfigFieldType.Table)
             {
                 // Pusta tablica jest poprawną konfiguracją, a IConfiguration jej nie widzi -
                 // dlatego zaglądamy wprost do pliku.
@@ -114,53 +108,6 @@ namespace ServiceManager
             }
 
             return config.GetSection(field.Key).Exists();
-        }
-
-        private void LoadDeliveries(IConfiguration config)
-        {
-            var section = config.GetSection("AppSettings:Deliveries");
-            _deliveriesSectionExists = section.Exists();
-            if (!_deliveriesSectionExists)
-            {
-                _deliveryEditor = null;
-                return;
-            }
-
-            _deliveries = section.Get<List<Delivery>>() ?? new List<Delivery>();
-
-            var groupBox = new GroupBox
-            {
-                Header = "Dostawy",
-                Margin = new Thickness(0, 6, 0, 6)
-            };
-
-            _deliveryEditor = new DeliveryEditor();
-            _deliveryEditor.SetDeliveries(_deliveries);
-            groupBox.Content = _deliveryEditor;
-            ConfigStackPanel.Children.Add(groupBox);
-        }
-
-        private void LoadMarginRanges(IConfiguration config, StackPanel groupPanel)
-        {
-            if (!config.GetSection("PriceSettings").Exists())
-            {
-                _marginRangeEditor = null;
-                return;
-            }
-
-            var section = config.GetSection("PriceSettings:MarginRanges");
-            _marginRangesSectionExists = section.Exists();
-            if (!_marginRangesSectionExists)
-            {
-                _marginRangeEditor = null;
-                return;
-            }
-
-            _marginRanges = section.Get<List<MarginRange>>() ?? new List<MarginRange>();
-
-            _marginRangeEditor = new MarginRangeEditor();
-            _marginRangeEditor.SetRanges(_marginRanges);
-            groupPanel.Children.Add(_marginRangeEditor);
         }
 
         private void BtnReloadConfig_Click(object sender, RoutedEventArgs e)
@@ -180,23 +127,8 @@ namespace ServiceManager
                     .CollectValues(ConfigStackPanel, ConfigFieldDefinitions.AllFields);
                 errors.AddRange(fieldErrors);
 
-                var deliveries = BuildDeliveries(errors);
-                var marginRanges = BuildMarginRanges(errors);
-
                 if (!TryShowValidationErrors(errors))
                     return;
-
-                if (_deliveriesSectionExists)
-                {
-                    valuesToSave["AppSettings:Deliveries"] =
-                        JsonSerializer.Serialize(deliveries);
-                }
-
-                if (_marginRangesSectionExists)
-                {
-                    valuesToSave["PriceSettings:MarginRanges"] =
-                        JsonSerializer.Serialize(marginRanges);
-                }
 
                 SaveAppSettings(_selectedService.ExternalConfigPath, valuesToSave);
 
@@ -208,40 +140,6 @@ namespace ServiceManager
             }
         }
 
-
-        private List<Delivery> BuildDeliveries(List<string> errors)
-        {
-            var deliveries = new List<Delivery>();
-
-            if (!_deliveriesSectionExists)
-                return deliveries;
-
-            if (_deliveryEditor == null)
-                return deliveries;
-
-            var inputs = _deliveryEditor.GetInputs();
-
-            var (validated, validationErrors) = DeliveryValidator.Validate(inputs);
-            errors.AddRange(validationErrors);
-            return validated;
-        }
-
-        private List<MarginRange> BuildMarginRanges(List<string> errors)
-        {
-            var marginRanges = new List<MarginRange>();
-
-            if (!_marginRangesSectionExists)
-                return marginRanges;
-
-            if (_marginRangeEditor == null)
-                return marginRanges;
-
-            var inputs = _marginRangeEditor.GetInputs();
-
-            var (validated, validationErrors) = MarginRangeValidator.Validate(inputs);
-            errors.AddRange(validationErrors);
-            return validated;
-        }
 
         private bool TryShowValidationErrors(List<string> errors)
         {

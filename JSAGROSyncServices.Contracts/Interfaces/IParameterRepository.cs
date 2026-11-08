@@ -31,5 +31,14 @@ namespace JSAGROSyncServices.Contracts.Interfaces
         /// </summary>
         Task<bool> UpdateParameterByName(int productId, string parameterName, string value, CancellationToken ct);
         Task DeleteParameter(string categoryParameterName, int productId, CancellationToken ct);
+
+        /// <summary>
+        /// Ustawia wartość parametru po nazwie wskazaną przez Allegro: poprawia istniejące wiersze
+        /// i dokłada brakujące w kategorii domyślnej produktu i w kategorii oferty. Parametr produktu
+        /// przy produkcie z katalogu włącza wysyłanie parametrów produktu razem z jego id -
+        /// inaczej poprawiona wartość nigdy nie trafiłaby do Allegro.
+        /// Zwraca true, gdy cokolwiek się zmieniło.
+        /// </summary>
+        Task<bool> SetParameterByName(int productId, int offerCategoryId, string parameterName, string value, CancellationToken ct);
     }
 }

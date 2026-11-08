@@ -81,8 +81,10 @@ namespace JSAGROSyncServices.Products
 
                     services.AddScoped<IAllegroOfferService, AllegroOfferService>();
                     services.AddScoped<IAllegroCategoryService, AllegroCategoryService>();
+                    services.AddScoped<AllegroCategoryPathService>();
                     services.AddScoped<IAllegroParametersService, AllegroParametersService>();
                     services.AddScoped<IAllegroProductService, AllegroProductService>();
+                    services.AddScoped<OfferCategoryAligner>();
                     services.AddScoped<IAllegroResponsibleProducerService, AllegroResponsibleProducerService>();
                     services.AddScoped<IAllegroResponsiblePersonService, AllegroResponsiblePersonService>();
                     services.AddScoped<IAllegroShippingRateService, AllegroShippingRateService>();

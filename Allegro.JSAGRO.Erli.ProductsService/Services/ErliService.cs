@@ -139,8 +139,15 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Services
 
         public async Task SyncDeliveriesWithErli(CancellationToken ct = default)
         {
-            var deliveryMethods = await _deliveryRepo.GetAllegroDeliveryMethods();
-            var erliPriceLists = await _erliClient.GetAsync<List<ErliPriceListResponse>>("delivery/priceListsDetails", ct);
+            // Wszystkie cenniki Allegro, także One Fulfillment. Allegro trzyma część z nich w kilku
+            // kopiach o tej samej nazwie (różniących się spacjami) - pierwsza kopia zakłada cennik
+            // w Erli, kolejne go aktualizują, zamiast próbować zakładać go drugi raz (błąd 409).
+            var deliveryMethods = (await _deliveryRepo.GetAllegroDeliveryMethods())
+                .Where(m => !string.IsNullOrWhiteSpace(m.Name))
+                .ToList();
+
+            var erliPriceLists = await _erliClient.GetAsync<List<ErliPriceListResponse>>("delivery/priceListsDetails", ct)
+                ?? new List<ErliPriceListResponse>();
 
             int created = 0, updated = 0, skipped = 0, failed = 0;
 
@@ -150,8 +157,7 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Services
 
                 try
                 {
-                    var existingPriceList = erliPriceLists?.FirstOrDefault(priceList =>
-                        string.Equals(priceList.Name?.Trim(), deliveryMethod.Name?.Trim(), StringComparison.OrdinalIgnoreCase));
+                    var existingPriceList = FindPriceList(erliPriceLists, deliveryMethod.Name);
 
                     var prices = BuildPrices(deliveryMethod, existingPriceList);
 
@@ -164,16 +170,34 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Services
 
                     if (existingPriceList == null)
                     {
-                        await _erliClient.PostAsync("delivery/priceList", new ErliPriceListCreate
+                        try
                         {
-                            Name = deliveryMethod.Name,
-                            Prices = prices,
-                            ErliProEnabled = false,
-                            NextDayDeliveryEnabled = false
-                        }, ct);
+                            await _erliClient.PostAsync("delivery/priceList", new ErliPriceListCreate
+                            {
+                                Name = deliveryMethod.Name,
+                                Prices = prices,
+                                ErliProEnabled = false,
+                                NextDayDeliveryEnabled = false
+                            }, ct);
 
-                        created++;
-                        continue;
+                            created++;
+
+                            // Nowy cennik musi być widoczny dla kolejnych kopii o tej samej nazwie.
+                            erliPriceLists = await _erliClient.GetAsync<List<ErliPriceListResponse>>("delivery/priceListsDetails", ct)
+                                ?? new List<ErliPriceListResponse>();
+                            continue;
+                        }
+                        catch (ErliApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Conflict)
+                        {
+                            // Erli zna już cennik o tej nazwie (np. zapisany w innej pisowni) - odświeżamy
+                            // listę i aktualizujemy go, zamiast zgłaszać ten sam konflikt w każdym cyklu.
+                            erliPriceLists = await _erliClient.GetAsync<List<ErliPriceListResponse>>("delivery/priceListsDetails", ct)
+                                ?? new List<ErliPriceListResponse>();
+                            existingPriceList = FindPriceList(erliPriceLists, deliveryMethod.Name);
+
+                            if (existingPriceList == null)
+                                throw;
+                        }
                     }
 
                     await _erliClient.PatchAsync($"delivery/priceList/{existingPriceList.Id}", new ErliPriceListPatch
@@ -195,6 +219,17 @@ namespace Allegro.JSAGRO.Erli.ProductsService.Services
             _logger.LogInformation("Erli delivery price lists - created: {Created}, updated: {Updated}, skipped: {Skipped}, failed: {Failed}.",
                 created, updated, skipped, failed);
         }
+
+        /// <summary>Cennik Erli o tej samej nazwie - bez względu na wielkość liter i wielokrotne spacje.</summary>
+        private static ErliPriceListResponse? FindPriceList(IEnumerable<ErliPriceListResponse> priceLists, string? name)
+        {
+            var key = PriceListKey(name);
+            return priceLists.FirstOrDefault(p => PriceListKey(p.Name) == key);
+        }
+
+        /// <summary>Nazwa cennika do porównań: bez skrajnych i zwielokrotnionych spacji, małymi literami.</summary>
+        internal static string PriceListKey(string? name) =>
+            string.Join(' ', (name ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
 
         private List<Prices> BuildPrices(AllegroDeliveryMethod deliveryMethod, ErliPriceListResponse? existingPriceList)
         {

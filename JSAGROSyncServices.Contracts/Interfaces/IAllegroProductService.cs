@@ -19,6 +19,16 @@
         /// produktu zgadza się z naszym - inaczej (null, null). Wyszukiwarka Allegro dopasowuje
         /// przybliżenie i bez tego sprawdzenia podpinała produkty niemające z naszym nic wspólnego.
         /// </summary>
-        Task<CatalogProductMatch> FindCatalogProduct(Models.RolmarProduct product, CancellationToken ct);
+        /// <param name="product">Produkt dostawcy.</param>
+        /// <param name="ct">Token anulowania.</param>
+        /// <param name="excludedIds">Id produktów z katalogu, których nie wolno zwrócić (np. bieżący, niekompletny).</param>
+        /// <param name="requiredParameters">
+        /// Nazwy parametrów, które produkt z katalogu musi mieć uzupełnione - te, których brak zgłosiło Allegro.
+        /// </param>
+        Task<CatalogProductMatch> FindCatalogProduct(Models.RolmarProduct product, CancellationToken ct,
+            IReadOnlyCollection<string>? excludedIds = null, IReadOnlyCollection<string>? requiredParameters = null);
+
+        /// <summary>Parametry kategorii Allegro (z pamięci podręcznej). <c>null</c>, gdy nie udało się ich pobrać.</summary>
+        Task<IReadOnlyList<DTOs.Allegro.CategoryParameterItem>?> GetCategoryParameters(string categoryId, CancellationToken ct);
     }
 }

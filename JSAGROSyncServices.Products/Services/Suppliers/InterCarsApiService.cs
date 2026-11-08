@@ -116,12 +116,20 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
             var sw = Stopwatch.StartNew();
             var categoriesBySku = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            int fetched = 0, saved = 0, skipped = 0, outsideWhitelist = 0, failedCategories = 0;
+            int fetched = 0, saved = 0, skipped = 0, outsideWhitelist = 0, failedCategories = 0, splitCategories = 0;
 
-            foreach (var categoryKey in categoriesToFetch)
+            // Kategoria większa niż limit API (10 000 produktów) jest dzielona na podkategorie,
+            // łącznie z liśćmi (GenericArticle). Liście nie zawsze pokrywają całego rodzica, więc
+            // rodzica i tak pobieramy - podkategorie dokładają produkty, których nie było na jego
+            // pierwszych 100 stronach.
+            var queue = new Queue<string>(categoriesToFetch);
+            var visited = new HashSet<string>(categoriesToFetch, StringComparer.OrdinalIgnoreCase);
+
+            while (queue.Count > 0)
             {
                 ct.ThrowIfCancellationRequested();
 
+                var categoryKey = queue.Dequeue();
                 var result = await FetchCategoryProductsAsync(categoryKey, allowedSkus, categoriesBySku, ct);
 
                 fetched += result.Fetched;
@@ -129,12 +137,32 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 skipped += result.Skipped;
                 outsideWhitelist += result.OutsideWhitelist;
 
-                if (!result.Completed)
+                if (result.Completed)
+                    continue;
+
+                failedCategories++;
+
+                var children = result.Truncated
+                    ? tree.ChildrenOf(categoryKey).Where(visited.Add).ToList()
+                    : new List<string>();
+
+                if (children.Count > 0)
                 {
-                    failedCategories++;
+                    splitCategories++;
+                    children.ForEach(queue.Enqueue);
+
+                    _logger.LogInformation(
+                        "Category {Category} exceeds the Inter Cars limit of {Limit} products - fetching its {Count} subcategories as well.",
+                        categoryKey, result.Fetched, children.Count);
+                }
+                else
+                {
                     _logger.LogWarning("Category {Category} was not fetched completely ({Count} products).", categoryKey, result.Fetched);
                 }
             }
+
+            if (splitCategories > 0)
+                _logger.LogInformation("{Count} categories above the Inter Cars limit were split into subcategories.", splitCategories);
 
             await SaveProductCategoriesAsync(categoriesBySku, ct);
 
@@ -142,7 +170,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
 
             _logger.LogInformation(
                 "Inter Cars products: {Saved} saved, {Skipped} skipped (no price), {Outside} outside the AGRO list, {Fetched} returned from {Categories} categories (incomplete: {Failed}). Took {Elapsed}.",
-                saved, skipped, outsideWhitelist, fetched, categoriesToFetch.Count, failedCategories, sw.Elapsed);
+                saved, skipped, outsideWhitelist, fetched, visited.Count, failedCategories, sw.Elapsed);
 
             await ArchiveMissingProductsAsync(categoriesBySku.Keys, configured, failedCategories, ct);
         }
@@ -213,7 +241,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 catch (Exception ex) when (!ct.IsCancellationRequested)
                 {
                     _logger.LogError(ex, "Fetching page {Page} of Inter Cars category {Category} failed.", page, categoryKey);
-                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: false);
+                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: false, Truncated: false);
                 }
 
                 var returned = response?.Products
@@ -225,7 +253,7 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 // Pusta strona kończy kategorię, ale strona złożona wyłącznie z produktów spoza
                 // listy AGRO - już nie: kolejne strony nadal mogą zawierać nasz asortyment.
                 if (returned.Count == 0)
-                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
+                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true, Truncated: false);
 
                 fetched += returned.Count;
 
@@ -250,22 +278,20 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 }
 
                 if (response?.HasNextPage != true)
-                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true);
+                    return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: true, Truncated: false);
             }
 
             // Niekompletne, choc bez bledu: produktow powyzej limitu nie zobaczylismy, wiec nie
             // wolno ich uznac za wycofane u dostawcy. Completed=true archiwizowaloby cala reszte
             // kategorii razem z jej ofertami.
-            _logger.LogWarning(
-                "Category {Category} is larger than the Inter Cars page limit - only the first {Count} products were fetched. " +
-                "Archiving is skipped this cycle; configure deeper categories to stay under the limit.",
-                categoryKey, (MaxPageNumber + 1) * perPage);
-
-            return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: false);
+            return new CategoryFetchResult(fetched, saved, skipped, outside, Completed: false, Truncated: true);
         }
 
-        /// <summary>Podsumowanie pobrania jednej kategorii katalogu.</summary>
-        private readonly record struct CategoryFetchResult(int Fetched, int Saved, int Skipped, int OutsideWhitelist, bool Completed);
+        /// <summary>
+        /// Podsumowanie pobrania jednej kategorii katalogu. <c>Truncated</c>: kategoria ma więcej
+        /// produktów, niż API pozwala pobrać (10 000) - pobieramy wtedy dodatkowo jej podkategorie.
+        /// </summary>
+        private readonly record struct CategoryFetchResult(int Fetched, int Saved, int Skipped, int OutsideWhitelist, bool Completed, bool Truncated);
 
         /// <summary>
         /// Uzupełnia produkty o cenę i stan, po czym zapisuje je wsadowo. Produkt bez ceny pomijamy -

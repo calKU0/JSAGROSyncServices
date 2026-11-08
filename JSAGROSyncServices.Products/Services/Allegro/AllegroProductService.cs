@@ -141,8 +141,11 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 found, notFound, failed, products.Count, sw.Elapsed);
         }
 
-        public async Task<CatalogProductMatch> FindCatalogProduct(RolmarProduct product, CancellationToken ct)
+        public async Task<CatalogProductMatch> FindCatalogProduct(RolmarProduct product, CancellationToken ct,
+            IReadOnlyCollection<string>? excludedIds = null, IReadOnlyCollection<string>? requiredParameters = null)
         {
+            var mustHave = requiredParameters ?? [];
+
             var identifiers = ProductIdentifiers(product);
 
             // Bez własnego numeru katalogowego nie ma czym potwierdzić trafienia, a podpięcie
@@ -150,10 +153,20 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             if (identifiers.Count == 0)
                 return CatalogProductMatch.None;
 
+            // Produkty, które Allegro odłączyło od oferty ("Produkt nie pasuje do oferty") - nie podpinamy ich ponownie.
+            // Do tego produkty wykluczone przez wołającego (np. bieżący, bez kompletu parametrów obowiązkowych).
+            var rejected = await _productRepository.GetRejectedAllegroIds(product.Id, ct);
+
+            foreach (var excluded in excludedIds ?? [])
+            {
+                if (!string.IsNullOrWhiteSpace(excluded))
+                    rejected.Add(excluded);
+            }
+
             // EAN jest jednoznaczny, więc pytamy o niego trybem GTIN - bez dopasowań przybliżonych.
             if (IsGtin(product.Ean))
             {
-                var byEan = await SearchAsync(product.Ean!, gtin: true, identifiers, product, ct);
+                var byEan = await SearchAsync(product.Ean!, gtin: true, identifiers, product, rejected, mustHave, ct);
 
                 if (byEan.ProductId != null)
                     return byEan;
@@ -161,7 +174,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
             foreach (var phrase in SearchPhrases(product))
             {
-                var match = await SearchAsync(phrase, gtin: false, identifiers, product, ct);
+                var match = await SearchAsync(phrase, gtin: false, identifiers, product, rejected, mustHave, ct);
 
                 if (match.ProductId != null)
                     return match;
@@ -196,6 +209,23 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 yield break;
             }
 
+            if (_service.Company == IntegrationCompany.Rolmar)
+            {
+                // Jak przy Inter Cars: marka + numer, potem sam numer. Bez szukania po nazwie -
+                // trafiała w przypadkowe produkty o podobnym opisie.
+                var brand = (product.SupplierName ?? string.Empty).Trim();
+
+                foreach (var number in RolmarNumberVariants(product.Code))
+                {
+                    if (brand.Length > 0)
+                        yield return $"{brand} {number}";
+
+                    yield return number;
+                }
+
+                yield break;
+            }
+
             if (!string.IsNullOrWhiteSpace(product.Code))
                 yield return product.Code;
 
@@ -203,11 +233,35 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 yield return product.Name;
         }
 
+        /// <summary>Przedrostek grupy towarowej w indeksie Rolmaru ("W-5036020600").</summary>
+        private static readonly Regex RolmarPrefix = new(@"^[A-Za-z]{1,2}-(?=[^-]*\d)", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Indeks Rolmaru i jego wariant bez przedrostka grupy. Przedrostek ("W-") dopisuje Rolmar -
+        /// numer producenta, który zna katalog Allegro, to reszta indeksu.
+        /// </summary>
+        internal static IEnumerable<string> RolmarNumberVariants(string? code)
+        {
+            var value = (code ?? string.Empty).Trim();
+
+            if (value.Length == 0)
+                yield break;
+
+            yield return value;
+
+            var withoutPrefix = RolmarPrefix.Replace(value, string.Empty).Trim();
+
+            if (!string.Equals(withoutPrefix, value, StringComparison.Ordinal) && IsUsableIdentifier(Normalize(withoutPrefix)))
+                yield return withoutPrefix;
+        }
+
         private async Task<CatalogProductMatch> SearchAsync(
             string phrase,
             bool gtin,
             IReadOnlySet<string> identifiers,
             RolmarProduct product,
+            IReadOnlySet<string> rejected,
+            IReadOnlyCollection<string> mustHave,
             CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(phrase))
@@ -219,15 +273,45 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             var candidates = (result?.Products ?? []).Take(MaxCandidates)
                 .Where(c => c.Id != null && c.Category?.Id != null)
                 .Where(c => !RequiresCatalogImages || c.Images.Count > 0)
+                .Where(c => !rejected.Contains(c.Id!))
                 .ToList();
 
             // Trafienie w "Numer katalogowy części" jest pewniejsze niż w numer zamiennika czy
-            // oryginału, więc najpierw szukamy dopasowania po numerze własnym produktu.
-            var best = candidates.FirstOrDefault(c => Matches(c, identifiers, primaryOnly: true) && Confirms(c, identifiers, product))
-                ?? candidates.FirstOrDefault(c => Matches(c, identifiers, primaryOnly: false) && Confirms(c, identifiers, product));
+            // oryginału, więc najpierw kandydaci dopasowani po numerze własnym produktu.
+            var matched = candidates.Where(c => Matches(c, identifiers, primaryOnly: true) && Confirms(c, identifiers, product))
+                .Concat(candidates.Where(c => Matches(c, identifiers, primaryOnly: false) && Confirms(c, identifiers, product)))
+                .DistinctBy(c => c.Id)
+                .ToList();
 
-            if (best != null)
-                return new CatalogProductMatch(best.Id, best.Category!.Id, best.Name);
+            foreach (var candidate in matched)
+            {
+                // Allegro pozwala na jedną aktywną ofertę danego produktu z katalogu. Produkt podpięty już pod
+                // inny nasz produkt (także innego dostawcy - oba sprzedajemy na tych samych kontach) blokował
+                // aktywację drugiej oferty: "Przedmiot ... znajduje się już na liście Twoich aktywnych ofert".
+                if (await _productRepository.IsAllegroIdTakenByOther(candidate.Id!, product.Id, ct))
+                {
+                    _logger.LogDebug("Allegro product {ProductId} matches {Code} but is already linked to another product.", candidate.Id, product.Code);
+                    continue;
+                }
+
+                // Parametry produktu bierzemy wyłącznie z katalogu, więc produkt bez kompletu
+                // obowiązkowych kończyłby się "Uzupełnij parametry obowiązkowe". Bierzemy pierwszy
+                // kompletny, niekompletne pomijamy.
+                if (_service.ProductParametersFromCatalog)
+                {
+                    var missing = await MissingRequiredParameters(candidate, ct);
+                    missing.AddRange(MissingNamedParameters(candidate, mustHave));
+
+                    if (missing.Count > 0)
+                    {
+                        _logger.LogDebug("Allegro product {ProductId} matches {Code} but lacks required parameters: {Missing}.",
+                            candidate.Id, product.Code, string.Join(", ", missing));
+                        continue;
+                    }
+                }
+
+                return new CatalogProductMatch(candidate.Id, candidate.Category!.Id, candidate.Name);
+            }
 
             if (result?.Products.Count > 0)
             {
@@ -237,6 +321,96 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             }
 
             return CatalogProductMatch.None;
+        }
+
+        /// <summary>Jak długo trzymamy listę obowiązkowych parametrów kategorii (zmienia się rzadko).</summary>
+        private static readonly TimeSpan RequiredParametersCacheTime = TimeSpan.FromHours(12);
+
+        /// <summary>Po nieudanym pobraniu pytamy o kategorię ponownie dopiero po tym czasie.</summary>
+        private static readonly TimeSpan FailedRequiredParametersRetry = TimeSpan.FromMinutes(10);
+
+        private static readonly ConcurrentDictionary<string, (DateTime ExpiresAt, IReadOnlyList<CategoryParameterItem>? Parameters)> CategoryParametersCache = new();
+
+        /// <summary>
+        /// Obowiązkowe parametry produktu w kategorii kandydata, których kandydat nie ma uzupełnionych.
+        /// Gdy listy parametrów kategorii nie da się pobrać, kandydata nie odrzucamy - ewentualny brak
+        /// zgłosi Allegro przy wystawianiu, a serwis ofert podmieni wtedy produkt.
+        /// </summary>
+        private async Task<List<string>> MissingRequiredParameters(SearchProdustsResponse.Product candidate, CancellationToken ct)
+        {
+            var categoryId = candidate.Category?.Id;
+
+            if (string.IsNullOrWhiteSpace(categoryId))
+                return [];
+
+            var parameters = await GetCategoryParameters(categoryId, ct);
+
+            return parameters == null ? [] : MissingRequiredParameters(candidate, parameters);
+        }
+
+        /// <summary>Te z podanych nazw parametrów, których produkt z katalogu nie ma uzupełnionych.</summary>
+        internal static IEnumerable<string> MissingNamedParameters(SearchProdustsResponse.Product candidate, IEnumerable<string> names)
+        {
+            var filled = candidate.Parameters
+                .Where(HasValue)
+                .Select(p => p.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return names.Where(name => !string.IsNullOrWhiteSpace(name) && !filled.Contains(name.Trim()));
+        }
+
+        /// <summary>Nazwy obowiązkowych parametrów, których produkt z katalogu nie ma uzupełnionych.</summary>
+        internal static List<string> MissingRequiredParameters(SearchProdustsResponse.Product candidate, IEnumerable<CategoryParameterItem> required)
+        {
+            var filled = candidate.Parameters
+                .Where(HasValue)
+                .SelectMany(p => new[] { p.Id, p.Name })
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return required
+                .Where(IsRequiredForCatalogProduct)
+                .Where(p => !filled.Contains(p.Id ?? string.Empty) && !filled.Contains(p.Name ?? string.Empty))
+                .Select(p => p.Name ?? p.Id ?? "-")
+                .ToList();
+        }
+
+        /// <summary>
+        /// Parametr, który musi mieć produkt z katalogu: wymagany dla produktu albo wymagany
+        /// i opisujący produkt (takiego nie da się podać w sekcji oferty).
+        /// </summary>
+        internal static bool IsRequiredForCatalogProduct(CategoryParameterItem parameter) =>
+            parameter.RequiredForProduct || (parameter.Required && parameter.Options?.DescribesProduct == true);
+
+        private static bool HasValue(SearchProdustsResponse.Parameter parameter) =>
+            (parameter.Values?.Any(v => !string.IsNullOrWhiteSpace(v)) ?? false)
+            || (parameter.ValuesIds?.Any(v => !string.IsNullOrWhiteSpace(v)) ?? false)
+            || parameter.RangeValue != null;
+
+        public async Task<IReadOnlyList<CategoryParameterItem>?> GetCategoryParameters(string categoryId, CancellationToken ct)
+        {
+            if (CategoryParametersCache.TryGetValue(categoryId, out var cached) && DateTime.UtcNow < cached.ExpiresAt)
+                return cached.Parameters;
+
+            IReadOnlyList<CategoryParameterItem>? parameters = null;
+
+            try
+            {
+                var response = await _apiClient.GetAsync<CategoryParametersResponse>($"/sale/categories/{categoryId}/parameters", ct);
+
+                parameters = response?.Parameters?.ToList();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Fetching parameters of category {CategoryId} failed - candidates are not checked for required parameters.", categoryId);
+            }
+
+            CategoryParametersCache[categoryId] = (
+                DateTime.UtcNow + (parameters == null ? FailedRequiredParametersRetry : RequiredParametersCacheTime),
+                parameters);
+
+            return parameters;
         }
 
         /// <summary>
@@ -407,6 +581,12 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             {
                 values.AddRange(CatalogNumberVariants(product.Substitutes));
                 values.AddRange(CatalogNumberVariants(product.CustomerCode));
+            }
+            else if (_service.Company == IntegrationCompany.Rolmar)
+            {
+                // Tylko numer samego produktu. Zamienniki Rolmaru to numery oryginałów - trafienie
+                // w nie podpinało część innego producenta, czyli inny produkt.
+                values.AddRange(RolmarNumberVariants(product.Code));
             }
             else
             {

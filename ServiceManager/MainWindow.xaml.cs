@@ -36,12 +36,6 @@ namespace ServiceManager
         private bool _suppressLogSelection;
         private LogFileItem? _selectedLogFile;
         private bool _showOnlyWarningsAndErrors;
-        private List<Delivery> _deliveries = new();
-        private List<MarginRange> _marginRanges = new();
-        private Controls.DeliveryEditor? _deliveryEditor;
-        private Controls.MarginRangeEditor? _marginRangeEditor;
-        private bool _deliveriesSectionExists;
-        private bool _marginRangesSectionExists;
         private bool _initialSelectionCompleted;
         private readonly List<ServiceItem> _allServices = new();
         public ObservableCollection<string> AvailableAccounts { get; } = new ObservableCollection<string>();

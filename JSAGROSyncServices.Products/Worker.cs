@@ -1,4 +1,5 @@
-﻿using JSAGROSyncServices.Contracts.Data.Enums;
+﻿using JSAGROSyncServices.Products.Services.Allegro;
+using JSAGROSyncServices.Contracts.Data.Enums;
 using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Infrastructure.Services;
 using JSAGROSyncServices.Products.Configuration;
@@ -23,6 +24,7 @@ namespace JSAGROSyncServices.Products
         private readonly ServiceContext _service;
         private readonly SyncPipeline _pipeline;
         private readonly AppSettings _appSettings;
+        private readonly IHostApplicationLifetime _lifetime;
 
         private DateTime _lastDailyStepDate = DateTime.MinValue;
 
@@ -31,13 +33,15 @@ namespace JSAGROSyncServices.Products
             IServiceScopeFactory scopeFactory,
             ServiceContext serviceContext,
             SyncPipeline pipeline,
-            IOptions<AppSettings> appSettings)
+            IOptions<AppSettings> appSettings,
+            IHostApplicationLifetime lifetime)
         {
             _logger = logger;
             _scopeFactory = scopeFactory;
             _service = serviceContext;
             _pipeline = pipeline;
             _appSettings = appSettings.Value;
+            _lifetime = lifetime;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -70,6 +74,12 @@ namespace JSAGROSyncServices.Products
                     }
                 }
 
+                if (_appSettings.RunOnce)
+                {
+                    _lifetime.StopApplication();
+                    break;
+                }
+
                 try
                 {
                     await Task.Delay(interval, stoppingToken);
@@ -94,6 +104,9 @@ namespace JSAGROSyncServices.Products
 
             async Task Step(string name, Func<Task> action)
             {
+                if (_appSettings.OnlySteps.Count > 0 && !_appSettings.OnlySteps.Contains(name, StringComparer.OrdinalIgnoreCase))
+                    return;
+
                 var sw = Stopwatch.StartNew();
 
                 try
@@ -165,6 +178,9 @@ namespace JSAGROSyncServices.Products
 
             if (_pipeline.UpdateAllegroCategories)
                 await Step("Allegro categories", () => services.GetRequiredService<IAllegroCategoryService>().UpdateAllegroCategories());
+
+            if (_pipeline.SyncOfferCategoryPaths)
+                await Step("Allegro category paths", () => services.GetRequiredService<AllegroCategoryPathService>().SyncOfferCategoryPathsAsync());
 
             if (_pipeline.SearchAllegroProducts)
                 await Step("Allegro products search", () => services.GetRequiredService<IAllegroProductService>().SearchProducts());

@@ -105,7 +105,7 @@ namespace JSAGROSyncServices.Products.Helpers
                 Payments = new Payments { Invoice = "VAT" },
                 TaxSettings = BuildTaxSettings(),
                 AfterSalesServices = BuildAfterSalesServices(),
-                Parameters = BuildOfferParameters(product.Parameters)
+                Parameters = BuildParameters(product.Parameters, isForProduct: false)
             };
         }
 
@@ -161,7 +161,10 @@ namespace JSAGROSyncServices.Products.Helpers
                         ShippingRates = new ShippingRates { Name = DeliveryMatcher.Match(product, _appSettings.Deliveries) },
                         HandlingTime = _allegroSettings.AllegroHandlingTime
                     },
-                AfterSalesServices = BuildAfterSalesServices()
+                AfterSalesServices = BuildAfterSalesServices(),
+                // Parametry oferty - bez nich parametr obowiązkowy dodany przez Allegro po wystawieniu
+                // zostawał pusty i oferta wracała z błędem w każdym cyklu.
+                Parameters = NullIfEmpty(BuildParameters(product.Parameters, isForProduct: false))
             };
         }
 
@@ -193,7 +196,13 @@ namespace JSAGROSyncServices.Products.Helpers
             {
                 new()
                 {
-                    ProductObject = new ProductObject { Id = catalogProductId },
+                    // Allegro zażądało parametrów produktu ("Uzupełnij parametry obowiązkowe: Strona
+                    // zabudowy") - dokładamy je do id jako uzupełnienie produktu z katalogu.
+                    ProductObject = new ProductObject
+                    {
+                        Id = catalogProductId,
+                        Parameters = product.SendCatalogParameters ? NullIfEmpty(BuildParameters(product.Parameters, isForProduct: true)) : null
+                    },
                     Quantity = new Quantity { Value = Math.Max((int)Math.Ceiling(product.Package), 1) },
                     ResponsiblePerson = new ResponsiblePerson { Name = _allegroSettings.AllegroResponsiblePerson },
                     ResponsibleProducer = new ResponsibleProducer
@@ -303,11 +312,13 @@ namespace JSAGROSyncServices.Products.Helpers
 
         // ---------------------------------------------------------------- parametry i opis
 
+        private static List<Parameter>? NullIfEmpty(List<Parameter> parameters) => parameters.Count > 0 ? parameters : null;
+
         /// <summary>
-        /// Parametry samej oferty. Parametrów opisujących produkt nie budujemy wcale - produkt
-        /// bierzemy z katalogu Allegro, a on ma własne.
+        /// Parametry oferty albo produktu. Parametry produktu idą tylko wtedy, gdy Allegro ich
+        /// zażądało (<see cref="RolmarProduct.SendCatalogParameters"/>) - zwykle produkt z katalogu ma własne.
         /// </summary>
-        private static List<Parameter> BuildOfferParameters(ICollection<ProductParameter> parameters)
+        private static List<Parameter> BuildParameters(ICollection<ProductParameter> parameters, bool isForProduct)
         {
             var multiValueParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -316,7 +327,9 @@ namespace JSAGROSyncServices.Products.Helpers
 
             var result = new List<Parameter>();
 
-            foreach (var param in parameters.Where(p => !p.IsForProduct))
+            foreach (var param in parameters.Where(p => p.IsForProduct == isForProduct
+                                                        && p.Name != "EAN (GTIN)"
+                                                        && p.Name != "Informacje o bezpieczeństwie"))
             {
                 if (string.IsNullOrWhiteSpace(param.Value))
                     continue;
@@ -326,7 +339,7 @@ namespace JSAGROSyncServices.Products.Helpers
 
                 var values = multiValueParams.Contains(param.Name)
                     ? cleaned
-                        .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Split(ParameterFallbacks.MultiValueSeparators(param.Name), StringSplitOptions.RemoveEmptyEntries)
                         .Select(v => v.Trim())
                         .Where(v => v.Length > 0)
                         .Distinct(StringComparer.OrdinalIgnoreCase)

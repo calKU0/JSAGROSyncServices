@@ -44,36 +44,33 @@ namespace JSAGROSyncServices.Products.Repositories
                     cancellationToken: ct));
         }
 
+        /// <summary>
+        /// Dokłada brakujące parametry jednym poleceniem na paczkę - istniejących nie nadpisuje.
+        /// </summary>
         public async Task SaveProductParametersAsync(List<ProductParameter> parameters, CancellationToken ct)
         {
             if (parameters == null || parameters.Count == 0)
                 return;
 
             using var connection = _context.CreateConnection();
-            connection.Open();
-            using var transaction = connection.BeginTransaction();
 
-            try
+            foreach (var chunk in parameters.Chunk(5000))
             {
-                var parameterRows = parameters.Select(p => new
+                var json = JsonSerializer.Serialize(chunk.Select(p => new
                 {
                     p.ProductId,
                     p.CategoryParameterId,
                     p.Value,
                     p.IsForProduct
-                });
+                }));
 
-                await connection.ExecuteAsync(
-                    "RolmarProductParameters_Insert",
-                    parameterRows,
-                    transaction,
-                    commandType: CommandType.StoredProcedure);
-                transaction.Commit();
-            }
-            catch
-            {
-                transaction.Rollback();
-                throw;
+                await connection.ExecuteScalarAsync<int>(
+                    new CommandDefinition(
+                        "RolmarProductParameters_InsertMissing",
+                        new { ParametersJson = json },
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900,
+                        cancellationToken: ct));
             }
         }
 
@@ -115,6 +112,26 @@ namespace JSAGROSyncServices.Products.Repositories
                 commandType: CommandType.StoredProcedure);
 
             return updatedRows > 0;
+        }
+
+        public async Task<bool> SetParameterByName(int productId, int offerCategoryId, string parameterName, string value, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            var changed = await connection.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "RolmarProductParameters_SetByName",
+                    new
+                    {
+                        ProductId = productId,
+                        OfferCategoryId = offerCategoryId,
+                        ParameterName = parameterName,
+                        Value = value
+                    },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return changed > 0;
         }
 
         public async Task DeleteParameter(string parameterName, int productId, CancellationToken ct)

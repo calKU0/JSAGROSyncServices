@@ -23,6 +23,18 @@ namespace ServiceManager.Helpers
                     continue;
                 }
 
+                if (field.FieldType == ConfigFieldType.Table)
+                {
+                    panel.Children.Add(CreateTableRow(field, config.GetSection(field.Key)));
+                    continue;
+                }
+
+                if (field.FieldType == ConfigFieldType.Bool)
+                {
+                    panel.Children.Add(CreateBoolRow(field, config[field.Key]));
+                    continue;
+                }
+
                 if (IsListField(field))
                 {
                     panel.Children.Add(CreateListRow(field, ReadListValues(config, field.Key)));
@@ -36,7 +48,7 @@ namespace ServiceManager.Helpers
 
         public Grid CreateRow(ConfigField field, string value)
         {
-            var multiline = field.Key.EndsWith("AllegroSafetyMeasures", StringComparison.Ordinal);
+            var multiline = field.Multiline || field.Key.EndsWith("AllegroSafetyMeasures", StringComparison.Ordinal);
 
             var textbox = new TextBox
             {
@@ -69,6 +81,64 @@ namespace ServiceManager.Helpers
             }
 
             return section.Get<List<string>>() ?? new List<string>();
+        }
+
+        public Grid CreateBoolRow(ConfigField field, string? value)
+        {
+            var checkBox = new CheckBox
+            {
+                IsChecked = bool.TryParse(value, out var flag) && flag,
+                Margin = new Thickness(0, 6, 0, 6),
+                IsEnabled = field.IsEnabled,
+                Tag = field.Key,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            return CreateRow(field, checkBox);
+        }
+
+        /// <summary>Tabela zajmuje całą szerokość - etykieta nad nią, a nie obok.</summary>
+        public Grid CreateTableRow(ConfigField field, IConfigurationSection section)
+        {
+            var editor = new TableEditor(field)
+            {
+                IsEnabled = field.IsEnabled,
+                Tag = field.Key
+            };
+
+            editor.Load(section);
+
+            var label = new TextBlock
+            {
+                Text = field.Label,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 8, 0, 0),
+                TextWrapping = TextWrapping.Wrap
+            };
+
+            var description = new TextBlock
+            {
+                Text = field.Description,
+                Margin = new Thickness(0, 2, 0, 2),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = System.Windows.Media.Brushes.Gray,
+                Visibility = string.IsNullOrEmpty(field.Description) ? Visibility.Collapsed : Visibility.Visible
+            };
+
+            var grid = new Grid();
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            Grid.SetRow(label, 0);
+            Grid.SetRow(description, 1);
+            Grid.SetRow(editor, 2);
+
+            grid.Children.Add(label);
+            grid.Children.Add(description);
+            grid.Children.Add(editor);
+
+            return grid;
         }
 
         public Grid CreateCategoryPickerRow(ConfigField field, IEnumerable<string> selectedKeys, string? connectionString)

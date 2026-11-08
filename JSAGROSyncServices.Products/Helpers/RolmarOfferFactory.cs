@@ -67,8 +67,8 @@ namespace JSAGROSyncServices.Products.Helpers
                         Currency = "PLN"
                     }
                 },
-                Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).Take(MaxGalleryImages).ToList(),
-                Description = BuildDescription(product),
+                Images = GalleryImages(product),
+                Description = BuildDescription(product, GalleryImages(product)),
                 External = new External
                 {
                     Id = product.Code
@@ -115,7 +115,7 @@ namespace JSAGROSyncServices.Products.Helpers
                     ReturnPolicy = new ReturnPolicy { Name = allegroSettings.AllegroReturnPolicy },
                     ImpliedWarranty = new ImpliedWarranty { Name = allegroSettings.AllegroImpliedWarranty }
                 },
-                Parameters = BuildOfferParameters(product.Parameters)
+                Parameters = BuildParameters(product.Parameters, isForProduct: false)
             };
         }
 
@@ -201,12 +201,15 @@ namespace JSAGROSyncServices.Products.Helpers
                 .Take(MaxGalleryImages)
                 .ToList();
 
+            // Zdjęcia wgrane w tym cyklu (po resecie galerii) nie są jeszcze oznaczone jako podpięte.
+            // Bez nich patch nie miał ani galerii, ani opisu, a Allegro zostawiało stary opis ze
+            // zdjęciami spoza nowej galerii ("GalleryPhotosInStandardizedDescription").
             var images = connectedImages != null && connectedImages.Any()
                 ? connectedImages
-                : null;
+                : product.AllegroImages?.Count > 0 ? GalleryImages(product) : null;
 
             var description = images != null
-                ? BuildDescription(product)
+                ? BuildDescription(product, images)
                 : null;
 
             return new ProductOfferRequest
@@ -214,6 +217,10 @@ namespace JSAGROSyncServices.Products.Helpers
                 // Bez productSet Allegro odrzuca patch: nie widzi podpietego produktu,
                 // producenta odpowiedzialnego ani informacji o bezpieczenstwie (GPSR).
                 ProductSet = BuildProductSet(product, productQuantity, allegroSettings, offer.ProductId),
+                // Kategorii oferty nie zmieniamy: po przeniesieniu parametry oferty z poprzedniej kategorii
+                // były w nowej nieprawidłowe (InvalidParameterIdsInCategory), a kategorii ogólnej Allegro nie
+                // przyjmuje (IllegalChangeCategoryId). Produkt z katalogu dobieramy tak, żeby pasował do
+                // kategorii wszystkich ofert produktu - zob. AllegroProductService.FindCatalogProduct.
                 Stock = new Stock
                 {
                     Available = Convert.ToInt32(Math.Floor(product.InStock)),
@@ -235,6 +242,8 @@ namespace JSAGROSyncServices.Products.Helpers
                     },
                 Images = images,
                 Description = description,
+                // Wyłącznie obowiązkowe parametry oferty (np. "Stan") - parametry produktu daje produkt z katalogu.
+                Parameters = NullIfEmpty(BuildParameters(product.Parameters, isForProduct: false)),
                 External = new External
                 {
                     Id = product.Code
@@ -283,12 +292,19 @@ namespace JSAGROSyncServices.Products.Helpers
         {
             var ProductSets = new List<ProductSet>();
 
-            // Id produktu z katalogu: najpierw to, które oferta już ma, potem zapamiętane przy produkcie.
-            var catalogProductId = string.IsNullOrWhiteSpace(offerProductId) ? product.AllegroId : offerProductId;
+            // Id produktu z katalogu: zapamiętane przy produkcie, a dopiero bez niego to z oferty. Id na
+            // ofercie przychodzi z Allegro w każdym cyklu i po podmianie niekompletnego produktu wciąż
+            // wskazuje stary - patch z nim wracałby z "Uzupełnij parametry obowiązkowe".
+            var catalogProductId = string.IsNullOrWhiteSpace(product.AllegroId) ? offerProductId : product.AllegroId;
 
             ProductSets.Add(new ProductSet
             {
-                ProductObject = new ProductObject { Id = catalogProductId },
+                // Parametry produktu pochodzą wyłącznie z produktu z katalogu - nie wysyłamy własnych.
+                // Gdy katalogowy nie ma kompletu obowiązkowych, serwis ofert podpina inny albo kończy ofertę.
+                ProductObject = new ProductObject
+                {
+                    Id = catalogProductId
+                },
                 Quantity = new Quantity
                 {
                     Value = quantity,
@@ -329,11 +345,13 @@ namespace JSAGROSyncServices.Products.Helpers
                 return "UNIT"; // fallback for unknown units
         }
 
+        private static List<Parameter>? NullIfEmpty(List<Parameter> parameters) => parameters.Count > 0 ? parameters : null;
+
         /// <summary>
-        /// Parametry samej oferty. Parametrów opisujących produkt nie budujemy wcale - produkt
-        /// bierzemy z katalogu Allegro, a on ma własne.
+        /// Parametry oferty. W bazie Rolmar trzyma wyłącznie obowiązkowe parametry oferty
+        /// (krok parametrów pomija parametry produktu), a produktowych nigdy nie wysyłamy.
         /// </summary>
-        private static List<Parameter> BuildOfferParameters(ICollection<ProductParameter> parameters)
+        private static List<Parameter> BuildParameters(ICollection<ProductParameter> parameters, bool isForProduct)
         {
             var result = new List<Parameter>();
 
@@ -343,7 +361,9 @@ namespace JSAGROSyncServices.Products.Helpers
                 "numery katalogowe zamienników", "marka",
             };
 
-            foreach (var param in parameters.Where(p => !p.IsForProduct))
+            foreach (var param in parameters.Where(p => p.IsForProduct == isForProduct
+                                                        && p.Name != "EAN (GTIN)"
+                                                        && p.Name != "Informacje o bezpieczeństwie"))
             {
                 if (string.IsNullOrWhiteSpace(param.Value))
                     continue;
@@ -358,9 +378,9 @@ namespace JSAGROSyncServices.Products.Helpers
 
                 if (multiValueParams.Contains(param.Name))
                 {
-                    // 2. Split by comma OR whitespace
+                    // 2. Numery dzielimy po przecinkach i spacjach, marki tylko po przecinkach
                     values = cleaned
-                        .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Split(ParameterFallbacks.MultiValueSeparators(param.Name), StringSplitOptions.RemoveEmptyEntries)
                         .Select(v => v.Trim())
                         .Where(v => !string.IsNullOrWhiteSpace(v))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -390,7 +410,15 @@ namespace JSAGROSyncServices.Products.Helpers
             return result;
         }
 
-        private static Description BuildDescription(RolmarProduct product)
+        /// <summary>Zdjęcia galerii: bez powtórzeń i najwyżej tyle, ile przyjmuje Allegro.</summary>
+        private static List<string> GalleryImages(RolmarProduct product) =>
+            product.AllegroImages.Select(i => i.Url).Distinct().Take(MaxGalleryImages).ToList();
+
+        /// <summary>
+        /// Opis używa wyłącznie zdjęć z galerii. Zdjęcie z opisu, którego nie ma w galerii, Allegro
+        /// dokłada do oferty - przy produktach z ponad 16 zdjęciami kończyło się to błędem limitu zdjęć.
+        /// </summary>
+        private static Description BuildDescription(RolmarProduct product, IReadOnlyList<string> images)
         {
             var description = new Description
             {
@@ -400,9 +428,8 @@ namespace JSAGROSyncServices.Products.Helpers
             int imageIndex = 0;
 
             // 0. First image full-width on top
-            if (product.AllegroImages.Any())
+            if (images.Count > 0)
             {
-                product.AllegroImages = product.AllegroImages.DistinctBy(i => i.Url).ToList();
                 description.Sections.Add(new Section
                 {
                     SectionItems = new List<SectionItem>
@@ -410,7 +437,7 @@ namespace JSAGROSyncServices.Products.Helpers
                         new SectionItem
                         {
                             Type = "IMAGE",
-                            Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                            Url = images[imageIndex++]
                         }
                     }
                 });
@@ -427,8 +454,10 @@ namespace JSAGROSyncServices.Products.Helpers
                 ? $"<p><b>Producent: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.SupplierName))}</p>"
                 : string.Empty;
 
+            // Opis od Rolmara bywa sformatowany HTML-em (<b>, <br />) - zamieniamy go na akapity i listy,
+            // zamiast kodować całość i pokazywać kupującemu surowe tagi.
             string descriptionHtml = !string.IsNullOrWhiteSpace(product.Description) && product.Description != product.Name
-                ? $"<p><b>Opis: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Description))}</p>"
+                ? SupplierHtml.ToLabelledBlocks("Opis:", RemoveHiddenAscii(product.Description))
                 : string.Empty;
 
             string warning = string.Empty;
@@ -446,15 +475,13 @@ namespace JSAGROSyncServices.Products.Helpers
             string fitsText = string.Empty;
             if (!string.IsNullOrEmpty(product.Fits))
             {
-                var fits = System.Net.WebUtility.HtmlEncode(product.Fits);
-                fitsText = $"<p><b>Pasuje do: </b>{fits}</p>";
+                fitsText = SupplierHtml.ToLabelledBlocks("Pasuje do:", product.Fits);
             }
 
             string crossNumbersText = string.Empty;
             if (!string.IsNullOrEmpty(product.Substitutes))
             {
-                var crossNumbers = System.Net.WebUtility.HtmlEncode(product.Substitutes);
-                crossNumbersText = $"<p><b>Symbol zamiennika: </b>{crossNumbers}</p>";
+                crossNumbersText = SupplierHtml.ToLabelledBlocks("Symbol zamiennika:", product.Substitutes);
             }
 
             // Build the content string for text fields
@@ -477,12 +504,12 @@ namespace JSAGROSyncServices.Products.Helpers
             };
 
             // Add image
-            if (imageIndex < product.AllegroImages.Count)
+            if (imageIndex < images.Count)
             {
                 mainSectionItems.Add(new SectionItem
                 {
                     Type = "IMAGE",
-                    Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                    Url = images[imageIndex++]
                 });
             }
 
@@ -516,12 +543,12 @@ namespace JSAGROSyncServices.Products.Helpers
                 var parametersSectionItems = new List<SectionItem>();
 
                 // Add image to parameters section
-                if (imageIndex < product.AllegroImages.Count)
+                if (imageIndex < images.Count)
                 {
                     parametersSectionItems.Add(new SectionItem
                     {
                         Type = "IMAGE",
-                        Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                        Url = images[imageIndex++]
                     });
                 }
 
@@ -539,7 +566,7 @@ namespace JSAGROSyncServices.Products.Helpers
                 });
             }
 
-            while (imageIndex < product.AllegroImages.Count)
+            while (imageIndex < images.Count)
             {
                 var sectionImageItems = new List<SectionItem>();
 
@@ -547,16 +574,16 @@ namespace JSAGROSyncServices.Products.Helpers
                 sectionImageItems.Add(new SectionItem
                 {
                     Type = "IMAGE",
-                    Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                    Url = images[imageIndex++]
                 });
 
                 // Add second image if available
-                if (imageIndex < product.AllegroImages.Count)
+                if (imageIndex < images.Count)
                 {
                     sectionImageItems.Add(new SectionItem
                     {
                         Type = "IMAGE",
-                        Url = product.AllegroImages.Select(i => i.Url).ToList()[imageIndex++]
+                        Url = images[imageIndex++]
                     });
                 }
 

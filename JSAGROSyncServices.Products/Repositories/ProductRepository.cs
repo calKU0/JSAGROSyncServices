@@ -67,6 +67,7 @@ namespace JSAGROSyncServices.Products.Repositories
             table.Columns.Add("PriceGross", typeof(decimal));
             table.Columns.Add("Package", typeof(decimal));
             table.Columns.Add("BlockedReturn", typeof(bool));
+            table.Columns.Add("ShippingClass", typeof(string));
 
             foreach (var product in products)
             {
@@ -78,7 +79,8 @@ namespace JSAGROSyncServices.Products.Repositories
                     product.Description ?? (object)DBNull.Value,
                     product.CustomerCode ?? (object)DBNull.Value,
                     product.Ean ?? (object)DBNull.Value,
-                    Convert.ToDouble(product.InStock),
+                    // Brak stanu w danych = zostaw stan z bazy (procedura traktuje NULL jako "bez zmian").
+                    product.HasStock ? Convert.ToDouble(product.InStock) : DBNull.Value,
                     Convert.ToDouble(product.Weight),
                     product.Fits ?? (object)DBNull.Value,
                     product.Unit ?? (object)DBNull.Value,
@@ -90,7 +92,8 @@ namespace JSAGROSyncServices.Products.Repositories
                     product.PriceNet,
                     product.PriceGross,
                     product.Package,
-                    product.BlockedReturn);
+                    product.BlockedReturn,
+                    product.ShippingClass ?? (object)DBNull.Value);
             }
 
             await connection.ExecuteAsync(
@@ -630,6 +633,106 @@ namespace JSAGROSyncServices.Products.Repositories
             return productDict.Values.ToList();
         }
 
+        public async Task<Dictionary<int, List<int>>> GetParameterTargetCategories(CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            var rows = await connection.QueryAsync<(int ProductId, int CategoryId)>(
+                new CommandDefinition(
+                    "RolmarProducts_GetParameterTargetCategories",
+                    new { IntegrationCompany = _service.Company },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct));
+
+            return rows
+                .GroupBy(r => r.ProductId)
+                .ToDictionary(g => g.Key, g => g.Select(r => r.CategoryId).Distinct().ToList());
+        }
+
+        public async Task SetParametersChecked(IEnumerable<int> productIds, CancellationToken ct)
+        {
+            var ids = productIds.Distinct().ToList();
+
+            if (ids.Count == 0)
+                return;
+
+            using var connection = _context.CreateConnection();
+
+            foreach (var chunk in ids.Chunk(5000))
+            {
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "RolmarProducts_SetParametersChecked",
+                        new { ProductIds = System.Text.Json.JsonSerializer.Serialize(chunk) },
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900,
+                        cancellationToken: ct));
+            }
+        }
+
+        public async Task<bool> RequestCatalogParameters(int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            return await connection.ExecuteScalarAsync<bool>(
+                new CommandDefinition(
+                    "RolmarProducts_RequestCatalogParameters",
+                    new { ProductId = productId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+        }
+
+        public async Task RejectAllegroProduct(int productId, string? offerId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "RolmarProducts_RejectAllegroProduct",
+                    new { ProductId = productId, OfferId = offerId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+        }
+
+        public async Task<bool> IsAllegroIdTakenByOther(string allegroId, int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            return await connection.ExecuteScalarAsync<bool>(
+                new CommandDefinition(
+                    "RolmarProducts_IsAllegroIdTaken",
+                    new { AllegroId = allegroId, ProductId = productId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+        }
+
+        public async Task UnlinkAllegroProduct(int productId, string? offerId, bool reject, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "RolmarProducts_UnlinkAllegroProduct",
+                    new { ProductId = productId, OfferId = offerId, Reject = reject },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+        }
+
+        public async Task<HashSet<string>> GetRejectedAllegroIds(int productId, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            var ids = await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "RolmarProducts_GetRejectedAllegroIds",
+                    new { ProductId = productId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return new HashSet<string>(ids, StringComparer.OrdinalIgnoreCase);
+        }
+
         public async Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();
@@ -707,12 +810,19 @@ namespace JSAGROSyncServices.Products.Repositories
                     IntegrationCompany = _service.Company,
                     Account = _service.Account,
                     Categories = CategoriesFilter(),
-                    RequireDetails = _pipeline.RequireProductDetails
+                    RequireDetails = _pipeline.RequireProductDetails,
+                    // Parametry produktu daje produkt z katalogu, a obowiązkowych parametrów oferty
+                    // kategoria może nie mieć wcale - produkt bez wierszy parametrów też idzie do wystawienia.
+                    RequireParameters = !_service.ProductParametersFromCatalog
                 },
                 splitOn: "Id,Id,Id,Id",
                 commandTimeout: 900,
                 commandType: CommandType.StoredProcedure
             );
+
+            // Oferta powstaje w kategorii domyślnej - parametry z innych kategorii produktu tu nie pasują.
+            foreach (var product in productDict.Values)
+                product.Parameters = ParameterFallbacks.ForCategory(product.Parameters, product.DefaultAllegroCategory, product.DefaultAllegroCategory);
 
             return productDict.Values.ToList();
         }

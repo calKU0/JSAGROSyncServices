@@ -82,6 +82,27 @@ namespace JSAGROSyncServices.Tests
         }
 
         [Fact]
+        public void Rolmar_patch_keeps_the_offer_category_and_prefers_the_product_id()
+        {
+            // Zmiana kategorii psuła parametry oferty (InvalidParameterIdsInCategory) - kategorii nie wysyłamy.
+            var offer = new AllegroOffer
+            {
+                Id = "18772005384",
+                ProductId = "stale-offer-product",
+                CategoryId = 99999,
+                Status = "ACTIVE",
+                DeliveryName = "Mały Asortyment Rolmar",
+                Product = Product("4cc75215-e316-4f42-ab05-ee41eca23708")
+            };
+
+            var patch = Rolmar().PatchOffer(offer, keepCurrentPrice: false);
+
+            Assert.Null(patch.Category);
+            Assert.Equal("4cc75215-e316-4f42-ab05-ee41eca23708", Assert.Single(patch.ProductSet).ProductObject!.Id);
+            Assert.Null(Assert.Single(patch.ProductSet).ProductObject!.Parameters);
+        }
+
+        [Fact]
         public void InterCars_sends_only_the_catalog_product_id()
         {
             var offer = InterCars().BuildOffer(Product("4cc75215-e316-4f42-ab05-ee41eca23708"));

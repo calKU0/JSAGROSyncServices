@@ -61,6 +61,10 @@ namespace JSAGROSyncServices.Infrastructure.Services
 
         private async Task<string> AcquireTokenAsync(string? staleAccessToken, CancellationToken ct)
         {
+            if (!_settings.AllowTokenRefresh)
+                throw new InvalidOperationException(
+                    "Token Allegro wygasł albo został odrzucony, a odświeżanie jest wyłączone (AllegroApiCredentials:AllowTokenRefresh = false).");
+
             await TokenGate.WaitAsync(ct);
 
             try

@@ -1,5 +1,6 @@
 ﻿using JSAGROSyncServices.Contracts.Interfaces;
 using JSAGROSyncServices.Contracts.Models;
+using JSAGROSyncServices.Products.Configuration;
 using JSAGROSyncServices.Products.Helpers;
 
 namespace JSAGROSyncServices.Products.Services.Allegro
@@ -10,9 +11,12 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         private readonly IProductRepository _productRepo;
         private readonly ICategoryRepository _categoryRepo;
         private readonly IParameterRepository _parameterRepo;
+        private readonly ServiceContext _service;
 
-        public AllegroParametersService(IProductRepository productRepo, ICategoryRepository categoryRepo, IParameterRepository parameterRepository, ILogger<AllegroParametersService> logger)
+        public AllegroParametersService(IProductRepository productRepo, ICategoryRepository categoryRepo, IParameterRepository parameterRepository,
+            ServiceContext serviceContext, ILogger<AllegroParametersService> logger)
         {
+            _service = serviceContext;
             _productRepo = productRepo;
             _categoryRepo = categoryRepo;
             _parameterRepo = parameterRepository;
@@ -23,66 +27,90 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         {
             try
             {
-                // Parametry niezależne od danych produktu uzupełniamy w bazie, bo zwykły krok
-                // omija produkty, które mają już jakiekolwiek parametry - a brakujący parametr
-                // obowiązkowy blokuje wystawienie oferty w każdym cyklu.
-                var filled = await _parameterRepo.FillDataIndependentParametersAsync(
-                    ParameterDefaults.CountInOfferSqlPattern,
-                    ParameterDefaults.CountInOfferValue,
-                    ParameterDefaults.MountingSideParameterName,
-                    ParameterDefaults.UniversalMountingSidesOrdered,
-                    ct);
+                // Parametry produktu bierzemy z produktu z katalogu Allegro - liczymy tylko
+                // obowiązkowe parametry oferty, a uzupełnianie hurtowe (m.in. "Strona zabudowy",
+                // parametr produktu) pomijamy.
+                var offerParametersOnly = _service.ProductParametersFromCatalog;
 
-                if (filled > 0)
-                    _logger.LogInformation("Data-independent parameters filled in: {Count}.", filled);
+                if (!offerParametersOnly)
+                {
+                    // Parametry niezależne od danych produktu uzupełniamy w bazie, bo zwykły krok
+                    // omija produkty, które mają już jakiekolwiek parametry - a brakujący parametr
+                    // obowiązkowy blokuje wystawienie oferty w każdym cyklu.
+                    var filled = await _parameterRepo.FillDataIndependentParametersAsync(
+                        ParameterDefaults.CountInOfferSqlPattern,
+                        ParameterDefaults.CountInOfferValue,
+                        ParameterDefaults.MountingSideParameterName,
+                        ParameterDefaults.UniversalMountingSidesOrdered,
+                        ct);
 
+                    if (filled > 0)
+                        _logger.LogInformation("Data-independent parameters filled in: {Count}.", filled);
+                }
+
+                // Produkty bez parametrów i te, którym brakuje parametru obowiązkowego w kategorii
+                // domyślnej albo w kategorii, w której faktycznie stoi ich oferta.
                 var products = await _productRepo.GetProductsToUpdateParameters(ct);
 
-                // Cache category parameters
-                var categoryParamsCache = new Dictionary<int, List<CategoryParameter>>();
+                if (products.Count == 0)
+                    return;
 
-                // Collect all parameter inserts before saving
+                var targetCategories = await _productRepo.GetParameterTargetCategories(ct);
+                var categoryParamsCache = new Dictionary<int, List<CategoryParameter>>();
                 var allProductParameters = new List<ProductParameter>();
+                var missing = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var product in products)
                 {
                     try
                     {
-                        if (!categoryParamsCache.TryGetValue(product.DefaultAllegroCategory, out var categoryParams))
+                        var categories = targetCategories.TryGetValue(product.Id, out var known)
+                            ? new HashSet<int>(known)
+                            : new HashSet<int>();
+
+                        if (product.DefaultAllegroCategory != 0)
+                            categories.Add(product.DefaultAllegroCategory);
+
+                        foreach (var categoryId in categories)
                         {
-                            categoryParams = (await _categoryRepo.GetCategoryParametersAsync(product.DefaultAllegroCategory, ct)).ToList();
-                            categoryParamsCache[product.DefaultAllegroCategory] = categoryParams;
-                        }
-
-                        var productParams = new List<ProductParameter>();
-
-                        foreach (var catParam in categoryParams)
-                        {
-                            var value = MapProductToParameter(product, catParam);
-
-                            if (string.IsNullOrEmpty(value) && (catParam.Required || catParam.RequiredForProduct))
+                            if (!categoryParamsCache.TryGetValue(categoryId, out var categoryParams))
                             {
-                                _logger.LogWarning("Missing required parameter {ParamName} for product {Code}", catParam.Name, product.Code);
-                                continue;
+                                categoryParams = (await _categoryRepo.GetCategoryParametersAsync(categoryId, ct)).ToList();
+                                categoryParamsCache[categoryId] = categoryParams;
                             }
 
-                            productParams.Add(new ProductParameter
+                            foreach (var catParam in categoryParams)
                             {
-                                ProductId = product.Id,
-                                CategoryParameterId = catParam.Id,
-                                // O sekcji decyduje wyłącznie DescribesProduct. Parametr opisujący
-                                // produkt Allegro przyjmuje tylko w sekcji produktu - wysłany przy
-                                // ofercie wraca błędem "should not be specified as in section offer",
-                                // nawet gdy kategoria oznacza go jako wymagany.
-                                IsForProduct = catParam.DescribesProduct,
-                                Value = value!
-                            });
-                        }
+                                if (offerParametersOnly && !IsRequiredOfferParameter(catParam))
+                                    continue;
 
-                        if (productParams.Count > 0)
-                        {
-                            allProductParameters.AddRange(productParams);
-                            _logger.LogDebug("Assigned {Count} parameters for product {Code}", productParams.Count, product.Code);
+                                var value = MapProductToParameter(product, catParam);
+
+                                if (string.IsNullOrEmpty(value))
+                                {
+                                    if (catParam.Required || catParam.RequiredForProduct)
+                                    {
+                                        var key = $"{catParam.Name} ({categoryId})";
+                                        missing[key] = missing.GetValueOrDefault(key) + 1;
+                                        _logger.LogDebug("Missing required parameter {ParamName} in category {CategoryId} for product {Code}",
+                                            catParam.Name, categoryId, product.Code);
+                                    }
+
+                                    continue;
+                                }
+
+                                allProductParameters.Add(new ProductParameter
+                                {
+                                    ProductId = product.Id,
+                                    CategoryParameterId = catParam.Id,
+                                    // O sekcji decyduje wyłącznie DescribesProduct. Parametr opisujący
+                                    // produkt Allegro przyjmuje tylko w sekcji produktu - wysłany przy
+                                    // ofercie wraca błędem "should not be specified as in section offer",
+                                    // nawet gdy kategoria oznacza go jako wymagany.
+                                    IsForProduct = catParam.DescribesProduct,
+                                    Value = value
+                                });
+                            }
                         }
                     }
                     catch (Exception exProduct)
@@ -91,11 +119,22 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     }
                 }
 
-                // Single bulk save at the end instead of per product
-                if (allProductParameters.Any())
-                {
+                // Zapis dokłada tylko brakujące parametry - istniejących (np. poprawionych według
+                // komunikatu Allegro) nie nadpisuje.
+                if (allProductParameters.Count > 0)
                     await _parameterRepo.SaveProductParametersAsync(allProductParameters, ct);
-                    _logger.LogInformation("Product parameters saved: {Count} for {ProductsCount} products.", allProductParameters.Count, products.Count);
+
+                // Produkt z parametrem, którego nie umiemy wyliczyć, wróci dopiero po zmianie
+                // produktu albo parametrów kategorii - nie w każdym cyklu.
+                await _productRepo.SetParametersChecked(products.Select(p => p.Id), ct);
+
+                _logger.LogInformation("Product parameters checked for {ProductsCount} products, {Count} parameter values computed.",
+                    products.Count, allProductParameters.Count);
+
+                if (missing.Count > 0)
+                {
+                    _logger.LogWarning("Required parameters that could not be filled (parameter (category): products): {Missing}",
+                        string.Join("; ", missing.OrderByDescending(m => m.Value).Take(15).Select(m => $"{m.Key}: {m.Value}")));
                 }
             }
             catch (Exception ex)
@@ -104,11 +143,37 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             }
         }
 
-        private string? MapProductToParameter(RolmarProduct product, CategoryParameter param)
+        /// <summary>
+        /// Obowiązkowy parametr oferty - jedyny, który wypełniamy sami, gdy parametry produktu
+        /// pochodzą z katalogu Allegro. Parametr opisujący produkt dostarcza produkt z katalogu.
+        /// </summary>
+        internal static bool IsRequiredOfferParameter(CategoryParameter param) => param.Required && !param.DescribesProduct;
+
+        /// <summary>
+        /// Wartość parametru dla produktu. Wartość słownikowa musi istnieć w słowniku kategorii -
+        /// spoza słownika Allegro odrzuca całą ofertę. Parametr obowiązkowy, którego nie da się
+        /// wyliczyć, dostaje wartość niejednoznaczną ("Inna", "nieznany producent").
+        /// </summary>
+        internal static string? MapProductToParameter(RolmarProduct product, CategoryParameter param)
         {
             if (param == null) return null;
 
-            var name = param.Name?.ToLowerInvariant();
+            var value = MapKnownValue(product, param);
+            var fitted = ParameterFallbacks.FitToDictionary(param, value);
+
+            // Słownik z własnymi wartościami przyjmie też wartość spoza listy.
+            if (fitted == null && !string.IsNullOrWhiteSpace(value) && param.CustomValuesEnabled)
+                fitted = value;
+
+            if (fitted == null && (param.Required || param.RequiredForProduct))
+                fitted = ParameterFallbacks.ForRequired(param, product);
+
+            return fitted;
+        }
+
+        private static string? MapKnownValue(RolmarProduct product, CategoryParameter param)
+        {
+            var name = param.Name?.Trim().ToLowerInvariant();
 
             var directMappings = new Dictionary<string, Func<RolmarProduct, string?>>(StringComparer.OrdinalIgnoreCase)
             {
@@ -131,9 +196,9 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             if (name != null && directMappings.TryGetValue(name, out var resolver))
                 return resolver(product);
 
-            // "Liczba ... w ofercie" (tarcz, klocków, sztuk): sprzedajemy jedną pozycję
-            // w opakowaniu dostawcy, a dokładniejszej liczby dane dostawcy nie podają.
-            if (ParameterDefaults.IsCountInOffer(name))
+            // "Liczba ... w ofercie" (tarcz, klocków, sztuk) i "Liczba sztuk w opakowaniu": sprzedajemy
+            // jedną pozycję w opakowaniu dostawcy, a dokładniejszej liczby dane dostawcy nie podają.
+            if (ParameterDefaults.IsCountInOffer(name) || ParameterFallbacks.IsPackageCount(name))
                 return ParameterDefaults.CountInOfferValue;
 
             // Strony zabudowy nie znamy, więc zamiast zgadywać "przód" albo "lewa" bierzemy
@@ -145,85 +210,66 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             if (name == "producent" || name == "producent części")
                 return GetMatchingValue(product, param);
 
-            if (name == "marka" || name == "marka maszyny")
+            // "Marka" to marka samego produktu (słownik ma np. "Rolmar", "bez marki"),
+            // "Marka maszyny" - marka maszyny, do której pasuje część.
+            if (name == "marka")
+                return GetProductBrandValue(product, param);
+
+            if (name == "marka maszyny")
                 return GetBrandMatchingValue(product, param);
 
             return null;
         }
 
-        private string? GetMatchingValue(RolmarProduct product, CategoryParameter param)
+        /// <summary>
+        /// Producent części: marka dostawcy (SupplierName), w słowniku dopasowana bez względu na
+        /// wielkość liter i polskie znaki. Brak dopasowania zostawia decyzję wartości zastępczej.
+        /// </summary>
+        private static string? GetMatchingValue(RolmarProduct product, CategoryParameter param)
         {
-            const string fallback = "nieznany producent";
+            if (string.IsNullOrWhiteSpace(product.SupplierName))
+                return null;
 
-            if (param?.Type?.Equals("dictionary", StringComparison.OrdinalIgnoreCase) == true
-                && param.Values?.Any() == true)
-            {
-                var dict = param.Values
-                    .Where(v => !string.IsNullOrWhiteSpace(v.Value) && v.Value != "Premium")
-                    .Select(v => new { Raw = v.Value, Normalized = Normalize(v.Value) })
-                    .ToList();
+            var supplier = product.SupplierName.Trim();
 
-                var dictSet = new HashSet<string>(dict.Select(d => d.Normalized).OfType<string>());
+            // "Premium" to w słowniku linia produktów, nie producent - nie dopasowujemy jej.
+            if (string.Equals(supplier, "Premium", StringComparison.OrdinalIgnoreCase))
+                return null;
 
-                // 1. SupplierName exact match
-                if (!string.IsNullOrEmpty(product.SupplierName))
-                {
-                    var supplier = Normalize(product.SupplierName);
-                    var match = dict.FirstOrDefault(v => v.Normalized == supplier);
-                    if (match != null) return match.Raw;
-                }
-
-                return fallback;
-            }
-
-            return !string.IsNullOrEmpty(product.SupplierName)
-                ? Normalize(product.SupplierName)
-                : fallback;
+            return string.Equals(supplier, "rollon-solid", StringComparison.OrdinalIgnoreCase) ? "Rollon" : supplier;
         }
 
-        private string? GetBrandMatchingValue(RolmarProduct product, CategoryParameter param)
+        /// <summary>
+        /// Marka produktu: marka dostawcy (SupplierName). Pole tekstowe dostaje ją wprost, słownik -
+        /// tylko gdy ją zna; inaczej parametr obowiązkowy dostanie "bez marki" / wartość niejednoznaczną.
+        /// </summary>
+        private static string? GetProductBrandValue(RolmarProduct product, CategoryParameter param) =>
+            ParameterFallbacks.FitToDictionary(param, product.SupplierName?.Trim());
+
+        /// <summary>
+        /// Marka maszyny: marki z drzewa zastosowań produktu (pierwsza znana w słowniku), potem marka
+        /// dostawcy. Gdy żadna nie pasuje, parametr obowiązkowy dostaje wartość niejednoznaczną.
+        /// </summary>
+        private static string? GetBrandMatchingValue(RolmarProduct product, CategoryParameter param)
         {
-            const string fallback = "Inna";
-
-            if (product.Applications == null || !product.Applications.Any())
-                return fallback;
-
-            var rootBrands = product.Applications
+            var candidates = (product.Applications ?? new List<ProductApplication>())
                 .Where(a => a.ParentID == 0)
                 .Select(a => a.Name)
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .ToList();
 
-            if (!rootBrands.Any())
-                return fallback;
-
-            if (param?.Type?.Equals("dictionary", StringComparison.OrdinalIgnoreCase) == true && param.Values?.Any() == true)
+            foreach (var candidate in candidates)
             {
-                var dictValues = param.Values.Select(v => v.Value).ToList();
-
-                var brandMatch = dictValues.FirstOrDefault(dv => rootBrands.Any(rb => dv.Equals(rb, StringComparison.OrdinalIgnoreCase)));
-
-                if (!string.IsNullOrEmpty(brandMatch)) return brandMatch;
-
-                if (!string.IsNullOrEmpty(product.SupplierName))
-                {
-                    var supplierMatch = dictValues.FirstOrDefault(dv => dv.Equals(product.SupplierName, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(supplierMatch)) return supplierMatch;
-                }
-
-                return fallback;
+                var match = ParameterFallbacks.FitToDictionary(param, candidate);
+                if (match != null)
+                    return match;
             }
 
-            return rootBrands.FirstOrDefault() ?? fallback;
-        }
-
-        private static string? Normalize(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return null;
-
-            var lowered = value.Trim().ToLowerInvariant();
-            return lowered == "rollon-solid" ? "rollon" : lowered;
+            // Marka dostawcy bywa też marką maszyny (np. Ursus) - ale tylko gdy słownik ją zna.
+            // Do pola tekstowego jej nie wpisujemy: producent części to nie marka maszyny.
+            return ParameterFallbacks.IsDictionary(param)
+                ? ParameterFallbacks.FitToDictionary(param, product.SupplierName)
+                : null;
         }
     }
 }

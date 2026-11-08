@@ -8,5 +8,8 @@
         public int CategoryParameterId { get; set; }
         public string Value { get; set; } = string.Empty;
         public bool IsForProduct { get; set; }
+
+        /// <summary>Kategoria Allegro, dla której parametr wyliczono (produkt ma ich kilka: domyślną i kategorie ofert).</summary>
+        public int CategoryId { get; set; }
     }
 }

@@ -1,4 +1,4 @@
-using JSAGROSyncServices.Contracts.Data.Enums;
+﻿using JSAGROSyncServices.Contracts.Data.Enums;
 using JSAGROSyncServices.Products;
 using JSAGROSyncServices.Products.Configuration;
 
@@ -19,5 +19,6 @@ ProductsServiceHost.Run(
         FetchSupplierProductDetailsDaily = true,
         UpdateAllegroCategoriesDaily = true,
         SyncOfferDetails = true,
-        SyncProductParameters = true
+        SyncProductParameters = true,
+        SyncOfferCategoryPaths = true
     });

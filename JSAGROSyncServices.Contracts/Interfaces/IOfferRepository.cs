@@ -27,5 +27,14 @@ namespace JSAGROSyncServices.Contracts.Interfaces
 
         Task DeleteOffer(string offerId, CancellationToken ct);
         Task UpdateProductId(string offerId, string? value, CancellationToken ct);
+
+        /// <summary>Skróty treści ostatnich udanych pełnych patchy ofert konta, po id oferty.</summary>
+        Task<Dictionary<string, OfferContentState>> GetContentStates(CancellationToken ct);
+
+        /// <summary>
+        /// Zapisuje skróty treści po pełnym patchu (<c>Hash</c> = skrót) albo je usuwa (<c>Hash</c> = null) -
+        /// po nieudanym patchu kolejny cykl ma wysłać pełną strukturę.
+        /// </summary>
+        Task SaveContentStates(IReadOnlyCollection<(string OfferId, string? Hash)> states, CancellationToken ct);
     }
 }
