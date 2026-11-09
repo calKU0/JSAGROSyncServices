@@ -1510,10 +1510,13 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         /// </summary>
         private static readonly ConcurrentDictionary<string, int> GalleryLimits = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Klucz limitu galerii - kody produktów różnych dostawców potrafią się powtarzać.</summary>
+        private string GalleryKey(RolmarProduct product) => $"{_service.Company}:{product.Code}";
+
         /// <summary>Przycina własne zdjęcia produktu do zapamiętanego limitu galerii.</summary>
         private void ApplyGalleryLimit(RolmarProduct product)
         {
-            if (!_offerFactory.UsesOwnImages || !GalleryLimits.TryGetValue(product.Code, out var limit))
+            if (!_offerFactory.UsesOwnImages || !GalleryLimits.TryGetValue(GalleryKey(product), out var limit))
                 return;
 
             if (product.AllegroImages.Count > limit)
@@ -1589,7 +1592,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             if (size >= ownImages)
                 return false;
 
-            GalleryLimits[product.Code] = size;
+            GalleryLimits[GalleryKey(product)] = size;
             product.AllegroImages = product.AllegroImages
                 .GroupBy(i => i.Url)
                 .Select(g => g.First())
