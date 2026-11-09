@@ -111,6 +111,7 @@ namespace JSAGROSyncServices.Products.Repositories
                         param.DescribesProduct,
                         param.CustomValuesEnabled,
                         param.AmbiguousValueId,
+                        param.AmbiguousValue,
                         ValuesJson = valuesJson
                     },
                     tran,

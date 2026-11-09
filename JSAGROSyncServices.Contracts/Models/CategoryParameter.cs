@@ -13,6 +13,11 @@
         public bool DescribesProduct { get; set; }
         public bool CustomValuesEnabled { get; set; }
         public string AmbiguousValueId { get; set; } = string.Empty;
+
+        /// <summary>Etykieta wartości niejednoznacznej ze słownika ("Inna", "nieznany producent").</summary>
+        public string? AmbiguousValue { get; set; }
+
+        public DateTime? FetchedAt { get; set; }
         public int? Min { get; set; }
         public int? Max { get; set; }
 

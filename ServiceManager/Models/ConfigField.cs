@@ -22,5 +22,32 @@ namespace ServiceManager.Models
         /// <c>null</c> - zwykła lista wpisywana ręcznie.
         /// </summary>
         public int? CategoryCompany { get; set; }
+
+        /// <summary>Pole tekstowe wielowierszowe (długie teksty, np. polityka zwrotów).</summary>
+        public bool Multiline { get; set; }
+
+        /// <summary>Kolumny pola typu <see cref="ConfigFieldType.Table"/>.</summary>
+        public List<TableColumn> Columns { get; set; } = new();
+
+        /// <summary>
+        /// Tabela zapisywana jako obiekt-słownik (pierwsza kolumna = klucz, druga = wartość)
+        /// zamiast tablicy obiektów.
+        /// </summary>
+        public bool IsDictionary { get; set; }
+
+        /// <summary>Tekst przycisku dodającego wiersz tabeli.</summary>
+        public string AddButtonText { get; set; } = "Dodaj";
+
+        /// <summary>
+        /// Właściwość liczbowa, po której tabela jest sortowana rosnąco przy zapisie
+        /// (np. progi marży po "Min" - serwisy traktują ostatni próg jako zapasowy).
+        /// </summary>
+        public string? SortBy { get; set; }
+
+        /// <summary>
+        /// Reguły dotyczące całej tabeli (np. progi marży się nie nakładają). Dostaje wiersze
+        /// już po przeliczeniu typów i zwraca komunikaty błędów.
+        /// </summary>
+        public Func<System.Text.Json.Nodes.JsonArray, IEnumerable<string>>? TableValidator { get; set; }
     }
 }

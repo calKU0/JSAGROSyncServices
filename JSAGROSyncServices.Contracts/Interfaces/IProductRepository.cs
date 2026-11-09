@@ -58,6 +58,36 @@ namespace JSAGROSyncServices.Contracts.Interfaces
 
         Task<List<RolmarProduct>> GetProductsToUpdateParameters(CancellationToken ct);
 
+        /// <summary>Kategorie Allegro, dla których liczymy parametry produktu: domyślna i kategorie jego ofert.</summary>
+        Task<Dictionary<int, List<int>>> GetParameterTargetCategories(CancellationToken ct);
+
+        /// <summary>Odnotowuje wyliczenie parametrów - produkt wróci dopiero po zmianie danych.</summary>
+        Task SetParametersChecked(IEnumerable<int> productIds, CancellationToken ct);
+
+        /// <summary>
+        /// Przy kolejnej aktualizacji wysyła parametry produktu razem z id produktu z katalogu.
+        /// Zwraca true, gdy tryb był już włączony (samo przełączenie nic nie zmieni).
+        /// </summary>
+        Task<bool> RequestCatalogParameters(int productId, CancellationToken ct);
+
+        /// <summary>Allegro odłączyło produkt z katalogu od oferty - zapamiętuje id i czyści je przy produkcie i ofercie.</summary>
+        Task RejectAllegroProduct(int productId, string? offerId, CancellationToken ct);
+
+        Task<HashSet<string>> GetRejectedAllegroIds(int productId, CancellationToken ct);
+
+        /// <summary>Czy produkt z katalogu Allegro jest już podpięty pod inny nasz produkt (dowolnego dostawcy).</summary>
+        Task<bool> IsAllegroIdTakenByOther(string allegroId, int productId, CancellationToken ct);
+
+        /// <summary>
+        /// Odpina produkt z katalogu od produktu i oferty, wyłącza wysyłanie parametrów produktu
+        /// i kasuje znacznik wyszukiwania - kolejny cykl od razu szuka innego produktu z katalogu.
+        /// </summary>
+        /// <param name="productId">Produkt dostawcy.</param>
+        /// <param name="offerId">Oferta, z której zdjąć id produktu (opcjonalnie).</param>
+        /// <param name="reject">Zapamiętaj odpinane id, żeby wyszukiwanie nie podpięło go ponownie.</param>
+        /// <param name="ct">Token anulowania.</param>
+        Task UnlinkAllegroProduct(int productId, string? offerId, bool reject, CancellationToken ct);
+
         Task UpdateProductAllegroCategory(int productId, int categoryId, CancellationToken ct);
 
         Task UpdateProductAllegroCategory(string code, string categoryId, CancellationToken ct);

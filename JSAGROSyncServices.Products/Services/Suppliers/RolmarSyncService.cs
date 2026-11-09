@@ -421,6 +421,8 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 Description = product.Description,
                 Ean = product.Ean,
                 Weight = weight,
+                // Stany przychodzą osobnym zapytaniem (krok "Supplier stock") - lista produktów ich nie zmienia.
+                HasStock = false,
                 Fits = product.Fits,
                 Substitutes = product.Substitutes,
                 Unit = product.Unit ?? string.Empty,
@@ -428,6 +430,9 @@ namespace JSAGROSyncServices.Products.Services.Suppliers
                 PriceNet = priceNet,
                 PriceGross = priceNet * 1.23m,
                 Package = package,
+                ShippingClass = string.IsNullOrWhiteSpace(product.Cubature) ? null : product.Cubature.Trim(),
+                // Marka z API Rolmara (WARYNSKI, TEGER, URSUS...) - pusta, gdy dostawca jej nie podał.
+                SupplierName = string.IsNullOrWhiteSpace(product.Brand) ? null : product.Brand.Trim(),
                 IntegrationId = Convert.ToInt32(product.Id),
                 Specifications = product.Specifications?.Select(s => new JSAGROSyncServices.Contracts.Models.ProductSpecification
                 {

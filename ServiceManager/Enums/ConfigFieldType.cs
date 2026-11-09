@@ -6,6 +6,12 @@ namespace ServiceManager.Enums
         Int,
         Decimal,
         StringList,
-        IntList
+        IntList,
+
+        /// <summary>Tak / nie - pole wyboru.</summary>
+        Bool,
+
+        /// <summary>Tabela: lista obiektów albo słownik, kolumny w <c>ConfigField.Columns</c>.</summary>
+        Table
     }
 }

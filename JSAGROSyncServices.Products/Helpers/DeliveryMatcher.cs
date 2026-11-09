@@ -1,4 +1,4 @@
-using JSAGROSyncServices.Contracts.Models;
+﻿using JSAGROSyncServices.Contracts.Models;
 using JSAGROSyncServices.Contracts.Settings;
 
 namespace JSAGROSyncServices.Products.Helpers
@@ -47,7 +47,12 @@ namespace JSAGROSyncServices.Products.Helpers
             if (product.DeliveryType != 0)
                 return available[^1];
 
+            // Bez wymiarów w specyfikacji ratujemy się klasą wysyłki dostawcy (gabaryt paczkomatu).
             var sides = ProductDimensions.ReadCm(product);
+
+            if (sides.Count == 0 && ShippingClasses.ParcelSidesCm(product.ShippingClass) is { } classSides)
+                sides = classSides;
+
             var weight = (decimal)product.Weight;
 
             // Dostawca nie podał ani gabarytów, ani wagi - nie ma czego mierzyć, więc zakładamy

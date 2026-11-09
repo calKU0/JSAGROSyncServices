@@ -196,6 +196,9 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             Min = p.Restrictions?.GetMin(),
                             Max = p.Restrictions?.GetMax(),
                             AmbiguousValueId = p.Options?.AmbiguousValueId ?? string.Empty,
+                            // Etykieta wartości "nie wiem / inna" - wartość zastępcza dla parametrów obowiązkowych.
+                            AmbiguousValue = p.Dictionary?.FirstOrDefault(d =>
+                                !string.IsNullOrEmpty(p.Options?.AmbiguousValueId) && d.Id == p.Options.AmbiguousValueId)?.Value,
                             CustomValuesEnabled = p.Options?.CustomValuesEnabled ?? false,
                             DescribesProduct = p.Options?.DescribesProduct ?? false,
                             Values = p.Dictionary?.Select(d => new CategoryParameterValue

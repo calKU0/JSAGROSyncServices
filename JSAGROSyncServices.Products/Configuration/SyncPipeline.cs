@@ -53,6 +53,12 @@
         /// <summary>Aktualizacja drzewa kategorii Allegro w każdym cyklu.</summary>
         public bool UpdateAllegroCategories { get; init; }
 
+        /// <summary>
+        /// Zapis nazw i rodziców kategorii Allegro, w których stoją oferty (tylko brakujących).
+        /// Potrzebne do mapowania kategorii na inne marketplace'y (InPost) - wystarczy jedno konto.
+        /// </summary>
+        public bool SyncOfferCategoryPaths { get; init; }
+
         /// <summary>Wyszukiwanie produktów Allegro dla pozycji bez domyślnej kategorii.</summary>
         public bool SearchAllegroProducts { get; init; }
 

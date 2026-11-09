@@ -34,6 +34,20 @@ namespace ServiceManager.Helpers
                         continue;
                     }
 
+                    var table = grid.Children.OfType<TableEditor>().FirstOrDefault();
+                    if (table is { Tag: string tableKey })
+                    {
+                        values[tableKey] = table.ToJson(errors);
+                        continue;
+                    }
+
+                    var checkBox = grid.Children.OfType<CheckBox>().FirstOrDefault();
+                    if (checkBox is { Tag: string boolKey })
+                    {
+                        values[boolKey] = checkBox.IsChecked == true ? "true" : "false";
+                        continue;
+                    }
+
                     var tb = grid.Children.OfType<TextBox>().FirstOrDefault();
                     if (tb == null || tb.Tag is not string key)
                         continue;

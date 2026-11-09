@@ -36,6 +36,25 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         /// </summary>
         private readonly ConcurrentDictionary<string, int> _errorCounts = new();
 
+        /// <summary>
+        /// Oferty do zakończenia po kroku aktualizacji: produkt z katalogu nie ma kompletu parametrów
+        /// obowiązkowych, a zastępczego nie znaleziono. Kończymy je zbiorczo po pętli aktualizacji.
+        /// </summary>
+        private readonly ConcurrentDictionary<string, byte> _offersToEndAfterUpdate = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Id produktów z katalogu, które Allegro zgłosiło jako nieistniejące. Allegro nadal oddaje je
+        /// przy ofercie, więc bez tej listy patch szedł z martwym id w każdym cyklu. Lista żyje tyle,
+        /// co proces - usunięty produkt z katalogu nie wraca.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, byte> DeadCatalogProductIds = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Oferty podpięte po stronie Allegro pod usunięty produkt - każdy patch kończy się ProductNotFoundException.
+        /// Po zakończeniu ich nie patchujemy; trzeba je wystawić od nowa. Lista żyje tyle, co proces.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, byte> UnpatchableOffers = new(StringComparer.OrdinalIgnoreCase);
+
         private void CountError(string code) =>
             _errorCounts.AddOrUpdate(string.IsNullOrWhiteSpace(code) ? "-" : code, 1, (_, current) => current + 1);
 
@@ -65,6 +84,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         private readonly IImageRepository _imageRepo;
         private readonly IOfferFactory _offerFactory;
         private readonly IAllegroProductService _allegroProductService;
+        private readonly OfferCategoryAligner _categoryAligner;
         private readonly IEmailService _emailService;
         private readonly AllegroApiClient _apiClient;
         private readonly AppSettings _appSettings;
@@ -89,6 +109,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             IImageRepository imageRepo,
             IOfferFactory offerFactory,
             IAllegroProductService allegroProductService,
+            OfferCategoryAligner categoryAligner,
             IEmailService emailService,
             AllegroApiClient apiClient,
             IOptions<AppSettings> appSettings,
@@ -103,6 +124,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             _imageRepo = imageRepo;
             _offerFactory = offerFactory;
             _allegroProductService = allegroProductService;
+            _categoryAligner = categoryAligner;
             _emailService = emailService;
             _apiClient = apiClient;
             _appSettings = appSettings.Value;
@@ -394,9 +416,25 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             return;
                         }
 
+                        // Nowa oferta powstaje w kategorii produktu z katalogu - tej samej na wszystkich kontach.
+                        if (await _categoryAligner.AlignBeforeCreateAsync(product, token))
+                        {
+                            Interlocked.Increment(ref skipped);
+                            return;
+                        }
+
+                        ApplyGalleryLimit(product);
+
                         var request = _offerFactory.BuildOffer(product);
                         var response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, request, token);
                         var body = await response.Content.ReadAsStringAsync(token);
+
+                        if (await ShrinkGalleryAfterRejection(product, product.AllegroId, response, body, token))
+                        {
+                            request = _offerFactory.BuildOffer(product);
+                            response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, request, token);
+                            body = await response.Content.ReadAsStringAsync(token);
+                        }
 
                         var dataFixed = await HandleAllegroResponse(product, response, body, isUpdate: false);
 
@@ -484,7 +522,21 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                         .Where(o => !string.IsNullOrWhiteSpace(o.Product?.AllegroId))
                         .ToList();
 
-                    withoutCatalogProduct = offers.Count - linked.Count;
+                    var unlinked = offers.Count - linked.Count;
+                    withoutCatalogProduct = unlinked;
+
+                    // Parametry produktu bierzemy wyłącznie z katalogu, więc oferta bez produktu
+                    // z katalogu nie dostaje aktualizacji stanu ani ceny - kończymy ją, zamiast
+                    // sprzedawać ze starym stanem. Dotyczy też drugiego konta, gdy produkt odpięło
+                    // pierwsze. Po podpięciu nowego produktu zwykła aktualizacja wznowi ofertę.
+                    if (_service.ProductParametersFromCatalog && unlinked > 0)
+                    {
+                        var linkedIds = linked.Select(o => o.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        var toEndUnlinked = offers.Where(o => !linkedIds.Contains(o.Id)).ToList();
+
+                        endedCount += await EndOffers(toEndUnlinked, "have no Allegro catalog product", ct);
+                    }
+
                     offers = linked;
                 }
 
@@ -503,12 +555,27 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 int failed = 0;
                 int fixedData = 0;
                 int skipped = 0;
+                int priceAndStockOnly = 0;
+                int movedToCategory = 0;
+                int moveRejected = 0;
+
+                // Skróty treści z ostatnich udanych pełnych patchy - bez zmian treści wysyłamy sam stan i cenę.
+                var contentStates = await _offerRepo.GetContentStates(ct);
+                var contentStateChanges = new ConcurrentBag<(string OfferId, string? Hash)>();
 
                 await Parallel.ForEachAsync(offers, ParallelOptions(ct), async (offer, token) =>
                 {
                     try
                     {
                         var product = offer.Product!;
+
+                        // Zakończona oferta podpięta po stronie Allegro pod usunięty produkt nie przyjmie żadnego
+                        // patcha - nie wysyłamy go co cykl tylko po to, żeby dostać ten sam błąd.
+                        if (UnpatchableOffers.ContainsKey(offer.Id) && !AllegroOfferStatus.IsPublished(offer.Status))
+                        {
+                            Interlocked.Increment(ref skipped);
+                            return;
+                        }
 
                         if (_offerFactory.UsesOwnImages && product.AllegroImages.Count == 0)
                         {
@@ -524,13 +591,145 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             product.AllegroImages = images;
                         }
 
+                        // Produkt z katalogu, którego Allegro już nie ma - nie wysyłamy go ponownie.
+                        if (!string.IsNullOrWhiteSpace(offer.ProductId) && DeadCatalogProductIds.ContainsKey(offer.ProductId))
+                            offer.ProductId = null;
+
+                        if (!string.IsNullOrWhiteSpace(product.AllegroId) && DeadCatalogProductIds.ContainsKey(product.AllegroId))
+                            product.AllegroId = null;
+
                         var keepCurrentPrice = await CheckPriceDrop(offer);
 
-                        var request = _offerFactory.PatchOffer(offer, keepCurrentPrice);
+                        ApplyGalleryLimit(product);
+
+                        // Oferty produktu stoją w tej samej kategorii na wszystkich kontach: przy rozjeździe
+                        // patch przenosi ofertę razem z parametrami kategorii docelowej.
+                        var catalogProductId = !string.IsNullOrWhiteSpace(product.AllegroId) ? product.AllegroId : offer.ProductId;
+                        var move = await _categoryAligner.PlanAsync(offer, catalogProductId, token);
+                        var offerCategoryParameters = product.Parameters;
+
+                        ProductOfferRequest BuildPatch(bool clearCompatibility = false)
+                        {
+                            product.Parameters = move?.Parameters ?? offerCategoryParameters;
+
+                            var built = _offerFactory.PatchOffer(offer, keepCurrentPrice);
+
+                            if (move != null)
+                            {
+                                OfferCategoryAligner.ApplyTo(move, built);
+
+                                if (clearCompatibility)
+                                    built.CompatibilityList = new CompatibilityList();
+                            }
+
+                            return built;
+                        }
+
+                        var fullRequest = BuildPatch();
+
+                        // Kompletność liczymy na tym, co faktycznie wysyłamy - wiersz w bazie nie znaczy, że fabryka
+                        // go wyśle (np. EAN z puli RCN). Bez kompletu przeniesienie czeka na krok parametrów.
+                        if (move != null)
+                        {
+                            var missing = OfferCategoryAligner.MissingIn(move, fullRequest);
+
+                            if (missing.Count > 0)
+                            {
+                                _logger.LogDebug("Offer {OfferId} ({Code}) waits to move from category {From} to {To}: missing {Missing}.",
+                                    offer.Id, product.Code, offer.CategoryId, move.CategoryId, string.Join(", ", missing));
+
+                                move = null;
+                                fullRequest = BuildPatch();
+                            }
+                        }
+                        var contentHash = OfferPatchContent.ContentHash(fullRequest);
+                        var unchanged = move == null
+                            && OfferPatchContent.IsUnchanged(contentHash, contentStates.GetValueOrDefault(offer.Id), DateTime.UtcNow);
+
+                        var request = unchanged ? OfferPatchContent.PriceAndStockOnly(fullRequest) : fullRequest;
                         var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, request, token);
                         var body = await response.Content.ReadAsStringAsync(token);
 
-                        var dataFixed = await HandleAllegroResponse(product, response, body, isUpdate: true, offer.Id);
+                        // Patch ze stanem i ceną przechodzi pełną walidację oferty. Gdy Allegro odrzuci go
+                        // z powodu treści (np. pusta galeria po asynchronicznym odrzuceniu zdjęć), od razu
+                        // wysyłamy pełną strukturę - ona może to naprawić, a ponowna walidacja to jedno zapytanie.
+                        if (unchanged && IsContentRejection(response.StatusCode))
+                        {
+                            _logger.LogInformation("Price and stock patch for {Code} (offer {OfferId}) rejected ({Status}) - sending the full offer.",
+                                product.Code, offer.Id, (int)response.StatusCode);
+
+                            unchanged = false;
+                            request = fullRequest;
+                            response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, request, token);
+                            body = await response.Content.ReadAsStringAsync(token);
+                        }
+
+                        // Tabela zgodności ("Pasuje do") ma typ, którego kategoria docelowa nie obsługuje - próbujemy
+                        // przenieść ofertę raz jeszcze z pustą tabelą.
+                        if (move != null && IsContentRejection(response.StatusCode) && body.Contains("ValidCompatibilityTable", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogInformation("Moving offer {OfferId} ({Code}) to category {To}: compatibility table not supported there - retrying without it.",
+                                offer.Id, product.Code, move.CategoryId);
+
+                            fullRequest = BuildPatch(clearCompatibility: true);
+                            contentHash = OfferPatchContent.ContentHash(fullRequest);
+                            request = fullRequest;
+                            response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, request, token);
+                            body = await response.Content.ReadAsStringAsync(token);
+                        }
+
+                        // Allegro nie przyjęło przeniesienia (np. kategoria wymaga czegoś, czego nie mamy) - oferta
+                        // dostaje zwykły patch w swojej kategorii, a próba wraca dopiero po okresie karencji.
+                        if (move != null && IsContentRejection(response.StatusCode))
+                        {
+                            _categoryAligner.RecordRejected(offer.Id, move.CategoryId);
+                            Interlocked.Increment(ref moveRejected);
+
+                            // Aktualizacja w miejscu idzie zaraz niżej, więc to informacja, nie błąd.
+                            _logger.LogInformation("Offer {OfferId} ({Code}) stays in category {From} - Allegro rejected the move to {To} (next attempt in {Days} days): {Reason}",
+                                offer.Id, product.Code, offer.CategoryId, move.CategoryId, OfferCategoryAligner.RetryRejectedAfter.TotalDays, RejectionReason(body));
+
+                            move = null;
+                            fullRequest = BuildPatch();
+                            contentHash = OfferPatchContent.ContentHash(fullRequest);
+                            request = fullRequest;
+                            response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, request, token);
+                            body = await response.Content.ReadAsStringAsync(token);
+                        }
+
+                        // Za duża galeria: przycinamy własne zdjęcia do miejsca, które zostawia produkt z katalogu,
+                        // i od razu ponawiamy pełny patch - inaczej oferta nie dostawała ani stanu, ani ceny.
+                        if (await ShrinkGalleryAfterRejection(product, catalogProductId, response, body, token))
+                        {
+                            unchanged = false;
+                            fullRequest = BuildPatch();
+                            contentHash = OfferPatchContent.ContentHash(fullRequest);
+                            request = fullRequest;
+                            response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, request, token);
+                            body = await response.Content.ReadAsStringAsync(token);
+                        }
+
+                        var dataFixed = await HandleAllegroResponse(product, response, body, isUpdate: true, offer.Id, offer.CategoryId);
+
+                        if (response.IsSuccessStatusCode && move != null)
+                        {
+                            Interlocked.Increment(ref movedToCategory);
+                            _logger.LogInformation("Offer {OfferId} ({Code}) moved from category {From} to {To}.",
+                                offer.Id, product.Code, offer.CategoryId, move.CategoryId);
+                        }
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            if (unchanged)
+                                Interlocked.Increment(ref priceAndStockOnly);
+                            else
+                                contentStateChanges.Add((offer.Id, contentHash));
+                        }
+                        else if (contentStates.ContainsKey(offer.Id))
+                        {
+                            // Po błędzie kolejny cykl wysyła pełną strukturę - mogła to naprawić tylko ona.
+                            contentStateChanges.Add((offer.Id, null));
+                        }
 
                         if (response.IsSuccessStatusCode)
                             Interlocked.Increment(ref updated);
@@ -546,9 +745,28 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     }
                 });
 
+                if (!_offersToEndAfterUpdate.IsEmpty)
+                {
+                    var incomplete = offers.Where(o => _offersToEndAfterUpdate.ContainsKey(o.Id)).ToList();
+                    _offersToEndAfterUpdate.Clear();
+
+                    endedCount += await EndOffers(incomplete, "have an Allegro catalog product without required parameters and no complete replacement", ct);
+                }
+
+                try
+                {
+                    await _offerRepo.SaveContentStates(contentStateChanges.ToList(), ct);
+                }
+                catch (Exception ex)
+                {
+                    // Bez zapisu kolejny cykl wyśle po prostu pełne patche - nic się nie psuje.
+                    _logger.LogWarning(ex, "Saving offer content hashes failed - the next cycle sends full updates.");
+                }
+
                 _logger.LogInformation(
-                    "Offers updated: {Updated}, failed: {Failed}, skipped: {Skipped}, ended: {Ended}, data fixed (retry next cycle): {Fixed}.",
-                    updated, failed, skipped, endedCount, fixedData);
+                    "Offers updated: {Updated} (price and stock only: {PriceAndStock}, full: {Full}, moved to the product category: {Moved}, move rejected: {MoveRejected}), " +
+                    "failed: {Failed}, skipped: {Skipped}, ended: {Ended}, data fixed (retry next cycle): {Fixed}.",
+                    updated, priceAndStockOnly, updated - priceAndStockOnly, movedToCategory, moveRejected, failed, skipped, endedCount, fixedData);
                 LogErrorSummary("Offers update");
             }
             catch (Exception ex)
@@ -726,7 +944,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         // ---------------------------------------------------------------- odpowiedzi z Allegro
 
         /// <summary>Zwraca true, gdy blad zostal naprawiony w danych produktu i ma sens kolejna proba.</summary>
-        private async Task<bool> HandleAllegroResponse(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate, string? offerId = null)
+        private async Task<bool> HandleAllegroResponse(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate, string? offerId = null, int? offerCategoryId = null)
         {
             var action = isUpdate ? "update" : "create";
 
@@ -741,7 +959,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 case 400:
                 case 422:
                     await _imageRepo.DeleteNotConnectedImages(product.Id, CancellationToken.None);
-                    return await HandleAllegroErrors(product, response, body, isUpdate, offerId);
+                    return await HandleAllegroErrors(product, response, body, isUpdate, offerId, offerCategoryId ?? product.DefaultAllegroCategory);
 
                 case 404:
                     _logger.LogWarning("Offer {OfferId} not found in Allegro ({Code}). Removing from database.", offerId, product.Code);
@@ -757,7 +975,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             }
         }
 
-        private async Task<bool> HandleAllegroErrors(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate, string? offerId)
+        private async Task<bool> HandleAllegroErrors(RolmarProduct product, HttpResponseMessage response, string body, bool isUpdate, string? offerId, int offerCategoryId)
         {
             var action = isUpdate ? "update" : "create";
 
@@ -785,12 +1003,28 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             var fixedCount = 0;
             var unfixedCount = 0;
 
+            // Produkt z katalogu podmieniamy najwyżej raz na odpowiedź - Allegro potrafi zgłosić
+            // kilka błędów naraz, a każdy z nich prowadziłby do tej samej podmiany.
+            var catalogProductReplaced = false;
+
             foreach (var err in errorResponse.Errors)
             {
                 var userMessage = err.UserMessage ?? string.Empty;
                 var message = err.Message ?? string.Empty;
 
-                if (await TryFixProductData(product, err, userMessage, message, response, offerId))
+                if (_service.ProductParametersFromCatalog && IsCatalogProductDefect(err.Code ?? string.Empty, userMessage, message))
+                {
+                    if (!catalogProductReplaced)
+                    {
+                        catalogProductReplaced = true;
+                        await ReplaceCatalogProduct(product, err, userMessage, message, offerId, offerCategoryId);
+                    }
+
+                    fixedCount++;
+                    continue;
+                }
+
+                if (await TryFixProductData(product, err, userMessage, message, response, offerId, offerCategoryId))
                 {
                     fixedCount++;
                     continue;
@@ -821,7 +1055,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         /// Część błędów Allegro da się naprawić w danych produktu (kategoria, parametr).
         /// Zwraca true, gdy błąd został obsłużony i nie trzeba go logować jako błędu.
         /// </summary>
-        private async Task<bool> TryFixProductData(RolmarProduct product, AllegroError err, string userMessage, string message, HttpResponseMessage response, string? offerId)
+        private async Task<bool> TryFixProductData(RolmarProduct product, AllegroError err, string userMessage, string message, HttpResponseMessage response, string? offerId, int offerCategoryId)
         {
             var code = err.Code ?? string.Empty;
 
@@ -841,6 +1075,55 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 return false;
             }
 
+            // Ten sam produkt z katalogu ma już aktywną ofertę innego naszego produktu - Allegro nie pozwala
+            // aktywować drugiej. Id odrzucamy dla tego produktu (zostaje przy tym, którego oferta jest aktywna)
+            // i szukamy innego; wyszukiwanie pomija produkty z katalogu podpięte już gdzie indziej. Bez tego
+            // oferta wracała z tym błędem w każdym cyklu.
+            if (_service.ProductParametersFromCatalog && IsDuplicateActiveOffer(userMessage, message))
+            {
+                await _productRepo.UnlinkAllegroProduct(product.Id, offerId, reject: true, CancellationToken.None);
+                var previousId = product.AllegroId;
+                product.AllegroId = null;
+
+                _logger.LogWarning(
+                    "Allegro product {ProductId} for {Code} (offer {OfferId}) already has an active offer of another product - " +
+                    "id rejected for this product, looking for another one.",
+                    previousId ?? "-", product.Code, offerId ?? "-");
+
+                return await RelinkCatalogProduct(product, offerId);
+            }
+
+            // Allegro odłączyło produkt z katalogu od oferty i nie pozwala go podpiąć ponownie.
+            // Zapamiętujemy jego id (wyszukiwanie go pominie), czyścimy je i szukamy innego produktu -
+            // inaczej ta sama oferta wracała z tym błędem w każdym cyklu.
+            if (code == "ProductConstraintViolationException.DataIntegrity"
+                && userMessage.Contains("odłączony", StringComparison.OrdinalIgnoreCase))
+            {
+                await _productRepo.RejectAllegroProduct(product.Id, offerId, CancellationToken.None);
+                product.AllegroId = null;
+
+                _logger.LogWarning("Allegro detached catalog product from offer {OfferId} ({Code}) - id rejected, looking for another one.",
+                    offerId ?? "-", product.Code);
+
+                // Bez innego produktu oferta poczeka - ponowna próba z tym samym id skończyłaby się tak samo.
+                await RelinkCatalogProduct(product, offerId);
+                return true;
+            }
+
+            // Brak parametrów obowiązkowych: przeliczamy parametry produktu (także dla kategorii,
+            // w której stoi oferta), a przy produkcie z katalogu wysyłamy je razem z jego id.
+            if (code.EndsWith("MissingRequiredParameters", StringComparison.OrdinalIgnoreCase))
+            {
+                var alreadyRequested = await _productRepo.RequestCatalogParameters(product.Id, CancellationToken.None);
+
+                if (alreadyRequested)
+                    return false;
+
+                _logger.LogInformation("Missing required parameters for {Code} (offer {OfferId}) - parameters will be recomputed and sent with the product.",
+                    product.Code, offerId ?? "-");
+                return true;
+            }
+
             // Allegro samo podaje wartość, jakiej oczekuje - stosujemy ją, zamiast wpisywać własną.
             if ((code == "PARAMETER_MISMATCH" && !string.IsNullOrEmpty(userMessage))
                 || (code == "ProductConstraintViolationException.DataIntegrity"
@@ -858,7 +1141,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 }
 
                 // Komunikat podaje id tylko czasem; zwykle mamy samą nazwę parametru.
-                var parameterId = ExtractParameterIdFromConstraintMessage(message);
+                var parameterId = ExtractParameterIdFromConstraintMessage(message) ?? ExtractParameterIdFromConstraintMessage(userMessage);
                 var parameterName = ExtractParameterNameFromMismatchMessage(sourceMessage);
 
                 bool updated;
@@ -872,6 +1155,12 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     _logger.LogWarning("Cannot identify the parameter to fix for {Code}. Message: {Message}", product.Code, Shorten(sourceMessage));
                     return false;
                 }
+
+                // Brak zmiany: parametr ma już tę wartość, ale nie dociera do Allegro (brak wiersza
+                // w kategorii oferty albo parametr produktu, którego przy produkcie z katalogu nie
+                // wysyłaliśmy) - np. "Producent części" `John Deere` zamiast `JAG` w każdym cyklu.
+                if (!updated && !string.IsNullOrEmpty(parameterName))
+                    updated = await _parameterRepo.SetParameterByName(product.Id, offerCategoryId, parameterName, correctValue, CancellationToken.None);
 
                 if (!updated)
                 {
@@ -912,6 +1201,36 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 }
 
                 _logger.LogInformation("Manufacturer set to '{Manufacturer}' for {Code}.", _allegroSettings.DefaultPartsManufacturer, product.Code);
+                return true;
+            }
+
+            // Wartość spoza słownika kategorii ("An incorrect value `Inna` has been entered for parameter `Marka`").
+            // Marce dajemy "bez marki", inny parametr usuwamy - obowiązkowy zostanie wyliczony
+            // ponownie, a nieobowiązkowy po prostu nie pójdzie.
+            if (code == "DictionaryParameterValueNotFound")
+            {
+                var (badValue, parameterName) = ExtractDictionaryValueError(string.IsNullOrEmpty(message) ? userMessage : message);
+
+                if (string.IsNullOrEmpty(parameterName))
+                    return false;
+
+                if (string.Equals(parameterName, "Marka", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(badValue, ParameterFallbacks.UnbrandedValue, StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    var changed = await _parameterRepo.SetParameterByName(product.Id, offerCategoryId, parameterName, ParameterFallbacks.UnbrandedValue, CancellationToken.None);
+
+                    if (changed)
+                        _logger.LogInformation("Parameter 'Marka' for {Code}: '{Value}' is not in the dictionary - set to '{Unbranded}'.",
+                            product.Code, badValue, ParameterFallbacks.UnbrandedValue);
+
+                    return changed;
+                }
+
+                await _parameterRepo.DeleteParameter(parameterName, product.Id, CancellationToken.None);
+                _logger.LogInformation("Parameter '{Parameter}' removed for {Code}: value '{Value}' is not in the category dictionary.",
+                    parameterName, product.Code, badValue);
                 return true;
             }
 
@@ -958,6 +1277,12 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             // wracalaby z tym samym bledem w kazdym cyklu.
             if (code == "ProductNotFoundException")
             {
+                foreach (var deadId in new[] { ExtractMissingProductId(message) ?? ExtractMissingProductId(userMessage), product.AllegroId })
+                {
+                    if (!string.IsNullOrWhiteSpace(deadId))
+                        DeadCatalogProductIds.TryAdd(deadId, 0);
+                }
+
                 if (!string.IsNullOrWhiteSpace(product.AllegroId))
                 {
                     await _productRepo.UpdateProductAllegroId(product.Id, null, product.DefaultAllegroCategory.ToString(CultureInfo.InvariantCulture), null, CancellationToken.None);
@@ -969,7 +1294,21 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 if (!string.IsNullOrEmpty(offerId))
                     await _offerRepo.UpdateProductId(offerId, null, CancellationToken.None);
 
-                return await RelinkCatalogProduct(product, offerId);
+                if (await RelinkCatalogProduct(product, offerId))
+                    return true;
+
+                // Oferta podpięta po stronie Allegro pod usunięty produkt nie przyjmuje żadnego patcha,
+                // więc nie dostaje ani stanu, ani ceny. Kończymy ją, zamiast sprzedawać ze starym stanem -
+                // do ponownego wystawienia trzeba ją wystawić od nowa.
+                if (!string.IsNullOrEmpty(offerId))
+                {
+                    _offersToEndAfterUpdate.TryAdd(offerId, 0);
+                    UnpatchableOffers.TryAdd(offerId, 0);
+                    _logger.LogWarning("Offer {OfferId} ({Code}) is bound to a deleted Allegro product and has no replacement - ending it; it needs to be listed again.",
+                        offerId, product.Code);
+                }
+
+                return false;
             }
 
             // Oferta nie jest podpieta pod produkt z katalogu. Szukamy produktu po EAN,
@@ -1018,6 +1357,122 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         }
 
         /// <summary>
+        /// Błąd, który przy parametrach branych z katalogu oznacza wadę samego produktu z katalogu:
+        /// brak obowiązkowego parametru albo wartość parametru produktu sprzeczna z ofertą.
+        /// Własnych parametrów produktu nie wysyłamy, więc naprawić to może tylko inny produkt.
+        /// </summary>
+        internal static bool IsCatalogProductDefect(string code, string userMessage, string message) =>
+            code.EndsWith("MissingRequiredParameters", StringComparison.OrdinalIgnoreCase)
+            || (code == "ProductConstraintViolationException.DataIntegrity"
+                && (userMessage.Contains("Niepoprawna wartość parametru", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("Incorrect value of the", StringComparison.OrdinalIgnoreCase)));
+
+        /// <summary>
+        /// Podmienia produkt z katalogu, któremu brakuje parametrów obowiązkowych (albo który jest
+        /// sprzeczny z ofertą), na inny z kompletem. Gdy takiego nie ma: odpina produkt (kolejny cykl
+        /// szuka od nowa), a istniejącą ofertę kończy - bez kompletu parametrów i tak nie przejdzie.
+        /// </summary>
+        private async Task ReplaceCatalogProduct(RolmarProduct product, AllegroError err, string userMessage, string message, string? offerId, int offerCategoryId)
+        {
+            var currentId = product.AllegroId;
+            var reason = string.IsNullOrWhiteSpace(userMessage) ? message : userMessage;
+
+            // Produkt sprzeczny z ofertą (inny EAN) to inny towar - nie wraca. Niekompletny może zostać
+            // uzupełniony w katalogu, więc tylko pomijamy go w tym wyszukiwaniu.
+            var reject = !(err.Code ?? string.Empty).EndsWith("MissingRequiredParameters", StringComparison.OrdinalIgnoreCase);
+
+            var missingNames = ExtractMissingParameterNames(reason);
+
+            if (!reject && missingNames.Count > 0)
+            {
+                // O tym, co jest parametrem oferty, decyduje kategoria, w której oferta stoi.
+                var offerOnly = await OfferOnlyParameters(offerCategoryId > 0 ? offerCategoryId : product.DefaultAllegroCategory, missingNames);
+
+                // Brakuje wyłącznie parametrów oferty (np. "Wyrób medyczny") - uzupełnia je oferta, nie produkt
+                // z katalogu, więc podmiana nic nie da. Wcześniej taka oferta odpinała i podpinała produkt co cykl.
+                if (offerOnly.Count == missingNames.Count)
+                {
+                    _logger.LogWarning(
+                        "Offer for {Code} (offer {OfferId}) lacks required offer parameters that are not computed from supplier data: {Parameters}. " +
+                        "The Allegro product stays linked.",
+                        product.Code, offerId ?? "-", string.Join(", ", offerOnly));
+                    return;
+                }
+
+                missingNames = missingNames.Except(offerOnly, StringComparer.OrdinalIgnoreCase).ToList();
+            }
+
+            var excluded = string.IsNullOrWhiteSpace(currentId) ? Array.Empty<string>() : new[] { currentId };
+            var found = await _allegroProductService.FindCatalogProduct(product, CancellationToken.None, excluded, missingNames);
+
+            if (found.ProductId != null && found.CategoryId != null
+                && !string.Equals(found.ProductId, currentId, StringComparison.OrdinalIgnoreCase))
+            {
+                if (reject)
+                    await _productRepo.RejectAllegroProduct(product.Id, offerId, CancellationToken.None);
+
+                await _productRepo.UpdateProductAllegroId(product.Id, found.ProductId, found.CategoryId, found.Name, CancellationToken.None);
+                product.AllegroId = found.ProductId;
+
+                if (!string.IsNullOrEmpty(offerId))
+                    await _offerRepo.UpdateProductId(offerId, found.ProductId, CancellationToken.None);
+
+                _logger.LogWarning(
+                    "Allegro product {OldId} for {Code} (offer {OfferId}) does not fit: {Reason} Replaced with {NewId} in category {CategoryId}.",
+                    currentId ?? "-", product.Code, offerId ?? "-", Shorten(reason), found.ProductId, found.CategoryId);
+                return;
+            }
+
+            await _productRepo.UnlinkAllegroProduct(product.Id, offerId, reject, CancellationToken.None);
+            product.AllegroId = null;
+
+            if (!string.IsNullOrEmpty(offerId))
+                _offersToEndAfterUpdate.TryAdd(offerId, 0);
+
+            _logger.LogWarning(
+                "Allegro product {OldId} for {Code} (offer {OfferId}) does not fit: {Reason} No complete replacement found - " +
+                "product unlinked{Ending}, the search retries next cycle.",
+                currentId ?? "-", product.Code, offerId ?? "-", Shorten(reason), string.IsNullOrEmpty(offerId) ? string.Empty : " and offer ended");
+        }
+
+        /// <summary>Nazwy parametrów z "Uzupełnij parametry obowiązkowe: A, B." / "Fill in the required parameters: A, B".</summary>
+        internal static List<string> ExtractMissingParameterNames(string message)
+        {
+            var match = Regex.Match(message ?? string.Empty, @"(?:obowiązkowe|required parameters)\s*:\s*(.+)$", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+            if (!match.Success)
+                return [];
+
+            return match.Groups[1].Value
+                .TrimEnd('.', ' ')
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(name => name.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Te z brakujących parametrów, które w kategorii są parametrami oferty (nie opisują produktu) -
+        /// podaje je sprzedający, a nie produkt z katalogu. Bez listy parametrów kategorii: żaden.
+        /// </summary>
+        private async Task<List<string>> OfferOnlyParameters(int categoryId, IReadOnlyCollection<string> names)
+        {
+            if (categoryId <= 0)
+                return [];
+
+            var parameters = await _allegroProductService.GetCategoryParameters(categoryId.ToString(CultureInfo.InvariantCulture), CancellationToken.None);
+
+            if (parameters == null)
+                return [];
+
+            return names
+                .Where(name => parameters.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)
+                                                   && p.Options?.DescribesProduct != true
+                                                   && !p.RequiredForProduct))
+                .ToList();
+        }
+
+        /// <summary>
         /// Podpina ofertę pod produkt z katalogu Allegro: szuka go po EAN, kodzie i nazwie,
         /// a znalezione id zapisuje przy produkcie i przy ofercie - dzięki temu kolejna próba
         /// wychodzi już z poprawnym productSet. Zwraca false, gdy w katalogu nic nie pasuje.
@@ -1044,6 +1499,137 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
             return true;
         }
+
+        /// <summary>Limit galerii Allegro, gdy komunikat go nie podaje.</summary>
+        private const int AllegroGalleryLimit = 16;
+
+        /// <summary>
+        /// Ile własnych zdjęć zmieści się w galerii oferty danego produktu, ustalone po odrzuceniu
+        /// "You can add up to 16 images". Bez tego każdy cykl zaczynałby od odrzuconego patcha.
+        /// Żyje tyle, co proces - po restarcie limit ustala się ponownie przy pierwszym odrzuceniu.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, int> GalleryLimits = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Klucz limitu galerii - kody produktów różnych dostawców potrafią się powtarzać.</summary>
+        private string GalleryKey(RolmarProduct product) => $"{_service.Company}:{product.Code}";
+
+        /// <summary>Przycina własne zdjęcia produktu do zapamiętanego limitu galerii.</summary>
+        private void ApplyGalleryLimit(RolmarProduct product)
+        {
+            if (!_offerFactory.UsesOwnImages || !GalleryLimits.TryGetValue(GalleryKey(product), out var limit))
+                return;
+
+            if (product.AllegroImages.Count > limit)
+                product.AllegroImages = product.AllegroImages.Take(limit).ToList();
+        }
+
+        /// <summary>
+        /// Odrzucenie za za dużą galerię ("GallerySizeException - You can add up to 16 images"). Zwraca limit
+        /// z komunikatu albo <c>null</c>, gdy to inny błąd - w tym "przynajmniej 1 zdjęcie", czyli galeria pusta.
+        /// </summary>
+        internal static int? GalleryTooLargeLimit(string body)
+        {
+            if (string.IsNullOrEmpty(body) || !body.Contains("GallerySizeException", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var match = Regex.Match(body, @"(?:up to|maksymalnie|do)\s+(\d+)\s+(?:images|zdję)", RegexOptions.IgnoreCase);
+
+            if (match.Success)
+                return int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+
+            return body.Contains("przynajmniej", StringComparison.OrdinalIgnoreCase) || body.Contains("at least", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : AllegroGalleryLimit;
+        }
+
+        /// <summary>
+        /// Ile własnych zdjęć wysłać, skoro Allegro odrzuciło galerię: limit minus zdjęcia produktu z katalogu,
+        /// które Allegro dolicza do galerii oferty. Gdy katalogowych nie ma albo nie wiadomo ile, zdejmujemy
+        /// po jednym - kolejne odrzucenie zmniejszy limit dalej. Zawsze zostaje co najmniej jedno zdjęcie.
+        /// </summary>
+        internal static int ReducedGallerySize(int ownImages, int catalogImages, int limit)
+        {
+            var size = limit - Math.Max(catalogImages, 0);
+
+            if (size >= ownImages)
+                size = ownImages - 1;
+
+            return Math.Max(size, 1);
+        }
+
+        /// <summary>
+        /// Po odrzuceniu za za dużą galerię przycina własne zdjęcia produktu i zapamiętuje limit.
+        /// Zwraca true, gdy jest sens ponowić zapytanie z mniejszą galerią.
+        /// </summary>
+        private async Task<bool> ShrinkGalleryAfterRejection(RolmarProduct product, string? catalogProductId, HttpResponseMessage response, string body, CancellationToken ct)
+        {
+            if (response.IsSuccessStatusCode || !_offerFactory.UsesOwnImages)
+                return false;
+
+            var limit = GalleryTooLargeLimit(body);
+            var ownImages = product.AllegroImages.Select(i => i.Url).Distinct().Count();
+
+            if (limit == null || ownImages <= 1)
+                return false;
+
+            var catalogImages = 0;
+
+            if (!string.IsNullOrWhiteSpace(catalogProductId))
+            {
+                try
+                {
+                    var catalogProduct = await _apiClient.GetAsync<SearchProdustsResponse.Product>($"/sale/products/{catalogProductId}", ct);
+                    catalogImages = catalogProduct?.Images.Count ?? 0;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogDebug(ex, "Reading images of Allegro product {ProductId} failed.", catalogProductId);
+                }
+            }
+
+            var size = ReducedGallerySize(ownImages, catalogImages, limit.Value);
+
+            if (size >= ownImages)
+                return false;
+
+            GalleryLimits[GalleryKey(product)] = size;
+            product.AllegroImages = product.AllegroImages
+                .GroupBy(i => i.Url)
+                .Select(g => g.First())
+                .Take(size)
+                .ToList();
+
+            _logger.LogWarning(
+                "Gallery of {Code} is over the Allegro limit of {Limit} ({Own} own images, {Catalog} from the catalog product) - sending {Size} own images.",
+                product.Code, limit, ownImages, catalogImages, size);
+
+            return true;
+        }
+
+        /// <summary>"Przedmiot, który chcesz wystawić znajduje się już na liście Twoich aktywnych ofert..."</summary>
+        internal static bool IsDuplicateActiveOffer(string userMessage, string message) =>
+            userMessage.Contains("już na liście Twoich aktywnych ofert", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("already on the list of your active offers", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Kod i komunikat pierwszego błędu z odpowiedzi Allegro - do jednej linii w logu.</summary>
+        internal static string RejectionReason(string body)
+        {
+            try
+            {
+                var error = JsonSerializer.Deserialize<AllegroErrorResponse>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })?.Errors?.FirstOrDefault();
+
+                if (error != null)
+                    return $"{error.Code}: {(string.IsNullOrWhiteSpace(error.UserMessage) ? error.Message : error.UserMessage)}";
+            }
+            catch (JsonException)
+            {
+            }
+
+            return Shorten(body);
+        }
+
+        private static bool IsContentRejection(System.Net.HttpStatusCode status) =>
+            status is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.UnprocessableEntity;
 
         private bool HasDefaultManufacturer => !string.IsNullOrWhiteSpace(_allegroSettings.DefaultPartsManufacturer);
 
@@ -1212,6 +1798,20 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
             // Polska wersja podaje id w nawiasie: "parametru EAN/ISBN/ISSN (225693) dla produktu w ofercie".
             match = Regex.Match(message, @"parametru\s+[^()]{1,80}?\((\d+)\)", RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups[1].Value : null;
+        }
+
+        /// <summary>Wartość i nazwa parametru z "An incorrect value `X` has been entered for parameter `Y`".</summary>
+        internal static (string? Value, string? Parameter) ExtractDictionaryValueError(string message)
+        {
+            var match = Regex.Match(message ?? string.Empty, @"value\s*`([^`]*)`.*?parameter\s*`([^`]+)`", RegexOptions.IgnoreCase);
+            return match.Success ? (match.Groups[1].Value.Trim(), match.Groups[2].Value.Trim()) : (null, null);
+        }
+
+        /// <summary>Id produktu z "Product with ID: X not found".</summary>
+        internal static string? ExtractMissingProductId(string message)
+        {
+            var match = Regex.Match(message ?? string.Empty, @"Product with ID:\s*([0-9a-fA-F-]{8,})", RegexOptions.IgnoreCase);
             return match.Success ? match.Groups[1].Value : null;
         }
 

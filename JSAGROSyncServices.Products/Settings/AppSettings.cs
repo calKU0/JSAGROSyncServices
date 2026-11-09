@@ -51,6 +51,15 @@ namespace JSAGROSyncServices.Products.Settings
         /// </summary>
         public int AllegroParallelism { get; set; } = 8;
 
+        /// <summary>
+        /// Uruchomienie ręczne: tylko kroki o podanych nazwach (np. "Supplier products",
+        /// "Allegro category paths"). Pusta lista = pełny cykl.
+        /// </summary>
+        public List<string> OnlySteps { get; set; } = new List<string>();
+
+        /// <summary>Jeden cykl i zakończenie procesu - do uruchomień ręcznych.</summary>
+        public bool RunOnce { get; set; }
+
         public int MinProductStock { get; set; }
         public decimal MinProductPriceNet { get; set; }
         public decimal BundleProductsUnderPriceNet { get; set; }

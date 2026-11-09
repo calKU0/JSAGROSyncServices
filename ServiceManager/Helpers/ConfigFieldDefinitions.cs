@@ -1,5 +1,6 @@
 ﻿using ServiceManager.Enums;
 using ServiceManager.Models;
+using ServiceManager.Validation;
 
 namespace ServiceManager.Helpers
 {
@@ -58,6 +59,23 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "PriceSettings:DropshippingPriceNet", Label = "Cena netto dropshippingu", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
             new ConfigField { Key = "PriceSettings:OversizeSurcharge", Label = "Dopłata za produkt ponadgabarytowy (PLN)", Group = "Narzuty", FieldType = ConfigFieldType.Decimal, Description = "Doliczana do ceny oferty, gdy którykolwiek wymiar produktu przekracza próg. 0 = bez dopłaty." },
             new ConfigField { Key = "PriceSettings:OversizeThresholdCm", Label = "Próg ponadgabarytu (cm)", Group = "Narzuty", FieldType = ConfigFieldType.Decimal },
+            new ConfigField
+            {
+                Key = "PriceSettings:MarginRanges",
+                Label = "Marża własna wg ceny zakupu brutto",
+                Group = "Narzuty",
+                FieldType = ConfigFieldType.Table,
+                AddButtonText = "Dodaj zakres",
+                SortBy = "Min",
+                TableValidator = MarginRangeValidator.Validate,
+                Description = "Marża doliczana do ceny zakupu brutto z przedziału, w który cena wpada. Zakresy zapisują się posortowane od najniższego; cena powyżej ostatniego zakresu dostaje marżę ostatniego.",
+                Columns =
+                {
+                    new TableColumn { Property = "Min", Header = "Od (PLN)", Kind = TableColumnKind.Decimal },
+                    new TableColumn { Property = "Max", Header = "Do (PLN)", Kind = TableColumnKind.Decimal },
+                    new TableColumn { Property = "Margin", Header = "Marża (%)", Kind = TableColumnKind.Decimal }
+                }
+            },
             new ConfigField { Key = "PriceSettings:MaxPriceDropPercent", Label = "Maksymalny spadek ceny (%)", Group = "Narzuty", FieldType = ConfigFieldType.Decimal, Description = "Dotyczy ceny zakupu u dostawcy. Po skokowym spadku powyżej tej wartości cena oferty nie jest aktualizowana, a produkt nie jest wystawiany - zgłaszamy to w logu i mailem. Blokada znika, gdy cena zakupu wróci do poprzedniego poziomu. 0 = bez ograniczenia." },
 
             // AppSettings
@@ -80,6 +98,25 @@ namespace ServiceManager.Helpers
             new ConfigField { Key = "AppSettings:OfferProcessingDelayMinutes", Label = "Opóźnienie złożenia zamówienia (min)", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.Int },
             new ConfigField { Key = "AppSettings:NotificationsEmail", Label = "Adresy email do powiadomień (rodzielone średnikiem)", IsVisable = false, Group = "Ustawienia serwisu" },
             new ConfigField { Key = "AppSettings:AllegroDeliveryNames", Label = "Nazwy cenników dostawy Allegro", Group = "Ustawienia serwisu", FieldType = ConfigFieldType.StringList, Description = "Serwis obsługuje tylko zamówienia z tych cenników. Oferty wystawione ręcznie, spoza listy, są pomijane." },
+            new ConfigField
+            {
+                Key = "AppSettings:Deliveries",
+                Label = "Cenniki dostaw Allegro",
+                Group = "Dostawy",
+                FieldType = ConfigFieldType.Table,
+                AddButtonText = "Dodaj dostawę",
+                TableValidator = DeliveryValidator.Validate,
+                Description = "Produkt trafia do najmniejszego cennika, w który mieści się wagą (kg) i wymiarami (cm, paczkę można obrócić).",
+                Columns =
+                {
+                    new TableColumn { Property = "Length", Header = "Długość", Kind = TableColumnKind.Decimal },
+                    new TableColumn { Property = "Width", Header = "Szerokość", Kind = TableColumnKind.Decimal },
+                    new TableColumn { Property = "Height", Header = "Wysokość", Kind = TableColumnKind.Decimal },
+                    new TableColumn { Property = "Weight", Header = "Waga", Kind = TableColumnKind.Decimal },
+                    new TableColumn { Property = "DeliveryName", Header = "Nazwa", Width = 2, Required = true },
+                    new TableColumn { Property = "IsSmart", Header = "Smart", Kind = TableColumnKind.Bool, DefaultValue = "true", Width = 0.6, Tooltip = "Cennik objęty Allegro Smart - tylko wtedy koszt wysyłki jest doliczany do ceny oferty." }
+                }
+            },
             new ConfigField { Key = "AppSettings:DeliveryAddressEmail", Label = "Email podawany w adresie dostawy", IsVisable = false, Group = "Ustawienia serwisu" },
 
             // Allegro Settings

@@ -115,6 +115,9 @@ namespace ServiceManager.Services
         /// </summary>
         private static JsonNode? ToJsonValue(string value, ConfigFieldType? fieldType, JsonNode? previous)
         {
+            if (fieldType == ConfigFieldType.Bool && bool.TryParse(value, out var flag))
+                return JsonValue.Create(flag);
+
             var numeric = fieldType switch
             {
                 ConfigFieldType.Int or ConfigFieldType.Decimal => true,

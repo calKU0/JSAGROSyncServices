@@ -1,4 +1,5 @@
 ﻿using JSAGROSyncServices.Products.Configuration;
+using JSAGROSyncServices.Products.Helpers;
 using JSAGROSyncServices.Products.Settings;
 using Dapper;
 using JSAGROSyncServices.Contracts.DTOs.Allegro;
@@ -423,10 +424,52 @@ namespace JSAGROSyncServices.Products.Repositories
                 product.Specifications = specsLookup[product.Id].ToList();
                 product.Applications = applicationsLookup[product.Id].ToList();
                 product.Packages = packagesLookup[product.Id].ToList();
-                product.Parameters = parametersLookup[product.Id].ToList();
+                // Produkt ma parametry w kilku kategoriach - bierzemy te z kategorii, w której stoi oferta.
+                // Komplet zostaje pod ręką na wypadek przeniesienia oferty do kategorii produktu z katalogu.
+                product.AllParameters = parametersLookup[product.Id].ToList();
+                product.Parameters = ParameterFallbacks.ForCategory(parametersLookup[product.Id], offer.CategoryId, product.DefaultAllegroCategory,
+                    withOtherProductParameters: product.SendCatalogParameters);
             }
 
             return offers;
+        }
+
+        public async Task<Dictionary<string, OfferContentState>> GetContentStates(CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            var rows = await connection.QueryAsync<(string OfferId, string ContentHash, DateTime SentAt)>(
+                new CommandDefinition(
+                    "AllegroOfferContentHashes_Get",
+                    new { Account = _service.Account },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct));
+
+            return rows
+                .GroupBy(r => r.OfferId, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => new OfferContentState(g.First().ContentHash, g.First().SentAt), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public async Task SaveContentStates(IReadOnlyCollection<(string OfferId, string? Hash)> states, CancellationToken ct)
+        {
+            if (states.Count == 0)
+                return;
+
+            using var connection = _context.CreateConnection();
+
+            foreach (var chunk in states.Chunk(2000))
+            {
+                var items = JsonSerializer.Serialize(chunk.Select(s => new { s.OfferId, s.Hash }));
+
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "AllegroOfferContentHashes_Save",
+                        new { Account = _service.Account, Items = items },
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900,
+                        cancellationToken: ct));
+            }
         }
 
         public async Task DeleteOffer(string offerId, CancellationToken ct)

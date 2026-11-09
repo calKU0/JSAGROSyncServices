@@ -8,6 +8,12 @@ namespace JSAGROSyncServices.Contracts.Models
         public string? AllegroId { get; set; }
 
         /// <summary>
+        /// Allegro odrzuciło ofertę z produktem z katalogu za brak parametrów obowiązkowych produktu -
+        /// wysyłamy je razem z id produktu (propozycja uzupełnienia produktu).
+        /// </summary>
+        public bool SendCatalogParameters { get; set; }
+
+        /// <summary>
         /// Nazwa produktu z katalogu Allegro, zapisana przy dopasowaniu. Dla dostawców, którzy
         /// podają tylko nazwę grupy asortymentowej (Inter Cars), jest to jedyna sensowna nazwa oferty.
         /// </summary>
@@ -23,6 +29,13 @@ namespace JSAGROSyncServices.Contracts.Models
         public string? SupplierLogo { get; set; }
         public string? Substitutes { get; set; }
         public float InStock { get; set; }
+
+        /// <summary>
+        /// Czy <see cref="InStock"/> pochodzi z tych samych danych co reszta produktu. Lista produktów
+        /// Rolmara nie zawiera stanów (przychodzą osobnym zapytaniem) - wtedy <c>false</c>, a zapis
+        /// produktu zostawia stan w bazie bez zmian, zamiast go zerować.
+        /// </summary>
+        public bool HasStock { get; set; } = true;
         public string Unit { get; set; } = string.Empty;
         public string? CurrencyPrice { get; set; }
         public decimal PriceNet { get; set; }
@@ -66,6 +79,12 @@ namespace JSAGROSyncServices.Contracts.Models
         public IntegrationCompany IntegrationCompany { get; set; }
         public int IntegrationId { get; set; }
         public int DeliveryType { get; set; }
+
+        /// <summary>
+        /// Klasa wysyłki od dostawcy (Rolmar: pole "cubature") - INPOST_A/B/C, "paczka",
+        /// "półpaleta", "paleta", "dłużyca". Zapasowe źródło gabarytu, gdy specyfikacja nie ma wymiarów.
+        /// </summary>
+        public string? ShippingClass { get; set; }
         public List<ProductPackage> Packages { get; set; } = new();
         public List<ProductApplication> Applications { get; set; } = new();
         /// <summary>
@@ -76,6 +95,12 @@ namespace JSAGROSyncServices.Contracts.Models
         /// </summary>
         public List<ProductSpecification>? Specifications { get; set; }
         public List<ProductParameter> Parameters { get; set; } = new();
+
+        /// <summary>
+        /// Wszystkie parametry produktu ze wszystkich kategorii (<see cref="Parameters"/> to zestaw jednej kategorii).
+        /// Potrzebne przy przenoszeniu oferty do innej kategorii - wysyłamy wtedy zestaw kategorii docelowej.
+        /// </summary>
+        public List<ProductParameter> AllParameters { get; set; } = new();
         /// <summary>
         /// Klucze kategorii-lisci dostawcy (Gąska: id z API, Rolmar: znormalizowana ścieżka).
         /// <c>null</c> oznacza "nie znamy kategorii w tej operacji" - zapis NIE rusza wtedy

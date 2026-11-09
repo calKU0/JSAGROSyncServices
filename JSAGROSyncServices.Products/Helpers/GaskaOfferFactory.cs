@@ -239,14 +239,19 @@ namespace JSAGROSyncServices.Products.Helpers
 
             // Przy produkcie z katalogu wysyłamy samo id. Nazwa, zdjęcia czy parametry obok id
             // to dla Allegro propozycja zmiany produktu - wtedy żąda kompletu parametrów produktu.
+            // Wyjątek: Allegro odrzuciło ofertę za brak parametrów produktu - dokładamy je do id.
+            var catalogParameters = product.SendCatalogParameters && includeProductParameters
+                ? BuildParameters(product.Parameters, isForProduct: true)
+                : null;
+
             var productObject = hasProductId
-                ? new ProductObject { Id = offerProductId }
+                ? new ProductObject { Id = offerProductId, Parameters = catalogParameters?.Count > 0 ? catalogParameters : null }
                 : new ProductObject
                 {
                     Name = product.Name,
                     Category = new Category { Id = categoryId == "0" ? fallbackCat : categoryId },
                     Images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).Take(MaxGalleryImages).ToList(),
-                    Parameters = includeProductParameters ? BuildParameters(product.Parameters, isForProduct: true) : null,
+                    Parameters = includeProductParameters ? BuildParameters(product.Parameters, isForProduct: true, includeEan: true) : null,
                 };
 
             return new List<ProductSet>
@@ -276,7 +281,12 @@ namespace JSAGROSyncServices.Products.Helpers
             };
         }
 
-        private static List<Parameter> BuildParameters(ICollection<ProductParameter> parameters, bool isForProduct)
+        /// <param name="includeEan">
+        /// Dołącz "EAN (GTIN)", gdy to poprawny kod kreskowy. Tylko przy propozycji nowego produktu -
+        /// Allegro bez niego odrzuca ją w kategoriach, gdzie EAN jest obowiązkowy. Obok id produktu
+        /// z katalogu EAN nie idzie: rozbieżny z katalogiem kończy się błędem DataIntegrity.
+        /// </param>
+        private static List<Parameter> BuildParameters(ICollection<ProductParameter> parameters, bool isForProduct, bool includeEan = false)
         {
             var result = new List<Parameter>();
 
@@ -288,7 +298,7 @@ namespace JSAGROSyncServices.Products.Helpers
 
             foreach (var param in parameters.Where(p =>
                          p.IsForProduct == isForProduct &&
-                         p.Name != "EAN (GTIN)" &&
+                         (p.Name != "EAN (GTIN)" || (includeEan && ParameterFallbacks.IsPublicGtin(p.Value))) &&
                          p.Name != "Informacje o bezpieczeństwie"))
             {
                 if (string.IsNullOrWhiteSpace(param.Value))
@@ -303,7 +313,7 @@ namespace JSAGROSyncServices.Products.Helpers
                 if (multiValueParams.Contains(param.Name))
                 {
                     values = cleaned
-                        .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Split(ParameterFallbacks.MultiValueSeparators(param.Name), StringSplitOptions.RemoveEmptyEntries)
                         .Select(v => v.Trim())
                         .Where(v => !string.IsNullOrWhiteSpace(v))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -416,7 +426,9 @@ namespace JSAGROSyncServices.Products.Helpers
         private static Description BuildDescription(RolmarProduct product)
         {
             var description = new Description { Sections = new List<Section>() };
-            var images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).ToList();
+            // Tylko zdjęcia z galerii (maks. 16) - zdjęcie z opisu spoza galerii Allegro dokłada do oferty
+            // i przy większej liczbie zdjęć oferta wracała z błędem limitu.
+            var images = product.AllegroImages.DistinctBy(i => i.Url).Select(i => i.Url).Take(MaxGalleryImages).ToList();
             var imageIndex = 0;
 
             if (images.Any())
@@ -441,9 +453,10 @@ namespace JSAGROSyncServices.Products.Helpers
             var producerHtml = string.IsNullOrWhiteSpace(product.SupplierName)
                 ? string.Empty
                 : $"<p><b>Producent: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.SupplierName))}</p>";
+            // Opis od dostawcy bywa sformatowany HTML-em - akapity i listy zamiast widocznych tagów.
             var descriptionHtml = string.IsNullOrWhiteSpace(product.Description)
                 ? string.Empty
-                : $"<p><b>Opis: </b>{RemoveHiddenAscii(System.Net.WebUtility.HtmlEncode(product.Description))}</p>";
+                : SupplierHtml.ToLabelledBlocks("Opis:", RemoveHiddenAscii(product.Description));
 
             var parametersHtml = string.Empty;
             if (product.Specifications?.Any() == true)

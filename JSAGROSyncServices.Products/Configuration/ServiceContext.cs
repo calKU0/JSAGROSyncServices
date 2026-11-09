@@ -19,5 +19,13 @@ namespace JSAGROSyncServices.Products.Configuration
         public required string MailSender { get; init; }
 
         public string ImagesFolder { get; init; } = @"C:\Program Files (x86)\Api Sync Services\Product_Images";
+
+        /// <summary>
+        /// Parametry produktu bierzemy wyłącznie z produktu z katalogu Allegro (Rolmar, oba konta).
+        /// Nie wyliczamy ich, nie zapisujemy w bazie i nie wysyłamy - sami uzupełniamy tylko
+        /// obowiązkowe parametry oferty. Produkt z katalogu bez kompletu obowiązkowych parametrów
+        /// zastępujemy innym, a gdy takiego nie ma, kończymy ofertę i odpinamy produkt.
+        /// </summary>
+        public bool ProductParametersFromCatalog => Company == IntegrationCompany.Rolmar;
     }
 }

@@ -1,56 +1,19 @@
-﻿using ServiceManager.Models;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
+﻿using System.Text.Json.Nodes;
 
 namespace ServiceManager.Validation
 {
+    /// <summary>Cenniki dostaw Allegro: wymiary i waga muszą być większe od zera.</summary>
     public static class DeliveryValidator
     {
-        public static (List<Delivery> Deliveries, List<string> Errors) Validate(IEnumerable<(string Length, string Width, string Height, string Weight, string Name, bool IsSmart)> inputs)
+        public static IEnumerable<string> Validate(JsonArray rows)
         {
-            var deliveries = new List<Delivery>();
-            var errors = new List<string>();
+            var dimensions = new[] { "Length", "Width", "Height", "Weight" };
 
-            foreach (var input in inputs)
-            {
-                if (!TryParseDecimal(input.Length, out var length) ||
-                    !TryParseDecimal(input.Width, out var width) ||
-                    !TryParseDecimal(input.Height, out var height) ||
-                    !TryParseDecimal(input.Weight, out var weight))
-                {
-                    errors.Add(ValidationMessages.DeliveryInvalidNumbers);
-                    continue;
-                }
-
-                if (length <= 0 || width <= 0 || height <= 0 || weight <= 0)
-                    errors.Add(ValidationMessages.DeliveryNonPositive);
-
-                if (string.IsNullOrWhiteSpace(input.Name))
-                    errors.Add(ValidationMessages.DeliveryMissingName);
-
-                deliveries.Add(new Delivery
-                {
-                    Length = length,
-                    Width = width,
-                    Height = height,
-                    Weight = weight,
-                    DeliveryName = input.Name.Trim(),
-                    IsSmart = input.IsSmart
-                });
-            }
-
-            return (deliveries, errors.Distinct().ToList());
+            if (rows.Any(r => dimensions.Any(d => Read(r, d) <= 0)))
+                yield return ValidationMessages.DeliveryNonPositive;
         }
 
-        private static bool TryParseDecimal(string input, out decimal result)
-        {
-            var normalized = input.Replace(',', '.');
-            return decimal.TryParse(
-                normalized,
-                NumberStyles.AllowDecimalPoint | NumberStyles.AllowLeadingSign,
-                CultureInfo.InvariantCulture,
-                out result);
-        }
+        private static decimal Read(JsonNode? row, string property) =>
+            row?[property] is JsonValue value && value.TryGetValue<decimal>(out var number) ? number : 0m;
     }
 }
