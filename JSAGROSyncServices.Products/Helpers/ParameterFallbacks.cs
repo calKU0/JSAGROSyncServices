@@ -154,7 +154,8 @@ namespace JSAGROSyncServices.Products.Helpers
 
         /// <summary>
         /// Parametry produktu dla oferty w danej kategorii: z kategorii oferty, gdy są wyliczone,
-        /// inaczej z kategorii domyślnej, a dla starych danych bez kategorii - po jednym na nazwę.
+        /// inaczej z kategorii domyślnej, a dla starych danych bez kategorii - po jednym na nazwę. Parametrów
+        /// z niezwiązanej kategorii nie zwraca.
         /// Parametry z innej kategorii Allegro odrzuca albo traktuje jako brak obowiązkowych.
         /// </summary>
         /// <param name="withOtherProductParameters">
@@ -172,8 +173,11 @@ namespace JSAGROSyncServices.Products.Helpers
             if (selected.Count == 0)
                 selected = all.Where(p => p.CategoryId != 0 && p.CategoryId == defaultCategoryId).ToList();
 
+            // Ani kategoria oferty, ani domyślna nie ma wyliczonych parametrów: zostają tylko stare wiersze bez
+            // kategorii. Zestawu z niezwiązanej kategorii nie wysyłamy - Allegro odrzuca jej parametry, a krok
+            // parametrów i tak wyliczy zestaw dla kategorii oferty i domyślnej w najbliższym cyklu.
             if (selected.Count == 0)
-                return Distinct(all);
+                return Distinct(all.Where(p => p.CategoryId == 0));
 
             if (withOtherProductParameters)
             {

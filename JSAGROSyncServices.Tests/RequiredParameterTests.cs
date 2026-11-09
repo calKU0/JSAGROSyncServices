@@ -121,6 +121,22 @@ namespace JSAGROSyncServices.Tests
             // Kategoria oferty jeszcze bez parametrów - zestaw z kategorii domyślnej.
             var fallback = ParameterFallbacks.ForCategory(parameters, offerCategoryId: 1, defaultCategoryId: 319120);
             Assert.Equal("Ursus", Assert.Single(fallback).Value);
+
+            // Żadna z dwóch kategorii nie ma zestawu - parametrów z niezwiązanej kategorii nie wysyłamy.
+            Assert.Empty(ParameterFallbacks.ForCategory(parameters, offerCategoryId: 1, defaultCategoryId: 2));
+        }
+
+        [Fact]
+        public void Legacy_parameters_without_category_are_still_used()
+        {
+            List<ProductParameter> parameters =
+            [
+                new() { Name = "Stan", Value = "Nowy" },
+                new() { Name = "Stan", Value = "Używany" },
+                new() { Name = "Marka", Value = "Ursus", CategoryId = 252436 }
+            ];
+
+            Assert.Equal("Nowy", Assert.Single(ParameterFallbacks.ForCategory(parameters, 1, 2)).Value);
         }
 
         [Fact]
