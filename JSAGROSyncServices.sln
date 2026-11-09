@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO2.InterCars.P
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JSAGROSyncServices.Tests", "JSAGROSyncServices.Tests\JSAGROSyncServices.Tests.csproj", "{813E43D9-7D15-4271-8025-80B2FBBD1A03}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Allegro.JSAGRO.InPost.ProductsService", "Allegro.JSAGRO.InPost.ProductsService\Allegro.JSAGRO.InPost.ProductsService.csproj", "{96B9EDA4-9886-4523-B66A-A8010690448F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

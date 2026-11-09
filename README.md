@@ -32,6 +32,7 @@ differences in one readable place instead of spread across eight near-identical 
 | `Allegro.JSAGRO*.{Gaska,Rolmar,InterCars}.ProductsService` | Product and offer synchronization, one service per account × supplier |
 | `Allegro.JSAGRO*.Gaska.OrdersService` | Order import and supplier order placement |
 | `Allegro.JSAGRO.Erli.ProductsService` | Offer replication to a secondary marketplace |
+| `Allegro.JSAGRO.InPost.ProductsService` | Offer replication to InPost Von Halsky, priced from the supplier's purchase price (dry-run by default) |
 | `JSAGROSyncServices.Products` | Shared product pipeline: worker, repositories, marketplace and supplier services |
 | `JSAGROSyncServices.Orders` | Shared order pipeline |
 | `JSAGROSyncServices.Infrastructure` | Data access, HTTP clients, retry policy, logging, SQL migrations |
