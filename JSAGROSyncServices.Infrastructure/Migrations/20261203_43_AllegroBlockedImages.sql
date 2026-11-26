@@ -6,7 +6,7 @@ IF OBJECT_ID('dbo.AllegroBlockedImages', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.AllegroBlockedImages
     (
-        Url NVARCHAR(500) NOT NULL,
+        Url NVARCHAR(450) NOT NULL,
         Reason NVARCHAR(500) NULL,
         OfferId NVARCHAR(128) NULL,
         Code NVARCHAR(255) NULL,
@@ -31,7 +31,7 @@ IF OBJECT_ID('dbo.AllegroCatalogProductImages', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.AllegroCatalogProductImages
     (
-        CatalogProductId NVARCHAR(500) NOT NULL,
+        CatalogProductId NVARCHAR(100) NOT NULL,
         Images NVARCHAR(MAX) NOT NULL,
         FetchedAt DATETIME2(7) NOT NULL CONSTRAINT DF_AllegroCatalogProductImages_FetchedAt DEFAULT (SYSUTCDATETIME()),
         CONSTRAINT PK_AllegroCatalogProductImages PRIMARY KEY (CatalogProductId)
@@ -48,7 +48,7 @@ END
 GO
 
 CREATE OR ALTER PROCEDURE dbo.AllegroBlockedImages_Add
-    @Url NVARCHAR(500),
+    @Url NVARCHAR(450),
     @Reason NVARCHAR(500) = NULL,
     @OfferId NVARCHAR(128) = NULL,
     @Code NVARCHAR(255) = NULL
@@ -70,7 +70,7 @@ END
 GO
 
 CREATE OR ALTER PROCEDURE dbo.AllegroCatalogProductImages_Upsert
-    @CatalogProductId NVARCHAR(500),
+    @CatalogProductId NVARCHAR(100),
     @Images NVARCHAR(MAX)
 AS
 BEGIN
