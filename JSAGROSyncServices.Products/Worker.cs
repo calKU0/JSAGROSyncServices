@@ -202,6 +202,9 @@ namespace JSAGROSyncServices.Products
             {
                 _logger.LogInformation(" - {Step}: {Duration}", step.Name, Format(step.Elapsed));
             }
+
+            // Zawsze na samym końcu logu cyklu - pełna lista, także z poprzednich cykli.
+            await offerService.LogUnfixableSummary(ct);
         }
 
         private Task FetchSupplierProducts(IServiceProvider services) => _service.Company switch

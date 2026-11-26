@@ -75,6 +75,18 @@ namespace JSAGROSyncServices.Contracts.Interfaces
 
         Task<HashSet<string>> GetRejectedAllegroIds(int productId, CancellationToken ct);
 
+        /// <summary>
+        /// Produkty z powiązaniem z katalogiem do sprawdzenia: niezweryfikowane albo sprawdzone dawniej niż
+        /// <paramref name="recheckAfterDays"/> dni temu - najpierw niezweryfikowane.
+        /// </summary>
+        Task<List<RolmarProduct>> GetLinksToVerify(int recheckAfterDays, int top, CancellationToken ct);
+
+        /// <summary>Specyfikacja (nazwa, wartość, jednostka) podanych produktów, pogrupowana po id produktu.</summary>
+        Task<Dictionary<int, List<ProductSpecification>>> GetSpecifications(IReadOnlyCollection<int> productIds, CancellationToken ct);
+
+        /// <summary>Odnotowuje, że powiązania produktów z katalogiem zostały potwierdzone.</summary>
+        Task MarkLinksVerified(IEnumerable<int> productIds, CancellationToken ct);
+
         /// <summary>Czy produkt z katalogu Allegro jest już podpięty pod inny nasz produkt (dowolnego dostawcy).</summary>
         Task<bool> IsAllegroIdTakenByOther(string allegroId, int productId, CancellationToken ct);
 

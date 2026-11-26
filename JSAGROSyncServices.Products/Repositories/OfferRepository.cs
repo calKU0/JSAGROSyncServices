@@ -451,6 +451,40 @@ namespace JSAGROSyncServices.Products.Repositories
                 .ToDictionary(g => g.Key, g => new OfferContentState(g.First().ContentHash, g.First().SentAt), StringComparer.OrdinalIgnoreCase);
         }
 
+        public async Task<List<UnfixableOffer>> GetUnfixableOffers(CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            var rows = await connection.QueryAsync<(string OfferId, string Code, string? CatalogProductId, string Reason, DateTime FirstSeenAt, DateTime LastSeenAt)>(
+                new CommandDefinition(
+                    "AllegroUnfixableOffers_Get",
+                    new { Account = _service.Account },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct));
+
+            return rows.Select(r => new UnfixableOffer(r.OfferId, r.Code, r.CatalogProductId, r.Reason, r.FirstSeenAt, r.LastSeenAt)).ToList();
+        }
+
+        public async Task SaveUnfixableOffers(IReadOnlyCollection<(string OfferId, string Code, string? CatalogProductId, string? Reason)> items, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            // Także przy pustej liście - procedura czyści wpisy ofert, których nie ma już na koncie.
+            foreach (var chunk in items.Count == 0 ? [Array.Empty<(string, string, string?, string?)>()] : items.Chunk(2000))
+            {
+                var json = JsonSerializer.Serialize(chunk.Select(i => new { i.OfferId, i.Code, i.CatalogProductId, i.Reason }));
+
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "AllegroUnfixableOffers_Save",
+                        new { Account = _service.Account, Items = json },
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900,
+                        cancellationToken: ct));
+            }
+        }
+
         public async Task SaveContentStates(IReadOnlyCollection<(string OfferId, string? Hash)> states, CancellationToken ct)
         {
             if (states.Count == 0)

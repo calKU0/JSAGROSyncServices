@@ -107,6 +107,10 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         {
             [JsonPropertyName("type")]
             public string? Type { get; set; }
+
+            /// <summary>HTML sekcji typu TEXT.</summary>
+            [JsonPropertyName("content")]
+            public string? Content { get; set; }
         }
 
         public class NextPage

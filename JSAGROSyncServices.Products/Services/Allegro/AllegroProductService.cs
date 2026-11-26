@@ -8,6 +8,8 @@ using JSAGROSyncServices.Products.Configuration;
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -80,6 +82,9 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
         public async Task SearchProducts(CancellationToken ct = default)
         {
+            // Najpierw sprawdzamy istniejące powiązania - odpięte produkty wyszukiwanie obsłuży jeszcze w tym cyklu.
+            await VerifyLinksAsync(ct);
+
             var products = await _productRepository.GetNotExistingProductsInAllegro(ct);
 
             if (products.Count == 0)
@@ -89,6 +94,8 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             }
 
             _logger.LogInformation("Allegro product search: {Count} products to look up.", products.Count);
+
+            await LoadSpecifications(products, ct);
 
             int found = 0, notFound = 0, failed = 0;
 
@@ -141,6 +148,153 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 found, notFound, failed, products.Count, sw.Elapsed);
         }
 
+        /// <summary>Co ile dni ponownie sprawdzać potwierdzone powiązanie (Allegro zmienia produkty w katalogu).</summary>
+        private const int RecheckLinksAfterDays = 30;
+
+        /// <summary>Ile powiązań pobieramy do sprawdzenia - wszystkie zaległe, żeby log pokazywał, ile zostało.</summary>
+        private const int MaxLinksToVerify = 50000;
+
+        /// <summary>
+        /// Porcja sprawdzeń zapisywana od razu w bazie. Postęp przeżywa restart serwisu i widać go w bazie
+        /// (AllegroIdVerifiedAt), a bezpiecznik ocenia każdą porcję osobno.
+        /// </summary>
+        private const int VerifyBatchSize = 200;
+
+        /// <summary>
+        /// Ile czasu cykl może poświęcić na weryfikację. Allegro dławi zapytania o produkty (429), więc całego
+        /// katalogu nie da się sprawdzić naraz - reszta poczeka na kolejne cykle, a oferty dostają aktualizacje.
+        /// </summary>
+        private static readonly TimeSpan VerifyTimeBudget = TimeSpan.FromMinutes(10);
+
+        /// <summary>
+        /// Od tylu sprawdzonych powiązań w porcji włącza się bezpiecznik. Gdy odpaść miałoby więcej niż
+        /// <see cref="MaxInvalidLinksPercent"/>, to raczej błąd (API, dane dostawcy) niż stan katalogu -
+        /// niczego nie odpinamy i przerywamy weryfikację, żeby nie zakończyć ofert hurtem.
+        /// </summary>
+        private const int MassUnlinkGuardFrom = 50;
+
+        private const decimal MaxInvalidLinksPercent = 40m;
+
+        /// <summary>
+        /// Sprawdza istniejące powiązania z katalogiem. Powiązania sprzed reguł potwierdzania trafienia nigdy nie
+        /// były weryfikowane (KR10 - odstraszacz na krety - stał pod radiem Blaupunkt "KR 10 WH"). Błędne odpina
+        /// i odrzuca, a produkt trafia do wyszukiwania jeszcze w tym cyklu. Pracuje porcjami w limicie czasu.
+        /// </summary>
+        public async Task VerifyLinksAsync(CancellationToken ct = default)
+        {
+            var pending = await _productRepository.GetLinksToVerify(RecheckLinksAfterDays, MaxLinksToVerify, ct);
+
+            if (pending.Count == 0)
+                return;
+
+            var sw = Stopwatch.StartNew();
+            int confirmedTotal = 0, unlinkedTotal = 0, failedTotal = 0, processed = 0;
+
+            _logger.LogInformation("Allegro product links to verify: {Pending} (time budget {Budget} min).", pending.Count, VerifyTimeBudget.TotalMinutes);
+
+            foreach (var batch in pending.Chunk(VerifyBatchSize))
+            {
+                if (sw.Elapsed > VerifyTimeBudget)
+                    break;
+
+                var batchStarted = sw.Elapsed;
+                var (confirmed, invalid, failed) = await VerifyBatchAsync(batch, ct);
+                processed += batch.Length;
+                failedTotal += failed;
+
+                await _productRepository.MarkLinksVerified(confirmed, ct);
+                confirmedTotal += confirmed.Count;
+
+                var checkedCount = confirmed.Count + invalid.Count;
+
+                if (checkedCount >= MassUnlinkGuardFrom && invalid.Count * 100m / checkedCount > MaxInvalidLinksPercent)
+                {
+                    _logger.LogError(
+                        "Allegro product links: {Invalid} of {Checked} in a batch failed verification - above the {Limit}% safety limit, " +
+                        "nothing unlinked and verification stopped. Examples: {Examples}",
+                        invalid.Count, checkedCount, MaxInvalidLinksPercent,
+                        string.Join("; ", invalid.Take(10).Select(x => $"{x.Product.Code} -> {x.CatalogName} ({x.Reason})")));
+                    break;
+                }
+
+                foreach (var (product, catalogName, reason) in invalid)
+                {
+                    await _productRepository.UnlinkAllegroProduct(product.Id, null, reject: true, ct);
+
+                    _logger.LogWarning("Allegro product {AllegroId} \"{CatalogName}\" does not match {Code} \"{Name}\" ({Reason}) - unlinked, searching again.",
+                        product.AllegroId, catalogName, product.Code, product.Name, reason);
+                }
+
+                unlinkedTotal += invalid.Count;
+
+                // Czas porcji pokazuje, czy Allegro dławi zapytania - ponowienia po 429 klient loguje tylko na poziomie Debug.
+                _logger.LogInformation("Allegro product links verification: {Processed} of {Pending} checked ({Unlinked} unlinked so far, " +
+                    "batch of {Batch} took {BatchSeconds:F0} s, {Failed} not checked).",
+                    processed, pending.Count, unlinkedTotal, batch.Length, (sw.Elapsed - batchStarted).TotalSeconds, failed);
+            }
+
+            _logger.LogInformation(
+                "Allegro product links verified: {Confirmed} confirmed, {Unlinked} unlinked, {Failed} not checked, " +
+                "{Remaining} left for the next cycles. Took {Elapsed}.",
+                confirmedTotal, unlinkedTotal, failedTotal, pending.Count - processed + failedTotal, sw.Elapsed);
+        }
+
+        private async Task<(List<int> Confirmed, List<(RolmarProduct Product, string? CatalogName, string Reason)> Invalid, int Failed)> VerifyBatchAsync(
+            IReadOnlyCollection<RolmarProduct> batch, CancellationToken ct)
+        {
+            var confirmed = new ConcurrentBag<int>();
+            var invalid = new ConcurrentBag<(RolmarProduct Product, string? CatalogName, string Reason)>();
+            var failed = 0;
+
+            await LoadSpecifications(batch, ct);
+
+            await Parallel.ForEachAsync(batch, new ParallelOptions { MaxDegreeOfParallelism = 5, CancellationToken = ct }, async (product, token) =>
+            {
+                try
+                {
+                    var catalogProduct = await _apiClient.GetAsync<SearchProdustsResponse.Product>($"/sale/products/{product.AllegroId}", token);
+
+                    // Brak odpowiedzi to także usunięty produkt - ale i chwilowy błąd; tego nie rozstrzygamy tutaj.
+                    if (catalogProduct?.Id == null)
+                    {
+                        Interlocked.Increment(ref failed);
+                        return;
+                    }
+
+                    var problem = LinkProblem(catalogProduct, ProductIdentifiers(product), product);
+
+                    if (problem == null)
+                        confirmed.Add(product.Id);
+                    else
+                        invalid.Add((product, catalogProduct.Name, problem));
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    Interlocked.Increment(ref failed);
+                    _logger.LogDebug(ex, "Verifying Allegro product {AllegroId} of {Code} failed.", product.AllegroId, product.Code);
+                }
+            });
+
+            return (confirmed.ToList(), invalid.ToList(), failed);
+        }
+
+        /// <summary>
+        /// Dociąga specyfikację produktom, które przyszły bez niej (wyszukiwanie, weryfikacja powiązań).
+        /// Napięcie, prąd i moc ze specyfikacji odróżniają warianty o tym samym numerze i EAN-ie.
+        /// </summary>
+        private async Task LoadSpecifications(IReadOnlyCollection<RolmarProduct> products, CancellationToken ct)
+        {
+            var missing = products.Where(p => p.Specifications == null).ToList();
+
+            if (missing.Count == 0)
+                return;
+
+            var specifications = await _productRepository.GetSpecifications(missing.Select(p => p.Id).ToList(), ct);
+
+            foreach (var product in missing)
+                product.Specifications = specifications.TryGetValue(product.Id, out var list) ? list : [];
+        }
+
         public async Task<CatalogProductMatch> FindCatalogProduct(RolmarProduct product, CancellationToken ct,
             IReadOnlyCollection<string>? excludedIds = null, IReadOnlyCollection<string>? requiredParameters = null)
         {
@@ -152,6 +306,8 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             // przypadkowego produktu psuje ofertę bardziej niż jego brak.
             if (identifiers.Count == 0)
                 return CatalogProductMatch.None;
+
+            await LoadSpecifications([product], ct);
 
             // Produkty, które Allegro odłączyło od oferty ("Produkt nie pasuje do oferty") - nie podpinamy ich ponownie.
             // Do tego produkty wykluczone przez wołającego (np. bieżący, bez kompletu parametrów obowiązkowych).
@@ -278,8 +434,8 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
             // Trafienie w "Numer katalogowy części" jest pewniejsze niż w numer zamiennika czy
             // oryginału, więc najpierw kandydaci dopasowani po numerze własnym produktu.
-            var matched = candidates.Where(c => Matches(c, identifiers, primaryOnly: true) && Confirms(c, identifiers, product))
-                .Concat(candidates.Where(c => Matches(c, identifiers, primaryOnly: false) && Confirms(c, identifiers, product)))
+            var matched = candidates.Where(c => Matches(c, identifiers, primaryOnly: true) && IsConfirmedMatch(c, identifiers, product))
+                .Concat(candidates.Where(c => IsConfirmedMatch(c, identifiers, product)))
                 .DistinctBy(c => c.Id)
                 .ToList();
 
@@ -435,15 +591,253 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 return false;
 
             // Numer katalogowy bardzo często siedzi w samej nazwie produktu - wtedy parametry
-            // bywają puste, a trafienie i tak jest pewne.
-            foreach (var token in TokenizeName(candidate.Name))
+            // bywają puste, a trafienie i tak jest pewne. Sklejone sąsiednie słowa liczą się tylko
+            // dla numeru charakterystycznego: krótki "KR10" trafiał w "Blaupunkt KR 10 WH" (radio).
+            foreach (var (token, glued) in TokenizeName(candidate.Name))
             {
-                if (identifiers.Contains(token))
+                if (identifiers.Contains(token) && (!glued || IsStrongIdentifier(token)))
                     return true;
             }
 
             return false;
         }
+
+        /// <summary>
+        /// Pełne trafienie: produkt z katalogu ma nasz numer, drugą przesłankę i nie ma sprzecznego EAN.
+        /// Tymi samymi regułami sprawdzamy nowe dopasowania i istniejące powiązania.
+        /// </summary>
+        internal static bool IsConfirmedMatch(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers, RolmarProduct product) =>
+            Matches(candidate, identifiers, primaryOnly: false)
+            && Confirms(candidate, identifiers, product)
+            && !HasConflictingEan(candidate, product)
+            && !HasConflictingMeasures(product.Name, candidate.Name)
+            && !HasConflictingSpecifications(candidate, product);
+
+        /// <summary>Najmniejsza część naszych słów, którą musi mieć nazwa produktu z katalogu przy powiązaniu bez numeru.</summary>
+        private const double MinLinkNameOverlap = 0.35;
+
+        /// <summary>
+        /// Czy istniejące powiązanie jest wiarygodne. Łagodniej niż przy nowym dopasowaniu: stare powiązania
+        /// są w większości poprawne, a odpięcie kończy ofertę. Odpinamy tylko przy dowodzie pomyłki - sprzeczny
+        /// EAN albo wymiar (przedłużacz 5 m pod 3 m, kolanko 10 mm pod 12 mm) - albo gdy produkt z katalogu
+        /// nie ma ani naszego numeru, ani nazwy choć trochę podobnej do naszej (odstraszacz KR10 pod radiem "KR 10 WH").
+        /// </summary>
+        internal static bool IsPlausibleLink(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers, RolmarProduct product) =>
+            LinkProblem(candidate, identifiers, product) == null;
+
+        /// <summary>Dlaczego powiązanie jest błędne (do logu i raportu) - <c>null</c>, gdy jest wiarygodne.</summary>
+        internal static string? LinkProblem(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers, RolmarProduct product)
+        {
+            if (HasConflictingEan(candidate, product))
+                return "inny EAN";
+
+            if (HasConflictingMeasures(product.Name, candidate.Name))
+                return "inny wymiar w nazwie";
+
+            var specification = SpecificationConflict(candidate, product);
+
+            if (specification != null)
+                return $"inna specyfikacja: {specification}";
+
+            var plausible = IsConfirmedMatch(candidate, identifiers, product)
+                            || MatchesCodeExactly(candidate, identifiers)
+                            || NameOverlap(product.Name, candidate.Name) >= MinLinkNameOverlap;
+
+            return plausible ? null : "brak naszego numeru i podobnej nazwy";
+        }
+
+        /// <summary>Nasz numer w parametrze identyfikującym albo jako osobne słowo nazwy - bez sklejania słów.</summary>
+        internal static bool MatchesCodeExactly(SearchProdustsResponse.Product candidate, IReadOnlySet<string> identifiers) =>
+            candidate.Parameters
+                .Where(p => IsIdentifyingParameter(p.Name, primaryOnly: false))
+                .SelectMany(p => p.Values ?? [])
+                .Any(value => identifiers.Contains(Normalize(value)))
+            || TokenizeName(candidate.Name).Any(t => !t.Glued && identifiers.Contains(t.Token));
+
+        /// <summary>
+        /// Wymiar w nazwie: liczba i jednostka jako osobne słowo ("5m", "10 mm", "1,2W"). Fragment kodu
+        /// ("W-ROZ40L/3L") wymiarem nie jest.
+        /// </summary>
+        private static readonly Regex Measure = new(
+            @"(?<![\p{L}\d/\-.])(\d+(?:[.,]\d+)?)\s*(mm|cm|m|kg|g|ml|l|w|v|ah|a|kw|bar|nm)(?![\p{L}\d/\-])",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// Jednostki specyfikacji dostawcy, które porównujemy z produktem z katalogu: parametry elektryczne.
+        /// Odróżniają warianty o tym samym numerze, a nawet EAN-ie - alternator EX-260000EX Rolmaru (14 V, 44 A)
+        /// stał pod produktem z katalogu z naszym EAN-em i "70A" w opisie. Wymiarów i wagi nie porównujemy:
+        /// opisy podają je w różnych układach ("30x62x16 mm", waga z opakowaniem) i myliłyby się z naszymi.
+        /// </summary>
+        private static readonly HashSet<string> ComparedSpecificationUnits = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "a", "v", "w", "kw", "ah"
+        };
+
+        /// <summary>
+        /// Specyfikacja dostawcy podaje wartość w jednostce, w której produkt z katalogu (nazwa, opis, parametry)
+        /// podaje tylko inne wartości - to inny wariant towaru. Katalog bez tej jednostki niczego nie przesądza.
+        /// </summary>
+        internal static bool HasConflictingSpecifications(SearchProdustsResponse.Product candidate, RolmarProduct product) =>
+            SpecificationConflict(candidate, product) != null;
+
+        /// <summary>Opis sprzeczności ("nasze 44 A, w katalogu 70 A") albo <c>null</c>.</summary>
+        internal static string? SpecificationConflict(SearchProdustsResponse.Product candidate, RolmarProduct product)
+        {
+            var mine = SpecificationMeasures(product.Specifications);
+
+            if (mine.Count == 0)
+                return null;
+
+            var other = Measures(CatalogText(candidate));
+
+            var conflicts = mine
+                .Where(unit => other.TryGetValue(unit.Key, out var values) && !unit.Value.Overlaps(values))
+                .Select(unit => $"nasze {Join(unit.Value, unit.Key)}, w katalogu {Join(other[unit.Key], unit.Key)}")
+                .ToList();
+
+            return conflicts.Count == 0 ? null : string.Join("; ", conflicts);
+
+            static string Join(IEnumerable<decimal> values, string unit) =>
+                string.Join("/", values.Order().Select(v => v.ToString("0.##", CultureInfo.InvariantCulture))) + " "
+                + unit switch { "kw" => "kW", "ah" => "Ah", _ => unit.ToUpperInvariant() };
+        }
+
+        private static Dictionary<string, HashSet<decimal>> SpecificationMeasures(IEnumerable<ProductSpecification>? specifications)
+        {
+            var result = new Dictionary<string, HashSet<decimal>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var specification in specifications ?? [])
+            {
+                var unit = (specification.UnitName ?? string.Empty).Trim().ToLowerInvariant();
+
+                if (!ComparedSpecificationUnits.Contains(unit)
+                    || !decimal.TryParse((specification.Value ?? string.Empty).Trim().Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
+                    continue;
+
+                if (!result.TryGetValue(unit, out var values))
+                    result[unit] = values = new HashSet<decimal>();
+
+                values.Add(NormalizeMeasure(unit, value));
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Instalacja 12 V ładuje się napięciem 14 V (24 V - 28 V) i opisy podają raz jedno, raz drugie
+        /// ("Alternator 14V" i "Napięcie: 12V" to ten sam towar), więc liczymy je jako tę samą wartość.
+        /// </summary>
+        private static decimal NormalizeMeasure(string unit, decimal value) =>
+            unit == "v" ? value switch { 14m => 12m, 28m => 24m, _ => value } : value;
+
+        /// <summary>Nazwa, tekst opisu i parametry produktu z katalogu - wszystko, co może podawać wymiar.</summary>
+        private static string CatalogText(SearchProdustsResponse.Product candidate)
+        {
+            var text = new StringBuilder(candidate.Name ?? string.Empty);
+
+            foreach (var item in (candidate.Description?.Sections ?? []).SelectMany(s => s.Items))
+            {
+                if (string.IsNullOrWhiteSpace(item.Content))
+                    continue;
+
+                var plain = WebUtility.HtmlDecode(HtmlTag.Replace(item.Content, " ")).Replace(' ', ' ');
+                text.Append(' ').Append(plain);
+            }
+
+            foreach (var parameter in candidate.Parameters)
+            {
+                var unit = parameter.Unit?.ToString();
+
+                foreach (var value in parameter.Values ?? [])
+                    text.Append(" ; ").Append(value).Append(' ').Append(unit);
+            }
+
+            return text.ToString();
+        }
+
+        private static readonly Regex HtmlTag = new(@"<[^>]*>", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Obie nazwy podają wymiar w tej samej jednostce i żadna wartość się nie powtarza - to inny wariant
+        /// towaru (przedłużacz 5 m i 3 m, kolanko 10 mm i 12 mm), choć reszta nazwy jest identyczna.
+        /// </summary>
+        internal static bool HasConflictingMeasures(string? ours, string? theirs)
+        {
+            var mine = Measures(ours);
+            var other = Measures(theirs);
+
+            return mine.Any(unit => other.TryGetValue(unit.Key, out var values) && !unit.Value.Overlaps(values));
+        }
+
+        private static Dictionary<string, HashSet<decimal>> Measures(string? name)
+        {
+            var result = new Dictionary<string, HashSet<decimal>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (Match match in Measure.Matches(name ?? string.Empty))
+            {
+                if (!decimal.TryParse(match.Groups[1].Value.Replace(',', '.'), NumberStyles.Number, CultureInfo.InvariantCulture, out var value))
+                    continue;
+
+                var unit = match.Groups[2].Value.ToLowerInvariant();
+
+                if (!result.TryGetValue(unit, out var values))
+                    result[unit] = values = new HashSet<decimal>();
+
+                values.Add(NormalizeMeasure(unit, value));
+            }
+
+            return result;
+        }
+
+        /// <summary>Słowa bez znaczenia dla porównania nazw (opakowanie, liczba sztuk, ogólniki).</summary>
+        private static readonly HashSet<string> NameStopWords = new(StringComparer.Ordinal)
+        {
+            "sprzedawane", "szt", "sztuk", "kpl", "komplet", "zestaw", "oryginal", "oryginalny", "oryginalne",
+            "czesc", "czesci", "element", "elementy", "pozostale", "inne", "uniwersalny", "uniwersalne", "nowy", "nowa"
+        };
+
+        /// <summary>Jaka część naszych słów (bez polskich znaków i ogólników) występuje w nazwie produktu z katalogu.</summary>
+        internal static double NameOverlap(string? ours, string? theirs)
+        {
+            var mine = NameWords(ours);
+
+            if (mine.Count == 0)
+                return 0;
+
+            var other = NameWords(theirs);
+
+            return mine.Count(other.Contains) / (double)mine.Count;
+        }
+
+        private static HashSet<string> NameWords(string? name) =>
+            Regex.Split(ParameterFallbacks.Key(name), @"[^\p{L}\d]+")
+                .Where(word => word.Length >= 3 && word.Any(char.IsLetter) && !NameStopWords.Contains(word))
+                .ToHashSet(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Oba produkty mają poprawny EAN i żaden się nie zgadza - to różne towary, niezależnie od numerów.
+        /// Produkt z katalogu bez EAN-u albo nasz bez EAN-u niczego nie przesądza.
+        /// </summary>
+        internal static bool HasConflictingEan(SearchProdustsResponse.Product candidate, RolmarProduct product)
+        {
+            var ours = Normalize(product.Ean);
+
+            if (!ParameterFallbacks.IsValidGtin(ours))
+                return false;
+
+            var theirs = candidate.Parameters
+                .Where(p => EanParameters.Contains(p.Name, StringComparer.OrdinalIgnoreCase))
+                .SelectMany(p => p.Values ?? [])
+                .Select(Normalize)
+                .Where(ParameterFallbacks.IsValidGtin)
+                .ToList();
+
+            return theirs.Count > 0 && !theirs.Any(ean => GtinEquals(ean, ours));
+        }
+
+        /// <summary>EAN-13 i GTIN-14 tego samego towaru różnią się zerami wiodącymi.</summary>
+        private static bool GtinEquals(string first, string second) =>
+            first.TrimStart('0') == second.TrimStart('0');
 
         /// <summary>
         /// Druga, niezależna przesłanka trafienia - wymagana zawsze, gdy numer, po którym
@@ -548,7 +942,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 }
             }
 
-            foreach (var token in TokenizeName(candidate.Name))
+            foreach (var (token, _) in TokenizeName(candidate.Name))
             {
                 if (identifiers.Contains(token) && IsStrongIdentifier(token))
                     return true;
@@ -573,16 +967,18 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         /// Nasze identyfikatory: numer katalogowy producenta i EAN. Kod Inter Cars celowo pomijamy -
         /// to identyfikator wewnętrzny dostawcy, którego katalog Allegro nie zna.
         /// </summary>
-        private IReadOnlySet<string> ProductIdentifiers(RolmarProduct product)
+        private IReadOnlySet<string> ProductIdentifiers(RolmarProduct product) => ProductIdentifiers(product, _service.Company);
+
+        internal static IReadOnlySet<string> ProductIdentifiers(RolmarProduct product, IntegrationCompany company)
         {
             var values = new List<string?> { product.Ean };
 
-            if (_service.Company == IntegrationCompany.InterCars)
+            if (company == IntegrationCompany.InterCars)
             {
                 values.AddRange(CatalogNumberVariants(product.Substitutes));
                 values.AddRange(CatalogNumberVariants(product.CustomerCode));
             }
-            else if (_service.Company == IntegrationCompany.Rolmar)
+            else if (company == IntegrationCompany.Rolmar)
             {
                 // Tylko numer samego produktu. Zamienniki Rolmaru to numery oryginałów - trafienie
                 // w nie podpinało część innego producenta, czyli inny produkt.
@@ -658,7 +1054,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
         /// sklejenia sąsiednich. Sklejamy wyłącznie całe słowa - dzięki temu nasz "L166731" nie
         /// pasuje do cudzego "640L166731", czyli innego numeru.
         /// </summary>
-        private static IEnumerable<string> TokenizeName(string? name)
+        private static IEnumerable<(string Token, bool Glued)> TokenizeName(string? name)
         {
             if (string.IsNullOrWhiteSpace(name))
                 yield break;
@@ -678,7 +1074,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     token += words[start + length];
 
                     if (token.Length >= MinIdentifierLength && token.Any(char.IsDigit))
-                        yield return token;
+                        yield return (token, length > 0);
                 }
             }
         }
