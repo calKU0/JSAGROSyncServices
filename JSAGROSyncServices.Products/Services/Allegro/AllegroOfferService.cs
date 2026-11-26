@@ -346,6 +346,7 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             try
             {
                 var products = await _productRepo.GetProductsToUpload(_appSettings.MinProductStock, _appSettings.MinProductPriceNet, ct);
+                await LoadBlockedImages(ct);
 
                 if (products.Count == 0)
                 {
@@ -425,13 +426,32 @@ namespace JSAGROSyncServices.Products.Services.Allegro
 
                         ApplyGalleryLimit(product);
 
-                        var request = _offerFactory.BuildOffer(product);
+                        ProductOfferRequest BuildCreate()
+                        {
+                            var built = _offerFactory.BuildOffer(product);
+                            BlockedImageFilter.Apply(built, BlockedImagesSnapshot(), _catalogImages);
+                            return built;
+                        }
+
+                        var request = BuildCreate();
                         var response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, request, token);
                         var body = await response.Content.ReadAsStringAsync(token);
 
                         if (await ShrinkGalleryAfterRejection(product, product.AllegroId, response, body, token))
                         {
-                            request = _offerFactory.BuildOffer(product);
+                            request = BuildCreate();
+                            response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, request, token);
+                            body = await response.Content.ReadAsStringAsync(token);
+                        }
+
+                        // Produkt z katalogu ma zablokowane zdjęcie (np. logo) - wystawiamy z jego listą zdjęć bez niego.
+                        var createCatalogId = request.ProductSet?.Select(s => s.ProductObject?.Id).FirstOrDefault(IsCatalogId);
+
+                        if (IsContentRejection(response.StatusCode) && IsBlockedImage(body) && createCatalogId != null
+                            && !_catalogImages.ContainsKey(createCatalogId)
+                            && (await CatalogImages(createCatalogId, token))?.Any(BlockedImagesSnapshot().Contains) == true)
+                        {
+                            request = BuildCreate();
                             response = await _apiClient.SendWithResponseAsync("/sale/product-offers", HttpMethod.Post, request, token);
                             body = await response.Content.ReadAsStringAsync(token);
                         }
@@ -562,12 +582,31 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 // Skróty treści z ostatnich udanych pełnych patchy - bez zmian treści wysyłamy sam stan i cenę.
                 var contentStates = await _offerRepo.GetContentStates(ct);
                 var contentStateChanges = new ConcurrentBag<(string OfferId, string? Hash)>();
+                Interlocked.Exchange(ref _blockedImageProbes, 0);
+                await LoadBlockedImages(ct);
+
+                // Lista do podsumowania nie może zatrzymać aktualizacji ofert (np. przed migracją tabeli).
+                HashSet<string> knownUnfixable;
+
+                try
+                {
+                    knownUnfixable = (await _offerRepo.GetUnfixableOffers(ct)).Select(o => o.OfferId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Reading the list of offers not fixable via the API failed - updating offers without it.");
+                    knownUnfixable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+                var unfixableChanges = new ConcurrentBag<(string OfferId, string Code, string? CatalogProductId, string? Reason)>();
 
                 await Parallel.ForEachAsync(offers, ParallelOptions(ct), async (offer, token) =>
                 {
                     try
                     {
                         var product = offer.Product!;
+
+                        // Powód, dla którego oferty nie da się naprawić przez API (do podsumowania na końcu cyklu).
+                        string? unfixableReason = null;
 
                         // Zakończona oferta podpięta po stronie Allegro pod usunięty produkt nie przyjmie żadnego
                         // patcha - nie wysyłamy go co cykl tylko po to, żeby dostać ten sam błąd.
@@ -598,6 +637,10 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                         if (!string.IsNullOrWhiteSpace(product.AllegroId) && DeadCatalogProductIds.ContainsKey(product.AllegroId))
                             product.AllegroId = null;
 
+                        // Oferta stoi na produkcie z katalogu, który odrzuciliśmy (np. zablokowane zdjęcie), a produkt
+                        // ma już inne powiązanie - przepinamy ją na nie, żeby oba konta miały ten sam productId.
+                        await AlignOfferToProductLink(offer, product, token);
+
                         var keepCurrentPrice = await CheckPriceDrop(offer);
 
                         ApplyGalleryLimit(product);
@@ -619,8 +662,11 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                                 OfferCategoryAligner.ApplyTo(move, built);
 
                                 if (clearCompatibility)
-                                    built.CompatibilityList = new CompatibilityList();
+                                    built.RemoveCompatibilityList();
                             }
+
+                            // Zdjęcia zablokowane przez Allegro wycinamy z galerii, opisu i zdjęć produktu z katalogu.
+                            BlockedImageFilter.Apply(built, BlockedImagesSnapshot(), _catalogImages);
 
                             return built;
                         }
@@ -709,6 +755,62 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                             body = await response.Content.ReadAsStringAsync(token);
                         }
 
+                        // Zdjęcie zablokowane przez Allegro: wycinamy tylko je. Najpierw dociągamy zdjęcia produktu
+                        // z katalogu (logo bywa w nim), a gdy znane zablokowane adresy nie wystarczą - szukamy
+                        // zablokowanego zdjęcia po jednym. Udana próba to od razu pełna aktualizacja oferty.
+                        if (IsContentRejection(response.StatusCode) && IsBlockedImage(body))
+                        {
+                            var fixedBlocked = await FixBlockedImages(offer, product, BuildPatch, token);
+
+                            if (fixedBlocked != null)
+                            {
+                                unchanged = false;
+                                fullRequest = fixedBlocked.Value.Request;
+                                contentHash = OfferPatchContent.ContentHash(fullRequest);
+                                request = fullRequest;
+                                response = fixedBlocked.Value.Response;
+                                body = fixedBlocked.Value.Body;
+                            }
+                            else
+                            {
+                                // Lista zablokowanych mogła się zmienić - kolejne próby budujemy od nowa.
+                                fullRequest = BuildPatch();
+                                unchanged = false;
+                            }
+                        }
+
+                        // Allegro zablokowało któreś zdjęcie, którego nie umiemy usunąć. Pełny patch nie przejdzie,
+                        // ale stan i cena mogą - galeria i opis na Allegro zostają wtedy bez zmian.
+                        if (!unchanged && IsContentRejection(response.StatusCode) && IsBlockedImage(body))
+                        {
+                            _logger.LogWarning("Offer {OfferId} ({Code}): Allegro blocked an image - updating price and stock only, gallery and description left unchanged. Sent images: {Images}",
+                                offer.Id, product.Code, SentImages(fullRequest));
+
+                            unchanged = true;
+                            move = null; // patch ze stanem i ceną nie przenosi kategorii
+                            request = OfferPatchContent.PriceAndStockOnly(fullRequest);
+                            response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, request, token);
+                            body = await response.Content.ReadAsStringAsync(token);
+
+                            // Sam stan i cena też odrzucone: zablokowane zdjęcie nie jest w tym, co wysyłamy, tylko
+                            // w produkcie z katalogu (productSet) albo w obecnej ofercie. Próbujemy bez productSet.
+                            if (IsContentRejection(response.StatusCode) && IsBlockedImage(body))
+                            {
+                                _logger.LogWarning("Offer {OfferId} ({Code}): price and stock patch with catalog product {ProductId} also rejected for a blocked image - retrying without productSet.",
+                                    offer.Id, product.Code, catalogProductId ?? "-");
+
+                                request = OfferPatchContent.PriceAndStockOnly(fullRequest);
+                                request.ProductSet = null!; // null pomijany w JSON - patch bez productSet
+                                response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, request, token);
+                                body = await response.Content.ReadAsStringAsync(token);
+                            }
+
+                            // Nawet stan i cena odrzucone - zablokowanego zdjęcia nie umiemy usunąć (np. jedyne zdjęcie
+                            // oferty ze znakiem wodnym). Trafia do podsumowania na końcu cyklu.
+                            if (IsContentRejection(response.StatusCode) && IsBlockedImage(body))
+                                unfixableReason = "Zablokowane zdjęcie, którego nie da się usunąć bez opróżnienia galerii (np. jedyne zdjęcie ze znakiem wodnym) - potrzebne nowe zdjęcie albo ręczna edycja w Allegro.";
+                        }
+
                         var dataFixed = await HandleAllegroResponse(product, response, body, isUpdate: true, offer.Id, offer.CategoryId);
 
                         if (response.IsSuccessStatusCode && move != null)
@@ -729,6 +831,17 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                         {
                             // Po błędzie kolejny cykl wysyła pełną strukturę - mogła to naprawić tylko ona.
                             contentStateChanges.Add((offer.Id, null));
+                        }
+
+        
+                        if (response.IsSuccessStatusCode)
+                        {
+                            if (knownUnfixable.Contains(offer.Id))
+                                unfixableChanges.Add((offer.Id, product.Code, null, null));
+                        }
+                        else if (unfixableReason != null)
+                        {
+                            unfixableChanges.Add((offer.Id, product.Code, IsCatalogId(offer.ProductId) ? offer.ProductId : null, unfixableReason));
                         }
 
                         if (response.IsSuccessStatusCode)
@@ -763,6 +876,15 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                     _logger.LogWarning(ex, "Saving offer content hashes failed - the next cycle sends full updates.");
                 }
 
+                try
+                {
+                    await _offerRepo.SaveUnfixableOffers(unfixableChanges.ToList(), ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Saving the list of offers not fixable via the API failed.");
+                }
+
                 _logger.LogInformation(
                     "Offers updated: {Updated} (price and stock only: {PriceAndStock}, full: {Full}, moved to the product category: {Moved}, move rejected: {MoveRejected}), " +
                     "failed: {Failed}, skipped: {Skipped}, ended: {Ended}, data fixed (retry next cycle): {Fixed}.",
@@ -772,6 +894,36 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Updating offers failed.");
+            }
+        }
+
+        /// <summary>
+        /// Podsumowanie na końcu cyklu: wszystkie oferty konta, których nie da się naprawić przez API -
+        /// także te zapisane w poprzednich cyklach. Lista znika z logu dopiero, gdy oferta przejdzie.
+        /// </summary>
+        public async Task LogUnfixableSummary(CancellationToken ct = default)
+        {
+            try
+            {
+                var offers = await _offerRepo.GetUnfixableOffers(ct);
+
+                if (offers.Count == 0)
+                {
+                    _logger.LogInformation("=== Not fixable via the Allegro API: none ===");
+                    return;
+                }
+
+                _logger.LogWarning("=== Not fixable via the Allegro API: {Count} offers (including earlier cycles) - need manual action in Allegro ===", offers.Count);
+
+                foreach (var o in offers)
+                {
+                    _logger.LogWarning(" - {Code} (offer {OfferId}, catalog product {CatalogProductId}, since {FirstSeen:yyyy-MM-dd HH:mm}, last {LastSeen:yyyy-MM-dd HH:mm}): {Reason}",
+                        o.Code, o.OfferId, o.CatalogProductId ?? "-", o.FirstSeenAt.ToLocalTime(), o.LastSeenAt.ToLocalTime(), o.Reason);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Reading the list of offers not fixable via the API failed.");
             }
         }
 
@@ -1034,9 +1186,11 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 CountError(err.Code ?? "-");
 
                 _logger.LogError(
-                    "Offer {Action} failed for {Code} (offer {OfferId}, category {CategoryId}): {ErrorCode} - {Message}",
+                    "Offer {Action} failed for {Code} (offer {OfferId}, category {CategoryId}): {ErrorCode} - {Message} [path: {Path}, details: {Details}]",
                     action, product.Code, offerId ?? "-", product.DefaultAllegroCategory, err.Code ?? "-",
-                    string.IsNullOrWhiteSpace(userMessage) ? message : userMessage);
+                    string.IsNullOrWhiteSpace(userMessage) ? message : userMessage,
+                    string.IsNullOrWhiteSpace(err.Path) ? "-" : err.Path,
+                    string.IsNullOrWhiteSpace(err.Details) ? "-" : Shorten(err.Details));
             }
 
             // Ponawiamy tylko wtedy, gdy wszystkie bledy dalo sie naprawic. Przy choc jednym
@@ -1435,6 +1589,276 @@ namespace JSAGROSyncServices.Products.Services.Allegro
                 currentId ?? "-", product.Code, offerId ?? "-", Shorten(reason), string.IsNullOrEmpty(offerId) ? string.Empty : " and offer ended");
         }
 
+        /// <summary>
+        /// Oferta stoi na produkcie z katalogu, który odrzuciliśmy, a produkt ma już inne powiązanie (np. podmienione
+        /// na jednym koncie). Przepinamy ofertę, żeby oba konta miały ten sam productId.
+        /// Listę odrzuconych czytamy tylko przy rozjeździe id - zwykle oferta i produkt mają to samo.
+        /// </summary>
+        private async Task AlignOfferToProductLink(AllegroOffer offer, RolmarProduct product, CancellationToken ct)
+        {
+            if (!LinksDiffer(offer.ProductId, product.AllegroId))
+                return;
+
+            var rejected = await _productRepo.GetRejectedAllegroIds(product.Id, ct);
+
+            if (!rejected.Contains(offer.ProductId!))
+                return;
+
+            _logger.LogInformation("Offer {OfferId} ({Code}) moves from rejected Allegro product {OldId} to {NewId} linked to the product.",
+                offer.Id, product.Code, offer.ProductId, product.AllegroId);
+
+            offer.ProductId = product.AllegroId;
+        }
+
+
+        // ---------------------------------------------------------------- zablokowane zdjęcia
+
+        /// <summary>Adresy zdjęć zablokowanych przez Allegro - wspólne dla kont (identyczny plik = ten sam adres).</summary>
+        private readonly ConcurrentDictionary<string, byte> _blockedImages = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Zdjęcia produktów z katalogu, w których szukaliśmy zablokowanego zdjęcia (id produktu -> adresy).</summary>
+        private readonly ConcurrentDictionary<string, List<string>> _catalogImages = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Ile próbnych patchy (szukanie zablokowanego zdjęcia po jednym) wolno wysłać w cyklu. Każdy nowo wykryty
+        /// adres naprawia od razu wszystkie oferty z tym zdjęciem, więc po kilku cyklach prób prawie nie ma.
+        /// </summary>
+        private const int MaxBlockedImageProbesPerCycle = 3000;
+
+        /// <summary>Ile zdjęć jednej oferty sprawdzamy po kolei - galeria ma do 16 własnych i kilka z katalogu.</summary>
+        private const int MaxProbesPerOffer = 24;
+
+        private int _blockedImageProbes;
+
+        private IReadOnlySet<string> BlockedImagesSnapshot() => new HashSet<string>(_blockedImages.Keys, StringComparer.OrdinalIgnoreCase);
+
+        private async Task LoadBlockedImages(CancellationToken ct)
+        {
+            try
+            {
+                foreach (var url in await _imageRepo.GetBlockedImageUrlsAsync(ct))
+                    _blockedImages.TryAdd(url, 0);
+
+                foreach (var (productId, images) in await _imageRepo.GetCatalogProductImagesAsync(ct))
+                    _catalogImages[productId] = images;
+
+                _logger.LogInformation("Blocked images known: {Blocked}, catalog products with checked images: {Catalog}.",
+                    _blockedImages.Count, _catalogImages.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Loading blocked images failed - offers are updated without the filter.");
+            }
+        }
+
+        /// <summary>
+        /// Zdjęcia produktu z katalogu (z pamięci albo z API). Zapamiętujemy je tylko wtedy, gdy zawierają zablokowany
+        /// adres albo właśnie go szukamy - patch podaje wtedy listę zdjęć produktu bez zablokowanych.
+        /// </summary>
+        private async Task<List<string>?> CatalogImages(string catalogProductId, CancellationToken ct)
+        {
+            if (_catalogImages.TryGetValue(catalogProductId, out var cached))
+                return cached;
+
+            try
+            {
+                var catalogProduct = await _apiClient.GetAsync<SearchProdustsResponse.Product>($"/sale/products/{catalogProductId}", ct);
+                var images = catalogProduct?.Images.Select(i => i.Url).Where(u => !string.IsNullOrWhiteSpace(u)).Select(u => u!).ToList();
+
+                if (images == null || images.Count == 0)
+                    return null;
+
+                _catalogImages[catalogProductId] = images;
+                await _imageRepo.SaveCatalogProductImagesAsync(catalogProductId, images, ct);
+                return images;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogDebug(ex, "Reading images of Allegro product {ProductId} failed.", catalogProductId);
+                return null;
+            }
+        }
+
+        private async Task MarkImageBlocked(string url, AllegroOffer offer, string reason)
+        {
+            if (!_blockedImages.TryAdd(url, 0))
+                return;
+
+            try
+            {
+                await _imageRepo.AddBlockedImageUrlAsync(url, reason, offer.Id, offer.Product?.Code, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Saving blocked image {Url} failed.", url);
+            }
+
+            _logger.LogWarning("Image {Url} is blocked by Allegro (found on offer {OfferId}, {Code}) - removed from all offers from now on.",
+                url, offer.Id, offer.Product?.Code ?? "-");
+        }
+
+        /// <summary>
+        /// Naprawia patch odrzucony za zablokowane zdjęcie, usuwając jak najmniej zdjęć:
+        /// 1) dociąga zdjęcia produktu z katalogu i wycina znane zablokowane adresy (także z produktu - przez
+        ///    productSet z listą zdjęć), 2) gdy to nie wystarcza, usuwa po jednym kolejne zdjęcia i zapamiętuje to,
+        ///    którego usunięcie zdjęło blokadę. Zwraca ostatnią odpowiedź, która nie jest już blokadą zdjęcia
+        ///    (sukces albo inny błąd), albo null, gdy blokada została.
+        /// </summary>
+        private async Task<(ProductOfferRequest Request, HttpResponseMessage Response, string Body)?> FixBlockedImages(
+            AllegroOffer offer, RolmarProduct product, Func<bool, ProductOfferRequest> buildPatch, CancellationToken ct)
+        {
+            async Task<(ProductOfferRequest Request, HttpResponseMessage Response, string Body)> Send(ProductOfferRequest request)
+            {
+                var response = await _apiClient.SendWithResponseAsync($"/sale/product-offers/{offer.Id}", HttpMethod.Patch, request, ct);
+                return (request, response, await response.Content.ReadAsStringAsync(ct));
+            }
+
+            bool StillBlocked((ProductOfferRequest Request, HttpResponseMessage Response, string Body) r) =>
+                IsContentRejection(r.Response.StatusCode) && IsBlockedImage(r.Body);
+
+            // 1) Zdjęcia produktu z katalogu - jeśli zawierają znany zablokowany adres, patch poda je bez niego.
+            var catalogId = buildPatch(false).ProductSet?.Select(s => s.ProductObject?.Id).FirstOrDefault(IsCatalogId);
+            var hadCatalogImages = catalogId != null && _catalogImages.ContainsKey(catalogId);
+
+            if (catalogId != null)
+                await CatalogImages(catalogId, ct);
+
+            var blocked = BlockedImagesSnapshot();
+            var catalogNowFiltered = catalogId != null && !hadCatalogImages
+                && _catalogImages.TryGetValue(catalogId, out var catalogList) && catalogList.Any(blocked.Contains);
+
+            if (catalogNowFiltered)
+            {
+                var attempt = await Send(buildPatch(false));
+
+                if (!StillBlocked(attempt))
+                {
+                    _logger.LogInformation("Offer {OfferId} ({Code}): blocked image removed from catalog product {ProductId} images in the patch - {Result}.",
+                        offer.Id, product.Code, catalogId, attempt.Response.IsSuccessStatusCode ? "updated" : "other error follows");
+                    return attempt;
+                }
+            }
+
+            // 2) Usuwamy kolejne zdjęcia narastająco, aż blokada zniknie, a potem przywracamy po jednym wszystkie
+            //    poza ostatnim: zdjęcie, którego powrót znów blokuje, jest zablokowane. Ostatnie usunięte też (z nim
+            //    było zablokowane, bez niego - nie). Zostają usunięte tylko zablokowane, nawet gdy jest ich kilka.
+            var candidates = BlockedImageFilter.Candidates(buildPatch(false), _catalogImages, blocked).Take(MaxProbesPerOffer).ToList();
+
+            ProductOfferRequest Without(IEnumerable<string> removed)
+            {
+                var probe = buildPatch(false);
+                var set = new HashSet<string>(BlockedImagesSnapshot(), StringComparer.OrdinalIgnoreCase);
+                set.UnionWith(removed);
+                BlockedImageFilter.Apply(probe, set, _catalogImages);
+                return probe;
+            }
+
+            bool OverBudget()
+            {
+                if (Interlocked.Increment(ref _blockedImageProbes) <= MaxBlockedImageProbesPerCycle)
+                    return false;
+
+                _logger.LogDebug("Blocked image probe limit reached - offer {OfferId} ({Code}) waits for the next cycle.", offer.Id, product.Code);
+                return true;
+            }
+
+            var removedSoFar = new List<string>();
+
+            foreach (var url in candidates)
+            {
+                if (OverBudget())
+                    return null;
+
+                removedSoFar.Add(url);
+                var attempt = await Send(Without(removedSoFar));
+
+                if (StillBlocked(attempt))
+                    continue;
+
+                // Blokada zniknęła. Wynik, który zwracamy, to ostatnia wysłana wersja, która nie była blokowana -
+                // odrzucone próby niczego w ofercie nie zmieniają.
+                var lastUnblocked = attempt;
+                var found = new List<string> { url };
+                var stillRemoved = new HashSet<string>(removedSoFar, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var earlier in removedSoFar.Where(r => !string.Equals(r, url, StringComparison.OrdinalIgnoreCase)).ToList())
+                {
+                    if (OverBudget())
+                        break;
+
+                    stillRemoved.Remove(earlier);
+                    var restored = await Send(Without(stillRemoved));
+
+                    if (StillBlocked(restored))
+                    {
+                        stillRemoved.Add(earlier);
+                        found.Add(earlier);
+                    }
+                    else
+                    {
+                        lastUnblocked = restored;
+                    }
+                }
+
+                foreach (var blockedUrl in found)
+                    await MarkImageBlocked(blockedUrl, offer, "Wykryte: patch bez tego zdjęcia przestał być blokowany");
+
+                _logger.LogInformation("Offer {OfferId} ({Code}): {Count} blocked image(s) removed ({Urls}) - {Result}.",
+                    offer.Id, product.Code, found.Count, string.Join(" ", found),
+                    lastUnblocked.Response.IsSuccessStatusCode ? "updated" : "other error follows");
+
+                return lastUnblocked;
+            }
+
+            // 3) Usuwanie narastające zależy od kolejności (np. gdy zablokowana jest cała własna galeria, a czyste są tylko
+            //    zdjęcia produktu). Sprawdzamy każde zdjęcie osobno: patch z samym tym zdjęciem przechodzi tylko wtedy,
+            //    gdy ono nie jest zablokowane. Na koniec patch bez wszystkich zablokowanych.
+            var classifiedBlocked = new List<string>();
+            var anyClean = false;
+
+            foreach (var url in candidates)
+            {
+                if (OverBudget())
+                    return null;
+
+                var onlyThis = await Send(Without(candidates.Where(c => !string.Equals(c, url, StringComparison.OrdinalIgnoreCase))));
+
+                if (StillBlocked(onlyThis))
+                    classifiedBlocked.Add(url);
+                else
+                    anyClean = true;
+            }
+
+            if (anyClean && classifiedBlocked.Count > 0 && !OverBudget())
+            {
+                var final = await Send(Without(classifiedBlocked));
+
+                if (!StillBlocked(final))
+                {
+                    foreach (var blockedUrl in classifiedBlocked)
+                        await MarkImageBlocked(blockedUrl, offer, "Wykryte: patch z samym tym zdjęciem jest blokowany");
+
+                    _logger.LogInformation("Offer {OfferId} ({Code}): {Count} blocked image(s) found one by one and removed ({Urls}) - {Result}.",
+                        offer.Id, product.Code, classifiedBlocked.Count, string.Join(" ", classifiedBlocked),
+                        final.Response.IsSuccessStatusCode ? "updated" : "other error follows");
+                    return final;
+                }
+            }
+
+            _logger.LogWarning("Offer {OfferId} ({Code}): removing images does not lift the block ({Count} checked).", offer.Id, product.Code, candidates.Count);
+            return null;
+        }
+
+        /// <summary>Prawdziwe id produktu z katalogu - nie puste i nie tekst "NULL", który zdarza się w bazie.</summary>
+        internal static bool IsCatalogId(string? id) =>
+            !string.IsNullOrWhiteSpace(id) && !string.Equals(id.Trim(), "NULL", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Oferta i produkt mają różne, niepuste id produktu z katalogu.</summary>
+        internal static bool LinksDiffer(string? offerProductId, string? productAllegroId) =>
+            IsCatalogId(offerProductId)
+            && IsCatalogId(productAllegroId)
+            && !string.Equals(offerProductId!.Trim(), productAllegroId!.Trim(), StringComparison.OrdinalIgnoreCase);
+
         /// <summary>Nazwy parametrów z "Uzupełnij parametry obowiązkowe: A, B." / "Fill in the required parameters: A, B".</summary>
         internal static List<string> ExtractMissingParameterNames(string message)
         {
@@ -1628,6 +2052,25 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             return Shorten(body);
         }
 
+        /// <summary>Adresy zdjęć z patcha (galeria, opis, propozycja produktu) - do logu przy zablokowanym zdjęciu.</summary>
+        internal static string SentImages(ProductOfferRequest request)
+        {
+            var urls = (request.Images ?? new List<string>())
+                .Concat(request.Description?.Sections.SelectMany(s => s.SectionItems).Select(i => i.Url) ?? Enumerable.Empty<string?>())
+                .Concat(request.ProductSet?.SelectMany(p => p.ProductObject?.Images ?? new List<string>()) ?? Enumerable.Empty<string>())
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Distinct()
+                .ToList();
+
+            return urls.Count == 0 ? "-" : string.Join(" ", urls);
+        }
+
+        /// <summary>"Zdjęcie zostało zablokowane" - Allegro odrzuca zdjęcie z galerii (np. ze znakiem wodnym).</summary>
+        internal static bool IsBlockedImage(string body) =>
+            body.Contains("Zdjęcie zostało zablokowane", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("Zdj\\u0119cie zosta\\u0142o zablokowane", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("image has been blocked", StringComparison.OrdinalIgnoreCase);
+
         private static bool IsContentRejection(System.Net.HttpStatusCode status) =>
             status is System.Net.HttpStatusCode.BadRequest or System.Net.HttpStatusCode.UnprocessableEntity;
 
@@ -1697,8 +2140,6 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             if (orderedUrls.Count == 0)
                 return new List<AllegroImages>();
 
-            await AppendLogo(orderedUrls, ct);
-
             var result = new List<AllegroImages>(orderedUrls.Count);
 
             foreach (var url in orderedUrls)
@@ -1715,27 +2156,6 @@ namespace JSAGROSyncServices.Products.Services.Allegro
             }
 
             return result;
-        }
-
-        private async Task AppendLogo(List<string> urls, CancellationToken ct)
-        {
-            var logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Images", "jsagro-logo.jpg");
-
-            if (!File.Exists(logoPath))
-                return;
-
-            try
-            {
-                var logoBytes = await File.ReadAllBytesAsync(logoPath, ct);
-                var logoResult = await _apiClient.PostAsync<AllegroImageResponse>("/sale/images", logoBytes, ct, "image/jpeg");
-
-                if (!string.IsNullOrWhiteSpace(logoResult?.Location))
-                    urls.Add(logoResult.Location);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Uploading logo image failed.");
-            }
         }
 
         // ---------------------------------------------------------------- pomocnicze

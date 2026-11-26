@@ -32,6 +32,24 @@ namespace JSAGROSyncServices.Contracts.DTOs.Allegro
         public External? External { get; set; }
         public TaxSettings? TaxSettings { get; set; }
         public MessageToSellerSettings? MessageToSellerSettings { get; set; }
+
+        /// <summary>
+        /// Pola wysyłane dosłownie, także z wartością null. Patch pomija pola null (null = "nie zmieniaj"),
+        /// więc jawny null - np. usunięcie tabeli zgodności - trzeba przekazać tędy.
+        /// </summary>
+        [JsonExtensionData]
+        public Dictionary<string, object?>? ExplicitFields { get; set; }
+
+        /// <summary>
+        /// Usuwa tabelę zgodności z oferty: wysyła "compatibilityList": null. Pusta lista ({"items": []})
+        /// nie działa - Allegro odrzuca ją ("The list may contain between 1 and 200 elements").
+        /// </summary>
+        public void RemoveCompatibilityList()
+        {
+            CompatibilityList = null;
+            ExplicitFields ??= new Dictionary<string, object?>();
+            ExplicitFields["compatibilityList"] = null;
+        }
     }
 
     public class AdditionalMarketplaces

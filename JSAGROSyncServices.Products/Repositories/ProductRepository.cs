@@ -695,6 +695,74 @@ namespace JSAGROSyncServices.Products.Repositories
                     cancellationToken: ct));
         }
 
+        public async Task<List<RolmarProduct>> GetLinksToVerify(int recheckAfterDays, int top, CancellationToken ct)
+        {
+            using var connection = _context.CreateConnection();
+
+            var products = await connection.QueryAsync<RolmarProduct>(
+                new CommandDefinition(
+                    "RolmarProducts_GetLinksToVerify",
+                    new { IntegrationCompany = _service.Company, RecheckAfterDays = recheckAfterDays, Top = top },
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 900,
+                    cancellationToken: ct));
+
+            return products.ToList();
+        }
+
+        public async Task<Dictionary<int, List<ProductSpecification>>> GetSpecifications(IReadOnlyCollection<int> productIds, CancellationToken ct)
+        {
+            var result = new Dictionary<int, List<ProductSpecification>>();
+            var ids = productIds.Distinct().ToList();
+
+            if (ids.Count == 0)
+                return result;
+
+            using var connection = _context.CreateConnection();
+
+            foreach (var chunk in ids.Chunk(5000))
+            {
+                var rows = await connection.QueryAsync<ProductSpecification>(
+                    new CommandDefinition(
+                        "ProductSpecifications_GetByProductIds",
+                        new { ProductIds = System.Text.Json.JsonSerializer.Serialize(chunk) },
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900,
+                        cancellationToken: ct));
+
+                foreach (var row in rows)
+                {
+                    if (!result.TryGetValue(row.ProductId, out var list))
+                        result[row.ProductId] = list = new List<ProductSpecification>();
+
+                    list.Add(row);
+                }
+            }
+
+            return result;
+        }
+
+        public async Task MarkLinksVerified(IEnumerable<int> productIds, CancellationToken ct)
+        {
+            var ids = productIds.Distinct().ToList();
+
+            if (ids.Count == 0)
+                return;
+
+            using var connection = _context.CreateConnection();
+
+            foreach (var chunk in ids.Chunk(5000))
+            {
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "RolmarProducts_MarkLinksVerified",
+                        new { ProductIds = System.Text.Json.JsonSerializer.Serialize(chunk) },
+                        commandType: CommandType.StoredProcedure,
+                        commandTimeout: 900,
+                        cancellationToken: ct));
+            }
+        }
+
         public async Task<bool> IsAllegroIdTakenByOther(string allegroId, int productId, CancellationToken ct)
         {
             using var connection = _context.CreateConnection();

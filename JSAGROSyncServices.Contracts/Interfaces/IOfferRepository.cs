@@ -36,5 +36,11 @@ namespace JSAGROSyncServices.Contracts.Interfaces
         /// po nieudanym patchu kolejny cykl ma wysłać pełną strukturę.
         /// </summary>
         Task SaveContentStates(IReadOnlyCollection<(string OfferId, string? Hash)> states, CancellationToken ct);
+
+        /// <summary>Oferty konta, których nie da się naprawić przez API - także z poprzednich cykli.</summary>
+        Task<List<UnfixableOffer>> GetUnfixableOffers(CancellationToken ct);
+
+        /// <summary>Zapisuje oferty nie do naprawienia (<c>Reason</c> = powód) albo je usuwa (<c>Reason</c> = null).</summary>
+        Task SaveUnfixableOffers(IReadOnlyCollection<(string OfferId, string Code, string? CatalogProductId, string? Reason)> items, CancellationToken ct);
     }
 }
